@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Load Shop Files</title>
+<style>
+:root { --navy: #1B3A5C; --ink: #13202D; --ink2: #4A6580; --line: #C3CDD8; --ok: #006600; --bad: #B80000; --bg: #E7EBF0; }
+body { margin: 0; font: 16px/1.45 Arial, sans-serif; background: var(--bg); color: var(--ink); }
+main { max-width: 760px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 16px; }
+h1 { margin: 0; color: var(--navy); }
+.card { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+button, .pick { font: 700 1.1rem Arial, sans-serif; padding: 14px 18px; border: 0; border-radius: 6px; background: var(--ok); color: #fff; cursor: pointer; align-self: flex-start; }
+button[disabled] { opacity: .5; }
+progress { width: 100%; height: 22px; }
+#log { font: 13px/1.4 monospace; max-height: 260px; overflow: auto; background: #f6f8fa; padding: 8px; border-radius: 6px; white-space: pre-wrap; }
+.muted { color: var(--ink2); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Load shop files</h1>
+  <div class="card">
+    <p><b>One time, at a PC.</b> This copies the master travelers, prints, people and open jobs into the shop's own database. Nothing on the server or in the master folder is changed.</p>
+    <ol>
+      <li>Click <b>Choose the starter folder</b>.</li>
+      <li>Pick the folder <b>Walker traveler starter</b> inside Claude Files → Walker traveler extract.</li>
+      <li>Click <b>Load</b> and leave this page open until it says Done (about 5–15 minutes).</li>
+    </ol>
+    <label class="pick" for="dir">Choose the starter folder</label>
+    <input id="dir" type="file" webkitdirectory multiple hidden>
+    <p id="picked" class="muted">No folder chosen.</p>
+    <button id="go" disabled>Load</button>
+    <progress id="bar" value="0" max="1"></progress>
+    <p id="status" class="muted"></p>
+    <div id="log"></div>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="supa.js"></script>
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s), log = (t) => { const l = $('#log'); l.textContent += t + '\n'; l.scrollTop = 1e9; };
+  let files = [];
+  const type = (p) => /\.json$/.test(p) ? 'application/json' : /\.png$/.test(p) ? 'image/png' : /\.jpe?g$/.test(p) ? 'image/jpeg' : /\.mp4$/.test(p) ? 'video/mp4' : /\.webm$/.test(p) ? 'video/webm' : 'application/octet-stream';
+  $('#dir').onchange = (e) => { files = [...e.target.files]; $('#picked').textContent = files.length + ' files chosen: ' + files.map((f) => f.name).filter((n) => /\.(zip|json)$/.test(n)).join(', '); $('#go').disabled = !files.length; };
+  async function up(path, blob) {
+    const sb = window.WT_SB;
+    for (let k = 0; k < 4; k++) { const { error } = await sb.storage.from('files').upload(path, blob, { upsert: true, contentType: type(path) }); if (!error) return; if (k === 3) throw new Error(path + ': ' + error.message); await new Promise((r) => setTimeout(r, 1500 * (k + 1))); }
+  }
+  async function pool(tasks, n, done) { let i = 0; const run = async () => { while (i < tasks.length) { const t = tasks[i++]; await t(); done(); } }; await Promise.all(Array.from({ length: n }, run)); }
+  $('#go').onclick = async () => {
+    $('#go').disabled = true; const sb = window.WT_SB;
+    const { data } = await sb.auth.getSession(); if (!data.session) { $('#status').textContent = 'Enter the shop password first (reload this page).'; return; }
+    const by = (n) => files.find((f) => f.name === n);
+    let kinds = {}; if (by('kinds.json')) kinds = JSON.parse(await by('kinds.json').text());
+    const tasks = []; let docs = null;
+    if (by('routings.json')) tasks.push(() => up('data/routings.json', by('routings.json')));
+    for (const zf of files.filter((f) => /\.zip$/.test(f.name))) {
+      log('Reading ' + zf.name + ' …'); const z = await JSZip.loadAsync(zf);
+      const prints = /^bundles/.test(zf.name);
+      z.forEach((p, e) => {
+        if (e.dir) return;
+        if (prints) tasks.push(async () => { let txt = await e.async('string'); const b = JSON.parse(txt); const ks = kinds[b.f]; if (ks && ks.length === b.pages.length) { b.pages.forEach((g, i) => { g.k = ks[i]; }); txt = JSON.stringify(b); } await up('dwg/' + p.split('/').pop(), new Blob([txt], { type: 'application/json' })); });
+        else if (p === 'import.json') docs = e;
+        else tasks.push(async () => up(p, await e.async('blob')));
+      });
+    }
+    $('#bar').max = tasks.length + 1; let n = 0; const tick = () => { n++; $('#bar').value = n; $('#status').textContent = n + ' of ' + tasks.length + ' files'; };
+    try {
+      await pool(tasks, 4, tick);
+      if (docs) { log('Loading jobs, people and logs …'); const rows = JSON.parse(await docs.async('string')); for (let k = 0; k < rows.length; k += 50) { const { error } = await sb.from('docs').upsert(rows.slice(k, k + 50), { onConflict: 'col,id' }); if (error) throw error; } log(rows.length + ' records loaded.'); }
+      tick(); $('#status').textContent = 'Done. Open the app and check a traveler and its prints.'; log('Done.');
+    } catch (e) { $('#status').textContent = 'Stopped: ' + e.message + ' — click Load again to retry.'; log(String(e.message || e)); $('#go').disabled = false; }
+  };
+})();
+</script>
+</body>
+</html>
