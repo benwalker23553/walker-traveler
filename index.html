@@ -274,6 +274,48 @@ td.num { font-variant-numeric: tabular-nums; text-align: right; }
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 window.WT_ES = {
+"End of shift":"Fin de turno",
+"End of shift (automatic)":"Fin de turno (automático)",
+"Clocked out — end of shift":"Salida — fin de turno",
+"Clocked out at the end of the shift. Sign in with your PIN and tap Start again.":"Se marcó salida al final del turno. Entra con tu PIN y toca Empezar de nuevo.",
+"Start again":"Empezar de nuevo",
+"Work schedule":"Horario de trabajo",
+"Save schedule":"Guardar horario",
+"Start":"Inicio",
+"End":"Fin",
+"A manager changes the schedule.":"Un gerente cambia el horario.",
+"Pick the work days and a start before the end.":"Escoge los días y una hora de inicio antes del fin.",
+"End of shift. Everyone is signed out. Sign in with your PIN to start again.":"Fin de turno. Se cerró la sesión de todos. Entra con tu PIN para empezar de nuevo.",
+"Paused · End of shift":"En pausa · Fin de turno",
+"Mon":"Lun",
+"Tue":"Mar",
+"Wed":"Mié",
+"Thu":"Jue",
+"Fri":"Vie",
+"Sat":"Sáb",
+"Sun":"Dom",
+"Every master traveler in the shop. Open one to read the steps and see the prints before issuing it. Tap ✎ to correct a step, the material or the description. The change is live on every traveler for that part.":"Todos los viajeros maestros del taller. Abre uno para leer los pasos y ver los planos antes de emitirlo. Toca ✎ para corregir un paso, el material o la descripción. El cambio sale en vivo en todos los viajeros de esa parte.",
+"Every master traveler in the shop. Open one to read the steps and see the prints before issuing it. Supervisors and managers sign in to make corrections.":"Todos los viajeros maestros del taller. Abre uno para leer los pasos y ver los planos antes de emitirlo. Supervisores y gerentes inician sesión para hacer correcciones.",
+"Traveler library":"Biblioteca de viajeros",
+"Look at any traveler before issuing · fix wording, material, steps":"Ver cualquier viajero antes de emitirlo · corregir texto, material, pasos",
+"Every master traveler in the shop. Open one to read the steps and see the prints before issuing it.":"Todos los viajeros maestros del taller. Abre uno para leer los pasos y ver los planos antes de emitirlo.",
+"Tap ✎ to correct a step, the material or the description. The change is live on every traveler for that part.":"Toca ✎ para corregir un paso, el material o la descripción. El cambio sale en vivo en todos los viajeros de esa parte.",
+"Supervisors and managers sign in to make corrections.":"Supervisores y gerentes inician sesión para hacer correcciones.",
+"Part number or name":"Número o nombre de parte",
+"Corrected travelers":"Viajeros corregidos",
+"Issue this traveler":"Emitir este viajero",
+"Material:":"Material:",
+"Should read":"Debe decir",
+"Now reads:":"Ahora dice:",
+"What kind of change?":"¿Qué tipo de cambio?",
+"Material correction":"Corrección de material",
+"Save — update all travelers":"Guardar — actualizar todos los viajeros",
+"Write it the way it should read. It changes on every traveler for this part on every tablet as soon as you save.":"Escríbelo como debe decir. Cambia en todos los viajeros de esta parte en todas las tabletas al guardar.",
+"No prints":"Sin planos",
+"Loading master travelers…":"Cargando viajeros maestros…",
+"A supervisor or manager makes corrections.":"Un supervisor o gerente hace las correcciones.",
+"Write it the way it should read.":"Escríbelo como debe decir.",
+"✎ changes save right away and show on every traveler for this part on every tablet, including ones already running. The master PDF keeps the old text until drafting revises it. Red-lines → Save approved red-lines lists every change for them.":"Los cambios ✎ se guardan al instante y salen en todos los viajeros de esta parte en todas las tabletas, incluso los que ya están corriendo. El PDF maestro conserva el texto viejo hasta que dibujo lo revise.",
 "This device only.":"Solo este dispositivo.","The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.":"El registro compartido del taller no está disponible aquí, así que lo que captures no lo ven las otras tabletas.",
 "Training":"Capacitación","How to use this, for every role":"Cómo usar esto, para cada puesto",
 "Improve":"Mejorar","What to fix this week, time and cost":"Qué arreglar esta semana, tiempo y costo","What to fix this week, where the time goes, and what each job costs. Updates live as the floor works.":"Qué arreglar esta semana, en qué se va el tiempo y cuánto cuesta cada trabajo. Se actualiza en vivo.",
@@ -376,6 +418,14 @@ window.WT_ES = {
 "Step changed for this job":"Paso cambiado para este trabajo","Sent for review":"Mandado a revisión","Saved":"Guardado","Changed for this job":"Cambiado para este trabajo"
 };
 window.WT_ESP = [
+[/^Prints (\d+)$/, 'Planos $1'],
+[/^✎ (\d+) corrections?$/, '✎ $1 corrección(es)'],
+[/^Op (.+) · sign in with your PIN to start again$/, 'Op $1 · entra con tu PIN para empezar de nuevo'],
+[/^Schedule saved: (.+)$/, 'Horario guardado: $1'],
+[/^(\d+) found · showing the first 60, type more to narrow$/, '$1 encontrados · se muestran los primeros 60, escribe más para acotar'],
+[/^(\d+) found$/, '$1 encontrados'],
+[/^Correct (.+) · $/, 'Corregir $1 · '],
+[/^(.+) updated on every (.+) traveler$/, '$1 actualizado en todos los viajeros $2'],
 [/^Due date is set (\d+) days out, the same as your (metal|filter) log\. Change it if needed\. Jobs run in due-date order unless marked RUSH\.$/, 'La entrega se pone a $1 días, igual que el registro. Cámbiala si hace falta. Los trabajos van por fecha de entrega a menos que estén marcados URGENTE.'],
 [/^Do this week \((\d+)\)$/, 'Hacer esta semana ($1)'],
 [/^(\d+) travelers are past due$/, '$1 viajeros están atrasados'],
@@ -627,6 +677,12 @@ window.WT_ESP = [
         if (!p.reason) fail('Pick a reason.');
         touch(job, i, ctx); op.paused = { reason: p.reason, at: ctx.at, by: ctx.u.id, resume: openSeg(op) ? openSeg(op).t : 'run' }; seg(op, 'paused', ctx);
         log(job, ctx, 'Paused', 'Op ' + op.n + ' · ' + p.reason); break;
+      case 'endDay': {
+        // End of the work day: stop the clock on everything still running. The operator signs in with their PIN to start again.
+        let n = 0;
+        job.ops.forEach((o) => { if (['setup', 'first_piece', 'running'].indexOf(o.st) < 0 || o.paused) return; const os = openSeg(o); o.paused = { reason: 'End of shift', at: ctx.at, by: 'system', resume: os ? os.t : 'run', auto: true }; seg(o, 'paused', { at: ctx.at, u: { id: 'system' } }); n++; log(job, { at: ctx.at, u: { id: 'system' } }, 'Clocked out — end of shift', 'Op ' + o.n + ' · sign in with your PIN to start again'); });
+        if (!n) return src; break;
+      }
       case 'resume': {
         op = guard(job, i, ctx, { ignorePause: true }); if (!op.paused) fail('Not paused.');
         const t = op.paused.resume; op.paused = null; touch(job, i, ctx); seg(op, t, ctx); log(job, ctx, 'Resumed', 'Op ' + op.n); break;
@@ -848,8 +904,22 @@ window.WT_ESP = [
     return '';
   }
   function goodDone(job) { const last = job.ops[job.ops.length - 1]; return last.good == null ? 0 : last.good; }
-  function dur(op, type, now) { return op.seg.filter((s) => s.t === type).reduce((a, s) => a + ((s.e || now) - s.s), 0); }
-  function approvalWait(op, now) { return op.checks.reduce((a, c) => a + ((c.at || now) - c.reqAt), 0); }
+  /* Work schedule: time on a job only counts inside shop hours (default Mon–Thu 6:30 AM–5:00 PM) */
+  let SHIFT = { days: [1, 2, 3, 4], start: '06:30', end: '17:00' };
+  function setShift(x) { if (x && Array.isArray(x.days) && /^\d\d?:\d\d$/.test(x.start) && /^\d\d?:\d\d$/.test(x.end)) SHIFT = { days: x.days.map(Number), start: x.start, end: x.end }; return SHIFT; }
+  const hm = (v) => { const a = v.split(':').map(Number); return a[0] * 60 + a[1]; };
+  function dayWin(d) { const b = new Date(d); b.setHours(0, 0, 0, 0); if (SHIFT.days.indexOf(b.getDay()) < 0) return null; const t = b.getTime(); return [t + hm(SHIFT.start) * 60000, t + hm(SHIFT.end) * 60000]; }
+  function workMs(a, b) {
+    if (!(b > a)) return 0; let tot = 0; const d = new Date(a); d.setHours(12, 0, 0, 0);
+    for (let k = 0; k < 800 && d.getTime() - 864e5 < b; k++) { const w = dayWin(d); if (w) tot += Math.max(0, Math.min(b, w[1]) - Math.max(a, w[0])); d.setDate(d.getDate() + 1); }
+    return tot;
+  }
+  function isWorking(t) { const w = dayWin(new Date(t)); return !!w && t >= w[0] && t < w[1]; }
+  // The most recent end of a work day at or before t
+  function lastShiftEnd(t) { const d = new Date(t); d.setHours(12, 0, 0, 0); for (let k = 0; k < 14; k++) { const w = dayWin(d); if (w && w[1] <= t) return w[1]; d.setDate(d.getDate() - 1); } return 0; }
+  function shiftText() { const N = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], f = (v) => { let [h, m] = v.split(':').map(Number); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return h + ':' + String(m).padStart(2, '0') + ' ' + ap; }, ds = SHIFT.days.slice().sort(); const run = ds.length > 2 && ds[ds.length - 1] - ds[0] === ds.length - 1; return (run ? N[ds[0]] + '–' + N[ds[ds.length - 1]] : ds.map((x) => N[x]).join(', ')) + ' ' + f(SHIFT.start) + '–' + f(SHIFT.end); }
+  function dur(op, type, now) { return op.seg.filter((s) => s.t === type).reduce((a, s) => a + workMs(s.s, s.e || now), 0); }
+  function approvalWait(op, now) { return op.checks.reduce((a, c) => a + workMs(c.reqAt, c.at || now), 0); }
   function totals(jobs, now) {
     const t = { planned: 0, good: 0, scrap: 0, made: 0, setup: 0, run: 0, wait: 0, paused: 0, holds: 0, late: 0, open: 0, done: 0 };
     jobs.forEach((j) => {
@@ -860,7 +930,7 @@ window.WT_ESP = [
     return t;
   }
 
-  root.WT = { STATIONS, ROUTINGS, ISSUES, DEFAULT_CFG, PAUSE_REASONS, HOLD_REASONS, BLOCK_REASONS, DISPOSITIONS, ST_LABEL, clone, routing, station, isApprover, canDispose, sideOf, covers, newJob, act, gate, finalDest, bucket, nextAction, where, blocking, goodDone, dur, approvalWait, totals, openHolds, openCheck, unmoved, moved, sendable, inbound, midTarget, totalScrap };
+  root.WT = { STATIONS, ROUTINGS, ISSUES, DEFAULT_CFG, PAUSE_REASONS, HOLD_REASONS, BLOCK_REASONS, DISPOSITIONS, ST_LABEL, clone, routing, station, isApprover, canDispose, sideOf, covers, newJob, act, gate, finalDest, bucket, nextAction, where, blocking, goodDone, dur, approvalWait, totals, workMs, isWorking, lastShiftEnd, setShift, shiftText, openHolds, openCheck, unmoved, moved, sendable, inbound, midTarget, totalScrap };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -877,7 +947,7 @@ window.WT_ESP = [
 
   /* ---------- formatting ---------- */
   const person = (id) => store.cfg.roster.find((r) => r.id === id);
-  const nm = (id) => (person(id) ? person(id).name : id || '—');
+  const nm = (id) => (id === 'system' ? 'End of shift (automatic)' : person(id) ? person(id).name : id || '—');
   const fTime = (t) => (t ? new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—');
   const fDue = (d) => (d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'No due date');
   function fDur(ms) { const m = Math.round(ms / 60000); if (m < 1) return ms > 0 ? '<1 min' : '0 min'; if (m < 60) return m + ' min'; const h = Math.floor(m / 60); return h + ' h ' + (m % 60) + ' min'; }
@@ -918,7 +988,7 @@ window.WT_ESP = [
 
   /* ---------- data ---------- */
   function loadLocal() { try { store.jobs = JSON.parse(ls.get('wt-jobs') || '{}'); const c = JSON.parse(ls.get('wt-cfg') || 'null'); if (c) store.cfg = c; } catch (e) { store.jobs = {}; } }
-  function mergeCfg(c) { c = W.clone(c); store.cfg = { rules: Object.assign({}, W.DEFAULT_CFG.rules, c.rules || {}), roster: c.roster && c.roster.length ? c.roster : W.clone(W.DEFAULT_CFG.roster), costs: c.costs || {} }; if (ui.user) ui.user = store.cfg.roster.find((r) => r.id === ui.user.id) || null; }
+  function mergeCfg(c) { c = W.clone(c); store.cfg = { rules: Object.assign({}, W.DEFAULT_CFG.rules, c.rules || {}), roster: c.roster && c.roster.length ? c.roster : W.clone(W.DEFAULT_CFG.roster), costs: c.costs || {}, shift: c.shift || null }; W.setShift(store.cfg.shift); if (ui.user) ui.user = store.cfg.roster.find((r) => r.id === ui.user.id) || null; }
   async function init() {
     render();
     let db = null;
@@ -928,7 +998,7 @@ window.WT_ESP = [
     db.collection('jobs').onSnapshot((s) => {
       const m = {}; s.docs.forEach((d) => { const j = d.data(); if (j && j.id) m[j.id] = j; });
       Object.keys(store.queue).forEach((id) => { m[id] = store.queue[id].job || store.queue[id]; });
-      store.jobs = m; store.loaded = true; render();
+      store.jobs = m; store.loaded = true; render(); setTimeout(endOfDay, 1500);
     }, () => { store.mode = 'local'; loadLocal(); store.loaded = true; render(); });
     db.collection('logs').onSnapshot((s) => { s.docs.forEach((d) => { const x = d.data(); store.logs[d.id] = (x && x.rows) || []; }); render(); }, () => {});
     db.collection('redlines').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.redlines = m; render(); if (ui.modal) renderModal(); }, () => {});
@@ -1134,8 +1204,8 @@ window.WT_ESP = [
     // Tablet jobs: time breakdown and by person
     const TJ = jobs().filter((j) => j.ops.some((o) => o.seg.length)).slice(0, 12);
     if (TJ.length) {
-      h += '<div class="panel"><h2>Where the time goes on each job</h2><p class="small muted">Clock time recorded on the tablets, per job.</p>' + stack(TJ.map((j) => [j.so + ' · ' + j.pn, (() => { const t = { setup: 0, run: 0, wait: 0, paused: 0 }; j.ops.forEach((o) => { t.setup += W.dur(o, 'setup', now); t.run += W.dur(o, 'run', now) + W.dur(o, 'first_piece', now); t.wait += W.approvalWait(o, now); t.paused += W.dur(o, 'paused', now); }); return t; })()])) + '</div>';
-      const per = {}; jobs().forEach((j) => j.ops.forEach((o) => o.seg.forEach((s) => { if (!s.by || !SEGN[s.t]) return; const p = per[s.by] = per[s.by] || { tot: 0 }; const v = (s.e || now) - s.s; p[s.t] = (p[s.t] || 0) + v; p.tot += v; })));
+      h += '<div class="panel"><h2>Where the time goes on each job</h2><p class="small muted">Work-hours time recorded on the tablets, per job (' + esc(W.shiftText()) + ').</p>' + stack(TJ.map((j) => [j.so + ' · ' + j.pn, (() => { const t = { setup: 0, run: 0, wait: 0, paused: 0 }; j.ops.forEach((o) => { t.setup += W.dur(o, 'setup', now); t.run += W.dur(o, 'run', now) + W.dur(o, 'first_piece', now); t.wait += W.approvalWait(o, now); t.paused += W.dur(o, 'paused', now); }); return t; })()])) + '</div>';
+      const per = {}; jobs().forEach((j) => j.ops.forEach((o) => o.seg.forEach((s) => { if (!s.by || !SEGN[s.t]) return; const p = per[s.by] = per[s.by] || { tot: 0 }; const v = W.workMs(s.s, s.e || now); p[s.t] = (p[s.t] || 0) + v; p.tot += v; })));
       const people = Object.keys(per).sort((a, b) => per[b].tot - per[a].tot);
       h += '<div class="panel"><h2>Time by person and step</h2>' + bars(people.map((id) => [nm(id), per[id].tot / HOUR]), { title: 'Hours by person', fmt: (v) => v.toFixed(1) + ' h', color: 'var(--s2)' }) +
         '<div class="tbl-wrap"><table><tr><th>Person</th>' + Object.values(SEGN).map((n) => '<th>' + n + '</th>').join('') + '<th>Total</th></tr>' + people.map((id) => '<tr><td>' + esc(nm(id)) + '</td>' + Object.keys(SEGN).map((k) => '<td class="num">' + (per[id][k] ? fDur(per[id][k]) : '—') + '</td>').join('') + '<td class="num"><b>' + fDur(per[id].tot) + '</b></td></tr>').join('') + '</table></div><p class="small muted">Clock time between button presses while signed in, not payroll hours.</p></div>';
@@ -1210,10 +1280,39 @@ window.WT_ESP = [
       tile('data-nav="train"', 'Training', 'How to use this, for every role', null) +
       tile('data-nav="improve"', 'Improve', 'What to fix this week, time and cost', prompts().length, prompts().length ? 'warn' : '') +
       tile('data-nav="manage" data-mtab="release"', 'Issue a traveler', ui.user && W.canDispose(ui.user) ? 'Start a new job: part, quantity, go' : 'Manager or QA signs in first', null) +
+      tile('data-nav="library"', 'Traveler library', 'Look at any traveler before issuing · fix wording, material, steps', null) +
       tile('data-nav="floor"', 'Where is everything', 'Parts in each of the nine areas', null) +
       tile('id="t-area"', 'Change area', 'Pick which area this tablet is at', null) +
       (ui.user ? tile('id="t-out"', 'Sign out', esc(ui.user.name), null) : tile('data-m="login"', 'Sign in', 'Tap your name, enter your PIN', null)) +
       tile('data-nav="manage" data-mtab="' + (mgr ? 'release' : 'holds') + '"', 'Manage', mgr ? 'Issue travelers, people, rules, numbers' : 'Holds, numbers, people', null) + '</div>';
+  }
+
+  /* ---------- traveler library: look at, check and correct master travelers before issuing ---------- */
+  const HDR = { name: 'Description', material: 'Material', customer: 'Customer' };
+  const hdr = (rt, f) => liveStep(rt.id, '@' + f, rt[f] || '', null).text;
+  const opLabel = (n) => (String(n).charAt(0) === '@' ? (HDR[String(n).slice(1)] || String(n).slice(1)) : 'op ' + n);
+  function libHits(raw) {
+    raw = (raw || '').trim(); const fixed = {}; rls().forEach((x) => { if (x.status === 'approved') fixed[x.rid] = (fixed[x.rid] || 0) + 1; });
+    let list;
+    if (raw.length < 2) {
+      list = W.ROUTINGS.filter((r) => fixed[r.id]);
+      if (!list.length) return '<p class="muted">Type a part number or part name above. Example: <span class="mono">1005080</span> or <span class="notr">baffle</span>.</p>';
+      return '<h3>Corrected travelers</h3>' + list.slice(0, 40).map((r) => libRow(r, fixed[r.id])).join('');
+    }
+    raw = stripAsk(raw); const q = (spoken(raw) || raw).toLowerCase(), nq = normKey(q);
+    list = W.ROUTINGS.filter((r) => (nq && (normKey(r.pn).indexOf(nq) >= 0 || normKey(r.wpn || '').indexOf(nq) >= 0)) || (q.length >= 3 && String(hdr(r, 'name')).toLowerCase().indexOf(q) >= 0) || (q.length >= 4 && String(hdr(r, 'material')).toLowerCase().indexOf(q) >= 0))
+      .sort((a, b) => (normKey(a.pn) === nq ? 0 : 1) - (normKey(b.pn) === nq ? 0 : 1) || String(a.pn).localeCompare(String(b.pn), undefined, { numeric: true }));
+    if (!list.length) return '<p class="muted">No master traveler found for “' + esc(raw) + '”.</p>';
+    return '<p class="small muted">' + list.length + ' found' + (list.length > 60 ? ' · showing the first 60, type more to narrow' : '') + '</p>' + list.slice(0, 60).map((r) => libRow(r, fixed[r.id])).join('');
+  }
+  function libRow(r, nFix) {
+    const mat = hdr(r, 'material');
+    return '<button class="card trow" data-master="' + esc(r.id) + '"><span class="tmain" style="pointer-events:none"><span class="tcol tpart"><span class="pn mono">' + esc(r.pn) + '</span><span class="small notr">' + esc(String(hdr(r, 'name')).slice(0, 70)) + '</span><span class="small muted">' + esc(kindOf(r)) + ' · ' + r.ops.length + ' operations · rev ' + esc(r.travRev) + (mat ? ' · ' + esc(String(mat).slice(0, 50)) : '') + '</span></span><span class="tcol tstat">' + (dwN(r) ? '<span class="pill plain">Prints ' + dwN(r) + '</span>' : '<span class="pill warn">No prints</span>') + (nFix ? '<span class="pill warn">✎ ' + nFix + ' correction' + (nFix > 1 ? 's' : '') + '</span>' : '') + '</span></span></button>';
+  }
+  function renderLibrary() {
+    const sup = ui.user && W.isApprover(ui.user);
+    return '<div class="head"><div><h1>Traveler library</h1><p class="muted">Every master traveler in the shop. Open one to read the steps and see the prints before issuing it.' + (sup ? ' Tap ✎ to correct a step, the material or the description. The change is live on every traveler for that part.' : ' Supervisors and managers sign in to make corrections.') + '</p></div>' + (sup ? '' : '<button class="btn" data-m="login">Sign in</button>') + '</div>' +
+      '<label>Part number or name<input id="lib-q" class="field" autocomplete="off" value="' + esc(ui.libQ || '') + '" placeholder="Type, scan, or say the part number"></label><div id="lib-hits">' + (store.masterN ? libHits(ui.libQ || '') : '<p class="muted">Loading master travelers…</p>') + '</div>';
   }
 
   /* ---------- where is everything ---------- */
@@ -1373,7 +1472,7 @@ window.WT_ESP = [
     let main = '', msg = '', sec = '';
     const active = op.st !== 'pending' && op.st !== 'done';
     if (holds.length) { msg = 'On hold. Nothing moves until a supervisor records a disposition.'; main = '<button class="btn primary stop" data-m="dispose" data-job="' + id + '" data-hold="' + holds[0].id + '">Record disposition</button>'; }
-    else if (op.paused) { msg = 'Paused: ' + esc(op.paused.reason) + ' · ' + fDur(Date.now() - op.paused.at); main = A('resume', 'Resume', 'primary go'); }
+    else if (op.paused) { msg = op.paused.auto ? 'Clocked out at the end of the shift. Sign in with your PIN and tap Start again.' : 'Paused: ' + esc(op.paused.reason) + ' · ' + fDur(Date.now() - op.paused.at); main = A('resume', op.paused.auto ? 'Start again' : 'Resume', 'primary go'); }
     else switch (op.st) {
       case 'pending': msg = 'Parts for this operation have not been received at ' + esc(W.station(op.station).name) + ' yet.'; break;
       case 'ready':
@@ -1401,7 +1500,7 @@ window.WT_ESP = [
   }
   function rlCard(x, withJob) {
     const can = ui.user && W.isApprover(ui.user) && x.by !== ui.user.id && W.covers(ui.user, x.station);
-    return '<div class="banner warn"><div><b>✎ Red-line ' + esc(x.id) + ' waiting for approval</b> · ' + esc(x.reason) + ' · by ' + esc(nm(x.by)) + ' ' + esc(fTime(x.at)) + (withJob ? ' · <span class="mono">' + esc(x.pn) + '</span> op ' + esc(x.n) + ' · Shop Order ' + esc(x.so) : '') +
+    return '<div class="banner warn"><div><b>✎ Red-line ' + esc(x.id) + ' waiting for approval</b> · ' + esc(x.reason) + ' · by ' + esc(nm(x.by)) + ' ' + esc(fTime(x.at)) + (withJob ? ' · <span class="mono">' + esc(x.pn) + '</span> ' + esc(opLabel(x.n)) + (x.so ? ' · Shop Order ' + esc(x.so) : ' · from the library') : '') +
       '<br><span class="small">Now:</span> <span class="small notr">' + esc(x.was) + '</span><br><span class="small"><b>Change to:</b></span> <span class="notr"><b>' + esc(x.text) + '</b></span>' + (x.note ? '<br><span class="small">Note: ' + esc(x.note) + '</span>' : '') + '</div>' +
       (can ? '<span class="row"><button class="btn go sm" data-a="rlOk" data-id="' + esc(x.id) + '">✔ Approve — update traveler</button><button class="btn sm" data-a="rlNo" data-id="' + esc(x.id) + '">Reject</button></span>' : '<span class="small muted">' + (ui.user && x.by === ui.user.id ? 'Another signer must approve.' : 'A signer for this area approves.') + '</span>') + '</div>';
   }
@@ -1456,8 +1555,8 @@ window.WT_ESP = [
     const j = store.jobs[ui.jobId]; if (!j) return '<div class="empty">That job is not in the shop record.</div><button class="btn" data-nav="station">Back</button>';
     const r = W.routing(j.rid); if (!r) return '<div class="empty">Loading this traveler’s master steps…</div><button class="btn" data-back>‹ Back</button>';
     ensureDocs(r); const i = Math.min(ui.opI, j.ops.length - 1), blk = W.blocking(j);
-    let h = '<div class="jobhead"><button class="btn sm" data-back>‹ Back</button><div class="t"><h1><span class="mono">' + esc(j.pn) + '</span> ' + esc(j.name) + '</h1>' +
-      '<div class="facts"><span>Shop Order <b>' + esc(j.so) + '</b></span><span>Qty <b>' + j.qty + '</b></span><span>Due <b>' + esc(fDue(j.due)) + '</b></span><span>Type <b>' + esc(kindOf(r)) + '</b></span><span>Trav rev <b>' + esc(j.rel.travRev) + '</b></span><span>Dwg rev <b>' + esc(j.rel.dwgRev) + '</b></span>' + (j.rush ? '<span class="pill bad">ASAP</span>' : '') + (j.sample ? '<span class="pill plain">Sample data</span>' : '') + (ui.user && ui.user.role === 'manager' ? '<button class="btn sm" data-m="priority" data-job="' + esc(j.id) + '">' + (j.rush ? 'Change priority' : (j.rush ? 'Remove ASAP' : 'Mark ASAP')) + '</button>' : '') + '</div>' +
+    let h = '<div class="jobhead"><button class="btn sm" data-back>‹ Back</button><div class="t"><h1><span class="mono">' + esc(j.pn) + '</span> ' + esc(liveStep(r.id, '@name', j.name, null).text) + '</h1>' +
+      '<div class="facts"><span>Shop Order <b>' + esc(j.so) + '</b></span><span>Qty <b>' + j.qty + '</b></span><span>Due <b>' + esc(fDue(j.due)) + '</b></span><span>Type <b>' + esc(kindOf(r)) + '</b></span><span>Trav rev <b>' + esc(j.rel.travRev) + '</b></span><span>Dwg rev <b>' + esc(j.rel.dwgRev) + '</b></span>' + (hdr(r, 'material') ? '<span>Material <b class="notr">' + esc(hdr(r, 'material')) + '</b></span>' : '') + (j.rush ? '<span class="pill bad">ASAP</span>' : '') + (j.sample ? '<span class="pill plain">Sample data</span>' : '') + (ui.user && ui.user.role === 'manager' ? '<button class="btn sm" data-m="priority" data-job="' + esc(j.id) + '">' + (j.rush ? 'Change priority' : (j.rush ? 'Remove ASAP' : 'Mark ASAP')) + '</button>' : '') + '</div>' +
       '<p class="small muted">' + esc(W.where(j)) + (blk ? ' · Blocking: ' + esc(blk) : '') + '</p>' +
       (j.parent && store.jobs[j.parent] ? '<p class="small">Component for <button class="btn sm" data-open="' + esc(j.parent) + '">Shop Order ' + esc(store.jobs[j.parent].so) + ' · ' + esc(store.jobs[j.parent].pn) + '</button></p>' : '') +
       (j.needs || []).map((n) => { const k = store.jobs[n.id]; return '<p class="small"><b>Needs ' + esc(n.label) + ' before op ' + j.ops[n.i].n + ':</b> ' + (k ? (k.st === 'complete' ? '✔ received' : esc(W.where(k))) : 'job not found') + (n.waived ? ' · started without receipt by ' + esc(nm(n.waived.by)) : '') + ' <button class="btn sm" data-open="' + esc(n.id) + '">Shop Order ' + esc(n.so) + '</button></p>'; }).join('') + '</div></div>';
@@ -1534,7 +1633,9 @@ window.WT_ESP = [
     }
     if (ui.mtab === 'people') {
       const R = store.cfg.rules;
-      const sup = ui.user && W.isApprover(ui.user);
+      const sup = ui.user && W.isApprover(ui.user), SH = W.setShift(store.cfg.shift), DN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      h += '<div class="panel"><h2>Work schedule</h2><p class="small muted">Now: <b>' + esc(W.shiftText()) + '</b>. Job and operator time only counts inside these hours. At the end of each work day every running job is clocked out and every tablet signs out, so people sign in with their PIN to start again the next day.</p>' +
+        (ui.user && ui.user.role === 'manager' ? '<div class="row">' + DN.map((n, k) => '<label class="check" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" class="sh-day" data-d="' + k + '"' + (SH.days.indexOf(k) >= 0 ? ' checked' : '') + ' style="width:24px;height:24px;min-height:24px">' + n + '</label>').join('') + '</div><div class="grid2"><label>Start<input id="sh-start" class="field" type="time" value="' + esc(SH.start.padStart(5, '0')) + '"></label><label>End<input id="sh-end" class="field" type="time" value="' + esc(SH.end.padStart(5, '0')) + '"></label></div><button class="btn primary" data-a="saveShift" style="align-self:flex-start">Save schedule</button>' : '<p class="small muted">A manager changes the schedule.</p>') + '</div>';
       h += '<div class="banner info"><div><b>PINs.</b> Each person creates their own 4-digit PIN the first time they tap their name. Suggested: birth month and year, so March 1985 is 0385. A manager can reset anyone’s PIN here.</div></div>' +
         '<div class="panel"><h2>People</h2><div class="tbl-wrap"><table><tr><th>Name</th><th>Area</th><th>Role</th><th>PIN</th><th></th></tr>' + store.cfg.roster.slice().sort((a, b) => a.name.localeCompare(b.name)).map((p) => '<tr><td>' + esc(p.name) + '</td><td>' + esc(p.area) + '</td><td>' + ({ operator: 'Operator', approver: p.side ? 'Supervisor, ' + p.side + ' side — signs checks' : 'Approved signer — both sides', qa: 'Quality — dispositions holds', manager: 'Manager — releases, priorities, can sign' }[p.role]) + '</td><td>' + (p.pin ? 'Set' : '<b>Not set yet</b>') + '</td><td>' + (mgr ? '<span class="row">' + (p.pin ? '<button class="btn sm" data-a="resetPin" data-id="' + esc(p.id) + '">Reset PIN</button>' : '') + (p.id !== ui.user.id ? '<button class="btn sm" data-a="rmPerson" data-id="' + esc(p.id) + '">Remove</button>' : '') + '</span>' : '') + '</td></tr>').join('') + '</table></div>' +
         (sup ? '<h3>Add a person</h3><div class="grid2"><label>Name<input id="pp-name" class="field" autocomplete="off"></label><label>Area<select id="pp-area" class="field">' + W.STATIONS.map((s) => '<option>' + esc(s.name) + '</option>').join('') + '<option>Quality</option><option>Office</option></select></label><label>Role<select id="pp-role" class="field"><option value="operator">Operator</option>' + (mgr ? '<option value="approver:metal">Supervisor — metal side</option><option value="approver:filter">Supervisor — filter side</option><option value="approver:">Approved signer — both sides</option><option value="qa">Quality</option><option value="manager">Manager</option>' : '') + '</select></label></div><p class="small muted">They create their own PIN the first time they sign in.</p><button class="btn" data-a="addPerson" style="align-self:flex-start">Add person</button>' : '<p class="muted">Supervisors and managers can add people here.</p>') + '</div>' +
@@ -1620,7 +1721,7 @@ window.WT_ESP = [
         '<label>Note (optional)<input data-f="note" id="m-note" class="field" value="' + esc(m.note || '') + '" placeholder="Why, which tool or fixture"></label><p class="small muted">Now reads: <span class="notr">' + esc(liveStep(j.rid, op.n, o2.text, null).text) + '</span></p>' + foot('Send for approval'); break; }
       case 'rlList': { wide = true; const P = rlPending(), D = rls().filter((x) => x.status !== 'pending').sort((a, b) => (b.okAt || b.at) - (a.okAt || a.at)).slice(0, 30);
         h = '<div class="row" style="justify-content:space-between"><h2>Red-lines</h2><button class="btn sm" data-close>Close</button></div><h3>Waiting for approval (' + P.length + ')</h3>' + (P.length ? P.map((x) => rlCard(x, true)).join('') : '<p class="muted">Nothing waiting.</p>') +
-          '<h3>Recently decided</h3>' + (D.length ? '<div class="tbl-wrap"><table><tr><th>Red-line</th><th>Part · op</th><th>Status</th><th>Change</th><th>Decided by</th></tr>' + D.map((x) => '<tr><td class="mono">' + esc(x.id) + '</td><td class="mono">' + esc(x.pn) + ' · ' + esc(x.n) + '</td><td>' + (x.status === 'approved' ? '✔ Approved — live' : '✖ Rejected' + (x.noWhy ? ': ' + esc(x.noWhy) : '')) + '</td><td class="notr">' + esc(x.text) + '</td><td>' + esc(nm(x.okBy)) + ' ' + esc(fTime(x.okAt)) + '</td></tr>').join('') + '</table></div>' : '<p class="muted">None yet.</p>') +
+          '<h3>Recently decided</h3>' + (D.length ? '<div class="tbl-wrap"><table><tr><th>Red-line</th><th>Part · op</th><th>Status</th><th>Change</th><th>Decided by</th></tr>' + D.map((x) => '<tr><td class="mono">' + esc(x.id) + '</td><td class="mono">' + esc(x.pn) + ' · ' + esc(opLabel(x.n)) + '</td><td>' + (x.status === 'approved' ? '✔ Approved — live' : '✖ Rejected' + (x.noWhy ? ': ' + esc(x.noWhy) : '')) + '</td><td class="notr">' + esc(x.text) + '</td><td>' + esc(nm(x.okBy)) + ' ' + esc(fTime(x.okAt)) + '</td></tr>').join('') + '</table></div>' : '<p class="muted">None yet.</p>') +
           (store.downloads ? '<button class="btn sm" data-a="rlCsv" style="align-self:flex-start">Save approved red-lines for the master PDFs</button><p class="small muted">Approved red-lines are live on the tablets now. The master PDFs in the folder still show the old step until drafting updates them at the next revision.</p>' : ''); break; }
       case 'rlNo': h = '<h2>Reject red-line ' + esc(m.id) + '</h2>' + inp('why', 'Why not?', m) + foot('Reject', 'stop'); break;
       case 'flag': h = '<h2>Flag this instruction · op ' + op.n + '</h2><p class="muted">Goes to review. The approved instruction does not change until someone releases a new revision.</p><label>What is unclear, or what would you change?<textarea data-f="text" id="m-text" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.text || '') + '</textarea></label>' + foot('Send for review'); break;
@@ -1640,10 +1741,19 @@ window.WT_ESP = [
         h = '<h2>Traveler #' + esc(r.t) + ' · paper</h2><p><span class="mono" style="font-size:1.3rem">' + esc(r.pn) + '</span> ' + esc(r.d) + '</p><div class="kv">' + f('Status', open ? 'Open' : 'Closed') + f('Floor', m.floor === 'metal' ? 'Metal' : 'Filter') + f('Qty planned', r.q) + f('Qty made', r.m) + f('Issued', sDate(ts(r.i))) + f('Due', sDate(ts(r.u))) + f('Closed', sDate(ts(r.c))) + f('Operator', r.o) + '</div>' + (r.n ? '<p><b>Notes on the log:</b> ' + esc(r.n) + '</p>' : '') +
           (rts.length ? (rts.close ? '<div class="banner warn"><div><b>No exact match for ' + esc(r.pn) + '.</b> This is the closest master traveler in your folder. Check it is the right one before going live.</div></div>' : '') + '<h3>Master traveler' + (rts.length > 1 ? 's' : '') + ' on file</h3>' + rts.map((rt) => '<div class="banner info"><div><b>' + esc(kindOf(rt)) + '</b><br><span class="small">' + (rt.file ? esc(rt.file) + ' · ' : '') + rt.ops.length + ' operations · traveler rev ' + esc(rt.travRev) + (rt.travDate ? ' (' + esc(rt.travDate) + ')' : '') + ' · starts at ' + esc(W.station(rt.master ? mapStation(rt.ops[0].mach[0], rt.ops[0].text, m.floor, rt.kind) : rt.ops[0].station).name) + '</span></div><span class="row"><button class="btn sm" data-master="' + esc(rt.id) + '">Steps, prints and original traveler</button>' + '</span></div>' + (open ? (() => { const si = m.start && m.start.split('~')[0] === rt.id ? Number(m.start.split('~')[1]) : 0; return '<h3>Where is this traveler right now?</h3><p class="small muted">Tap the operation it is at. Earlier operations are marked done on paper.</p><div class="tiles">' + rt.ops.map((o, k) => '<button class="btn sm ' + (k === si ? 'sel' : '') + '" data-set="start" data-v="' + esc(rt.id) + '~' + k + '"><span>Op ' + esc(o.n) + '</span><small>' + esc(W.station(rt.master ? mapStation(o.mach[0], o.text, m.floor, rt.kind) : o.station).name) + ' · ' + esc(String(o.text || '').slice(0, 46)) + '</small></button>').join('') + '</div>' + inp('qtyNow', 'Pieces at this operation', m, 'type="number" inputmode="numeric" min="1"') + '<button class="btn primary go" style="min-height:64px;font-size:1.3rem" data-a="adopt" data-t="' + esc(r.t) + '" data-floor="' + m.floor + '" data-rid="' + esc(rt.id) + '" data-start="' + si + '">GO LIVE ON TABLET</button>'; })() : '')).join('') + (open ? '' : '<p class="muted">Closed on paper.</p>')
             : '<p class="muted">' + (store.masterN ? 'No master traveler found for this part number.' : 'Loading master travelers…') + '</p>') + (PRINTS_ONLY[key(r.pn)] ? (() => { const pr = printsFor(PRINTS_ONLY[key(r.pn)]); return '<h3>Prints on file</h3>' + (pr.docs.length ? pr.docs.map((d) => '<img src="' + esc(d.f) + '" alt="' + esc(d.t) + '" style="width:100%;border:1px solid var(--line);background:#fff">').join('') : '<p class="muted">Loading prints…</p>') + '<p class="small muted">This part has a print but no traveler of its own yet.</p>'; })() : '') + '<button class="btn" data-close>Close</button>'; break; }
-      case 'master': { wide = true; const rt = W.routing(m.rid); ensureDocs(rt);
-        h = '<div class="row" style="justify-content:space-between"><h2><span class="mono">' + esc(rt.pn) + '</span> · master traveler</h2><button class="btn sm" data-close>Close</button></div><p>' + esc(rt.name) + '</p><div class="facts"><span>Type <b>' + esc(kindOf(rt)) + '</b></span><span>Trav rev <b>' + esc(rt.travRev) + ' ' + esc(rt.travDate) + '</b></span><span>Dwg rev <b>' + esc(rt.dwgRev) + '</b></span><span>Customer <b>' + esc(rt.customer) + '</b></span>' + (rt.file ? '<span>File <b>' + esc(rt.file) + '</b></span>' : '') + '</div>' + (rt.material ? '<p class="small"><b>Material:</b> ' + esc(rt.material) + '</p>' : '') +
-          '<div class="tbl-wrap"><table><tr><th>Op</th><th>Tablet area</th><th>Location on paper</th><th>Description</th></tr>' + rt.ops.map((o) => '<tr><td class="mono">' + esc(o.n) + '</td><td>' + esc(W.station(o.station).name) + '</td><td>' + esc(o.mach.join(', ')) + '</td><td>' + (() => { const lv = liveStep(rt.id, o.n, o.text, null); return esc(lv.text) + (lv.how === 'redline' ? ' <span class="pill warn">RED-LINE ' + esc(lv.x.id) + '</span>' : ''); })() + '</td></tr>').join('') + '</table></div>' +
+      case 'master': { wide = true; const rt = W.routing(m.rid); ensureDocs(rt); const sup = ui.user && W.isApprover(ui.user), canIss = ui.user && W.canDispose(ui.user);
+        const ed = (n, f) => (sup ? ' <button class="btn sm" data-a="mEdit" data-rid="' + esc(rt.id) + '" data-n="' + esc(n) + '"' + (f ? ' data-fld="' + f + '"' : '') + '>✎</button>' : '');
+        const tag = (n) => { const lv = liveStep(rt.id, n, null, null); return lv.how === 'redline' ? ' <span class="pill warn">✎ ' + esc(nm(lv.x.okBy)) + ' ' + esc(fTime(lv.x.okAt)) + '</span>' : ''; };
+        h = '<div class="row" style="justify-content:space-between"><h2><span class="mono">' + esc(rt.pn) + '</span> · master traveler</h2><span class="row">' + (canIss ? '<button class="btn primary sm" data-a="issueFrom" data-rid="' + esc(rt.id) + '">Issue this traveler</button>' : '') + '<button class="btn sm" data-close>Close</button></span></div>' +
+          '<p><b class="notr">' + esc(hdr(rt, 'name')) + '</b>' + tag('@name') + ed('@name', 'name') + '</p><div class="facts"><span>Type <b>' + esc(kindOf(rt)) + '</b></span><span>Trav rev <b>' + esc(rt.travRev) + ' ' + esc(rt.travDate) + '</b></span><span>Dwg rev <b>' + esc(rt.dwgRev) + '</b></span><span>Customer <b class="notr">' + esc(hdr(rt, 'customer')) + '</b>' + ed('@customer', 'customer') + '</span>' + (rt.file ? '<span>File <b>' + esc(rt.file) + '</b></span>' : '') + '</div>' +
+          '<p><b>Material:</b> <span class="notr">' + esc(hdr(rt, 'material') || '—') + '</span>' + tag('@material') + ed('@material', 'material') + '</p>' +
+          (sup ? '<p class="small muted">✎ changes save right away and show on every traveler for this part on every tablet, including ones already running. The master PDF keeps the old text until drafting revises it. Red-lines → Save approved red-lines lists every change for them.</p>' : '') +
+          '<div class="tbl-wrap"><table><tr><th>Op</th><th>Tablet area</th><th>Location on paper</th><th>Description</th>' + (sup ? '<th></th>' : '') + '</tr>' + rt.ops.map((o) => '<tr><td class="mono">' + esc(o.n) + '</td><td>' + esc(W.station(o.station).name) + '</td><td>' + esc(o.mach.join(', ')) + '</td><td class="notr">' + (() => { const lv = liveStep(rt.id, o.n, o.text, null); return esc(lv.text) + (lv.how === 'redline' ? ' <span class="pill warn">✎ ' + esc(lv.x.id) + '</span>' : ''); })() + '</td>' + (sup ? '<td>' + ed(o.n) + '</td>' : '') + '</tr>').join('') + '</table></div>' +
           ((rt.extra || []).length ? '<h3>Notes on the traveler</h3><ul class="clean small">' + rt.extra.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '') + (rt.master ? '<p class="small muted">Copied from the master PDF. The tablet area is my reading of the location column.</p>' : '') + (rt.docs.length ? '<h3>Prints and traveler pages</h3>' + rt.docs.map((d) => '<p class="small"><b>' + esc(d.t) + '</b></p><img src="' + esc(d.f) + '" alt="' + esc(d.t) + '" style="width:100%;border:1px solid var(--line);background:#fff">').join('') : (rt.dwLoading ? '<p class="muted">Loading prints…</p>' : '<p class="muted">Prints for this part are not on the tablet yet.</p>')); break; }
+      case 'mEdit': { const rt = W.routing(m.rid);
+        h = '<h2>Correct ' + esc(opLabel(m.n)) + ' · <span class="mono">' + esc(rt.pn) + '</span></h2><p class="muted">Write it the way it should read. It changes on every traveler for this part on every tablet as soon as you save.</p>' +
+          '<p class="small">Now reads: <span class="notr">' + esc(m.was || '—') + '</span></p><label>Should read<textarea data-f="text" id="m-text" class="notr" rows="4">' + esc(m.text || '') + '</textarea></label>' +
+          '<h3>What kind of change?</h3>' + tiles('reason', ['Material correction'].concat(RL_REASONS), m) + '<label>Note (optional)<input data-f="note" id="m-note" class="field" value="' + esc(m.note || '') + '" placeholder="Why — e.g. per print rev C, customer spec"></label>' + foot('Save — update all travelers', 'go'); break; }
       case 'join': h = '<h2>Add yourself</h2>' + inp('name', 'Your name, as people call you on the floor', m, 'autocomplete="off"') + '<label>Where you mostly work<select data-f="area" id="m-area">' + W.STATIONS.map((s) => '<option' + (m.area === s.name ? ' selected' : '') + '>' + esc(s.name) + '</option>').join('') + '</select></label><p class="small muted">You can still sign in at any tablet. Next you will create your PIN.</p>' + foot('Next'); break;
       case 'labels': { wide = true; const ids = m.lots || j.lots.map((l) => l.id);
         h = '<h2>Box labels · Shop Order ' + esc(j.so) + '</h2><p class="muted">One label per box. The barcode is the box number, so scanning it into the search box opens this traveler and that box.</p><style>' + LBL_CSS + '</style><div class="lblgrid">' + labelCards(j, ids) + '</div><div class="row" style="justify-content:space-between"><button class="btn" data-close>Done</button>' + (store.downloads ? '<button class="btn primary" data-a="saveLabels" data-job="' + esc(j.id) + '" data-ids="' + esc(ids.join(',')) + '">Print labels</button>' : '') + '</div>'; break; }
@@ -1662,9 +1772,9 @@ window.WT_ESP = [
           if ((m.pin || '').length !== 4) return toast('Enter 4 digits.', 'bad');
           if (!m.first) { m.first = m.pin; m.pin = ''; return renderModal(); }
           if (m.first !== m.pin) { m.first = ''; m.pin = ''; renderModal(); return toast('Those did not match. Start again.', 'bad'); }
-          lp.pin = m.pin; delete lp.tempPin; { const pid = lp.id, pin = m.pin; saveCfg((c) => { const x = c.roster.find((y) => y.id === pid); if (x) { x.pin = pin; delete x.tempPin; } }); } ui.user = lp; ui.touched = Date.now(); closeModal(); if (ui.view === 'home') ui.view = 'station'; render(); return toast('PIN saved. Signed in as ' + lp.name);
+          lp.pin = m.pin; delete lp.tempPin; { const pid = lp.id, pin = m.pin; saveCfg((c) => { const x = c.roster.find((y) => y.id === pid); if (x) { x.pin = pin; delete x.tempPin; } }); } ui.user = lp; ui.touched = Date.now(); ui.signedAt = Date.now(); closeModal(); if (ui.view === 'home') ui.view = 'station'; render(); return toast('PIN saved. Signed in as ' + lp.name);
         } }
-      case 'login-go': p = verify(m); if (!p) return; ui.user = p; ui.touched = Date.now(); closeModal(); if (ui.view === 'home') ui.view = 'station'; render(); toast('Signed in as ' + p.name); return;
+      case 'login-go': p = verify(m); if (!p) return; ui.user = p; ui.touched = Date.now(); ui.signedAt = Date.now(); closeModal(); if (ui.view === 'home') ui.view = 'station'; render(); toast('Signed in as ' + p.name); return;
       case 'sign': if (!m.result) return toast('Choose pass or fail.', 'bad'); p = verify(m, true); if (!p) return;
         ok = run(m.job, 'sign', { i: m.i, type: m.ctype, result: m.result, checked: m.checked, meas: m.meas, note: m.note, reason: m.reason, qty: m.qty }, p);
         if (ok) toast(m.result === 'pass' ? 'Signed by ' + p.name : 'Hold opened by ' + p.name, m.result === 'pass' ? '' : 'bad'); break;
@@ -1687,6 +1797,12 @@ window.WT_ESP = [
         saveRl({ id, rid: j.rid, pn: j.pn, n: op.n, station: op.station, so: j.so, job: j.id, was, text: tx, reason: m.reason, note: String(m.note || '').trim(), by: ui.user.id, at: Date.now(), status: 'pending' });
         run(m.job, 'logNote', { a: 'Red-line sent', d: id + ' · op ' + op.n + ' · ' + m.reason });
         closeModal(); return toast('Red-line ' + id + ' sent. A signer approves it.'); }
+      case 'mEdit': { const rt = W.routing(m.rid), tx = String(m.text || '').trim();
+        if (!ui.user || !W.isApprover(ui.user)) return toast('A supervisor or manager makes corrections.', 'bad');
+        if (!m.reason) return toast('Pick what kind of change it is.', 'bad'); if (!tx || tx === m.was) return toast('Write it the way it should read.', 'bad');
+        const id = 'R' + Date.now().toString(36).toUpperCase().slice(-5), at = Date.now(), o = rt.ops.find((x) => String(x.n) === String(m.n));
+        saveRl({ id, rid: rt.id, pn: rt.pn, n: m.n, station: o ? o.station : rt.ops[0].station, so: '', job: '', was: m.was, text: tx, reason: m.reason, note: String(m.note || '').trim(), by: ui.user.id, at, status: 'approved', okBy: ui.user.id, okAt: at, src: 'library' });
+        toast(opLabel(m.n) + ' updated on every ' + rt.pn + ' traveler'); return openModal({ type: 'master', rid: rt.id }); }
       case 'rlNo': { const x = store.redlines[m.id]; if (!String(m.why || '').trim()) return toast('Say why.', 'bad'); saveRl(Object.assign(W.clone(x), { status: 'rejected', okBy: ui.user.id, okAt: Date.now(), noWhy: m.why.trim() })); closeModal(); return toast('Red-line rejected'); }
       case 'editStep': ok = run(m.job, 'editStep', { i: m.i, text: m.text, reason: m.reason }); if (ok) toast('Step changed for this job'); break;
       case 'move': { const nb = Math.max(1, Math.floor(Number(m.boxes) || 1)), q = Math.floor(Number(m.qty)); let j2 = store.jobs[m.job];
@@ -1792,7 +1908,7 @@ window.WT_ESP = [
   function render() {
     const main = $('#main'); if (!main) return;
     const y = window.scrollY;
-    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'train' ? renderTrain() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
+    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
     $('#b-home').textContent = '⌂ Main menu'; $('#b-list').textContent = '☰ Travelers'; $('#q').setAttribute('placeholder', 'Search or scan'); $('#b-lang').textContent = LANG === 'es' ? 'English' : 'Español';
     if (!document.fullscreenElement) $('#b-full').textContent = '⛶ Full';
     $('#b-station').textContent = 'Area: ' + areaName();
@@ -1834,6 +1950,22 @@ window.WT_ESP = [
     return ok ? { text: ok.text, how: 'redline', x: ok } : { text: base, how: 'master' };
   }
   async function saveRl(x) { store.redlines[x.id] = x; render(); if (ui.modal) renderModal(); if (store.mode === 'shared') { try { await store.db.doc('redlines/' + x.id).set(W.clone(x)); } catch (e) { toast('Could not save the red-line. Check the connection.', 'bad'); } } }
+  /* End of the work day: clock out every running job and sign the tablet out. People sign back in with their PIN to start again. */
+  let dayChecked = 0;
+  function endOfDay() {
+    if (!store.loaded || store.readonly) return; const now = Date.now(), end = W.lastShiftEnd(now); if (!end) return;
+    W.setShift(store.cfg && store.cfg.shift);
+    Object.values(store.jobs).forEach((j) => {
+      if (j.st === 'complete') return;
+      const due = j.ops.some((o) => ['setup', 'first_piece', 'running'].indexOf(o.st) >= 0 && !o.paused && (o.seg.length && o.seg[o.seg.length - 1].s < end));
+      if (!due) return;
+      const mc = { u: { id: 'system', name: 'End of shift', role: 'system' }, at: end, cfg: store.cfg };
+      try { const j2 = W.act(j, 'endDay', {}, mc); if (j2 !== j) save(j2, [['endDay', {}, mc]]); } catch (e) { /* another tablet already did it */ }
+    });
+    if (ui.user && ui.signedAt && ui.signedAt < end && dayChecked < end) { ui.user = null; ui.signedAt = 0; closeModal(); render(); toast('End of shift. Everyone is signed out. Sign in with your PIN to start again.'); }
+    dayChecked = end;
+  }
+  setInterval(endOfDay, 60000);
   function need() { if (ui.user) return true; openModal({ type: 'login', who: null, pin: '' }); toast('Sign in first.'); return false; }
   function openJob(id, i) {
     const j = store.jobs[id]; if (!j) return;
@@ -1861,6 +1993,8 @@ window.WT_ESP = [
     if (d.lsort) { ui.lsort = d.lsort; return render(); }
     if (d.lfloor) { ui.lfloor = d.lfloor; return render(); }
     if (d.master) { $('#results').hidden = true; return openModal({ type: 'master', rid: d.master }); }
+    if (d.a === 'mEdit') { if (!ui.user || !W.isApprover(ui.user)) return toast('A supervisor or manager makes corrections.', 'bad'); const rt = W.routing(d.rid), o = rt.ops.find((x) => String(x.n) === String(d.n)), n = o ? o.n : d.n, was = d.fld ? hdr(rt, d.fld) : liveStep(rt.id, n, o ? o.text : '', null).text; return openModal({ type: 'mEdit', rid: rt.id, n, was, text: was, reason: '', note: '' }); }
+    if (d.a === 'issueFrom') { const rt = W.routing(d.rid); ui.view = 'manage'; ui.mtab = 'release'; ui.relQ = rt.pn; ui.relRid = rt.id; closeModal(); render(); window.scrollTo(0, 0); return; }
     if (d.paper) { $('#results').hidden = true; { const pr = (store.logs[d.floor] || []).find((x) => x.t === d.paper) || {}; return openModal({ type: 'paper', t: d.paper, floor: d.floor, start: '', qtyNow: pr.q || '' }); } }
     if (d.lfilt) { ui.lfilt = d.lfilt; return render(); }
     if (t.id === 'b-lang') { LANG = LANG === 'es' ? 'en' : 'es'; try { localStorage.setItem('wt-lang', LANG); } catch (e) { /* this tablet only */ } document.documentElement.lang = LANG; render(); renderModal(); return; }
@@ -1918,6 +2052,12 @@ window.WT_ESP = [
         const page = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Labels ' + esc(j.so) + '</title><style>@page{size:4in 2in;margin:0}html,body{margin:0;padding:0}' + LBL_CSS + '.lbl{width:4in;height:2in;box-sizing:border-box;border:0;border-radius:0;padding:.1in .14in;page-break-after:always;break-after:page;overflow:hidden}.lbl-pn{font-size:.36in}.lbl-trv{font-size:.28in}.lbl-bc svg{height:.52in}.bar{font:14px Arial;padding:10px;background:#1B3A5C;color:#fff;display:flex;gap:12px;align-items:center}.bar button{font:700 16px Arial;padding:10px 18px}@media print{.bar{display:none}}@media screen{body{background:#ddd}.lbl{margin:10px auto;border:1px solid #000;background:#fff}}</style></head><body><div class="bar"><button onclick="window.print()">Print</button><span>' + d.ids.split(',').length + ' labels · 4 x 2 inch · one per label</span></div>' + labelCards(j, d.ids.split(',')) + '<scr' + 'ipt>setTimeout(function(){try{window.print()}catch(e){}},600)</scr' + 'ipt></body></html>';
         return void store.downloads.save({ filename: 'labels-' + j.so + '.html', data: page }).then(() => toast('Saved. Open the file and the print screen comes up.')).catch((e) => { if (!e || e.code !== 'declined') toast('Could not save the label file here.', 'bad'); }); }
       if (!need()) return;
+      if (d.a === 'saveShift') {
+        if (!ui.user || ui.user.role !== 'manager') return toast('A manager changes the schedule.', 'bad');
+        const sh = { days: [...document.querySelectorAll('.sh-day')].filter((e) => e.checked).map((e) => Number(e.dataset.d)), start: $('#sh-start').value, end: $('#sh-end').value };
+        if (!sh.days.length || !sh.start || !sh.end || sh.end <= sh.start) return toast('Pick the work days and a start before the end.', 'bad');
+        store.cfg.shift = sh; W.setShift(sh); saveCfg((c) => { c.shift = sh; }); render(); return toast('Schedule saved: ' + W.shiftText());
+      }
       if (d.a === 'saveCosts') {
         if (!ui.user || ui.user.role !== 'manager') return toast('A manager saves costs.', 'bad');
         const co = { rate: $('#co-rate').value, oh: $('#co-oh').value, mat: {} }; document.querySelectorAll('.co-mat').forEach((e) => { if (e.value !== '') co.mat[e.dataset.pn] = e.value; });
@@ -1974,6 +2114,7 @@ window.WT_ESP = [
   document.addEventListener('input', (e) => {
     ui.touched = Date.now(); const t = e.target, m = ui.modal;
     if (t.id === 'q') return search(t.value);
+    if (t.id === 'lib-q') { ui.libQ = t.value; const hb = $('#lib-hits'); if (hb) { hb.innerHTML = libHits(t.value); trDom(hb); } return; }
     if (t.id === 'rel-find') { ui.relQ = t.value; const hb = $('#rel-hits'); if (hb) hb.innerHTML = relHits(t.value); return; }
     if (!m) return;
     if (t.dataset.f) { m[t.dataset.f] = t.type === 'checkbox' ? t.checked : t.value; if (m.type === 'finish' && (t.dataset.f === 'good' || t.dataset.f === 'scrap')) { const id = t.id, pos = t.value.length; renderModal(); const n = document.getElementById(id); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (er) { /* number inputs */ } } } }
