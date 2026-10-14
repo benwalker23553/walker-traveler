@@ -252,6 +252,12 @@ td.num { font-variant-numeric: tabular-nums; text-align: right; }
 .tsteps { margin: 0; padding-left: 1.6em; display: flex; flex-direction: column; gap: 12px; font-size: 1.1rem; }
 .tsteps li b { display: block; font-size: 1.15rem; } .tsteps li span { color: var(--ink2); }
 
+/* Risk colors, same as the paper travelers */
+.risk { display: inline-block; width: 22px; height: 22px; border: 1px solid #333; border-radius: 3px; vertical-align: middle; }
+.risk.big { width: auto; height: auto; padding: 3px 10px; font: 700 .85rem/1.2 Barlow, Arial, sans-serif; color: #000; text-transform: uppercase; letter-spacing: .04em; }
+.risk.rL { background: #92D050; } .risk.rM { background: #FFFF00; } .risk.rH { background: #FF0000; color: #fff; }
+.opchip.rk-L { border-top: 6px solid #92D050; } .opchip.rk-M { border-top: 6px solid #FFFF00; } .opchip.rk-H { border-top: 6px solid #FF0000; }
+
 </style>
 <header class="top">
   <button id="b-home" class="brandbtn" type="button">⌂ Main menu</button>
@@ -274,6 +280,28 @@ td.num { font-variant-numeric: tabular-nums; text-align: right; }
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 window.WT_ES = {
+"Low risk":"Riesgo bajo",
+"Medium risk":"Riesgo medio",
+"High risk":"Riesgo alto",
+"Risk":"Riesgo",
+"Shipping release ✔":"Liberación de embarque ✔",
+"Shipping release needed.":"Falta la liberación de embarque.",
+"Marty or QA enters the customer PO # and Sales Order #. Required before the closing signature.":"Marty o Calidad captura el PO del cliente y la Orden de Venta. Se requiere antes de la firma de cierre.",
+"Enter PO / Sales Order":"Capturar PO / Orden de Venta",
+"Change":"Cambiar",
+"Customer PO #":"PO del cliente",
+"Sales Order #":"Orden de Venta",
+"PO #":"PO",
+"Save shipping release":"Guardar liberación de embarque",
+"Shipping release saved":"Liberación de embarque guardada",
+"Prints on the traveler and on every box label. Saved with your name and the time.":"Se imprime en el viajero y en cada etiqueta de caja. Se guarda con tu nombre y la hora.",
+"Final assembly traveler log":"Registro de viajeros de ensamble final",
+"Upload final assembly log (.xls or .xlsx)":"Subir registro de ensamble final (.xls o .xlsx)",
+"Marty, quality or a supervisor uploads it.":"Marty, Calidad o un supervisor lo sube.",
+"Final / packing traveler — shipping release.":"Viajero final / de empaque — liberación de embarque.",
+"Enter the PO # and Sales Order # (shipping release) before the closing signature.":"Captura el PO y la Orden de Venta (liberación de embarque) antes de la firma de cierre.",
+"Enter both the PO # and the Sales Order #.":"Captura el PO y la Orden de Venta.",
+"Marty, quality or a supervisor enters the PO and Sales Order.":"Marty, Calidad o un supervisor captura el PO y la Orden de Venta.",
 "End of shift":"Fin de turno",
 "End of shift (automatic)":"Fin de turno (automático)",
 "Clocked out — end of shift":"Salida — fin de turno",
@@ -612,6 +640,9 @@ window.WT_ESP = [
   }
 
   function finalDest(job, i) { const next = job.ops[i + 1]; if (next) return next.station; const m = (routing(job.rid) || {}).moveTo; return STATIONS.some((s) => s.id === m) ? m : job.ops[i].station; }
+  // Final assembly / packaging travelers carry the customer PO # and Sales Order # for shipping
+  const isFinal = (r) => !!r && (!!r.fa || String(r.id).indexOf('PK-') === 0 || /FINAL|PACKAG|FNL/i.test((r.kind || '') + ' ' + (r.form || '') + ' ' + (r.file || '')));
+  const shipOk = (job) => !!(job.ship && String(job.ship.po || '').trim() && String(job.ship.sales || '').trim());
   function newJob(p, ctx) {
     const r = routing(p.rid);
     if (!r) fail('Pick a part.');
@@ -625,8 +656,9 @@ window.WT_ESP = [
       st: 'open', sample: !!p.sample, blocked: null, parent: p.parent || '', needs: p.needs || [],
       rel: { by: ctx.u.id, at: ctx.at, travRev: r.travRev, travDate: r.travDate, dwgRev: r.dwgRev, form: r.form },
       ops: r.ops.map((o, i) => ({ n: o.n, station: o.station, st: i === 0 ? 'ready' : 'pending', qtyIn: i === 0 ? qty : 0, good: null, scrap: 0, short: 0, shortReason: '', checks: [], seg: [], who: [], last: '', setup: null, paused: null, midOk: false, midWaived: false, pend: null })),
-      lots: [], holds: [], flags: [], log: [], ts: ctx.at
+      lots: [], holds: [], flags: [], log: [], ts: ctx.at, final: isFinal(r)
     };
+    if (p.ship && (String(p.ship.po || '').trim() || String(p.ship.sales || '').trim())) job.ship = { po: String(p.ship.po || '').trim(), sales: String(p.ship.sales || '').trim(), by: ctx.u.id, at: ctx.at };
     log(job, ctx, 'Released', qty + ' pcs · traveler rev ' + r.travRev + ' (' + r.travDate + ') · drawing rev ' + r.dwgRev);
     return job;
   }
@@ -700,8 +732,14 @@ window.WT_ESP = [
         op.st = 'fin_wait'; op.checks.push({ type: 'final', reqBy: ctx.u.id, reqAt: ctx.at, count: good, note: p.note || '' }); seg(op, 'wait_approval', ctx);
         log(job, ctx, 'Closing signature requested', 'Op ' + op.n + ' · good ' + good + ', scrap ' + (scrap + op.scrap) + (short ? ', not run ' + short + ' (' + p.shortReason + ')' : '')); break;
       }
+      case 'shipInfo': {
+        if (!canDispose(ctx.u) && !isApprover(ctx.u)) fail('Marty, quality or a supervisor enters the PO and Sales Order.');
+        const po = String(p.po || '').trim(), sales = String(p.sales || '').trim(); if (!po || !sales) fail('Enter both the PO # and the Sales Order #.');
+        job.ship = { po, sales, by: ctx.u.id, at: ctx.at }; log(job, ctx, 'Shipping release', 'PO ' + po + ' · Sales Order ' + sales); break;
+      }
       case 'sign': {
         op = guard(job, i, ctx, { ignorePause: true });
+        if (p.type === 'final' && p.result === 'pass' && i === job.ops.length - 1 && (job.final || isFinal(routing(job.rid))) && !shipOk(job)) fail('Enter the PO # and Sales Order # (shipping release) before the closing signature.');
         const c = openCheck(op, p.type); if (!c) fail('Nothing is waiting for that signature.');
         if (!isApprover(ctx.u)) fail(ctx.u.name + ' is not set up to approve.');
         if (!covers(ctx.u, op.station)) fail(ctx.u.name + ' signs for the ' + ctx.u.side + ' side. This operation is on the ' + sideOf(op.station) + ' side.');
@@ -930,7 +968,7 @@ window.WT_ESP = [
     return t;
   }
 
-  root.WT = { STATIONS, ROUTINGS, ISSUES, DEFAULT_CFG, PAUSE_REASONS, HOLD_REASONS, BLOCK_REASONS, DISPOSITIONS, ST_LABEL, clone, routing, station, isApprover, canDispose, sideOf, covers, newJob, act, gate, finalDest, bucket, nextAction, where, blocking, goodDone, dur, approvalWait, totals, workMs, isWorking, lastShiftEnd, setShift, shiftText, openHolds, openCheck, unmoved, moved, sendable, inbound, midTarget, totalScrap };
+  root.WT = { STATIONS, ROUTINGS, ISSUES, DEFAULT_CFG, PAUSE_REASONS, HOLD_REASONS, BLOCK_REASONS, DISPOSITIONS, ST_LABEL, clone, routing, station, isApprover, canDispose, sideOf, covers, newJob, act, gate, finalDest, bucket, nextAction, where, blocking, goodDone, dur, approvalWait, totals, isFinal, shipOk, workMs, isWorking, lastShiftEnd, setShift, shiftText, openHolds, openCheck, unmoved, moved, sendable, inbound, midTarget, totalScrap };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -1000,7 +1038,7 @@ window.WT_ESP = [
       Object.keys(store.queue).forEach((id) => { m[id] = store.queue[id].job || store.queue[id]; });
       store.jobs = m; store.loaded = true; render(); setTimeout(endOfDay, 1500);
     }, () => { store.mode = 'local'; loadLocal(); store.loaded = true; render(); });
-    db.collection('logs').onSnapshot((s) => { s.docs.forEach((d) => { const x = d.data(); store.logs[d.id] = (x && x.rows) || []; }); render(); }, () => {});
+    db.collection('logs').onSnapshot((s) => { s.docs.forEach((d) => { const x = d.data(); store.logs[d.id] = (x && x.rows) || []; if (d.id === 'final' && x) store.finMeta = { at: x.at, by: x.by, file: x.file }; }); render(); }, () => {});
     db.collection('redlines').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.redlines = m; render(); if (ui.modal) renderModal(); }, () => {});
     db.doc('config/main').onSnapshot((s) => { if (s.exists) { mergeCfg(s.data()); render(); } }, () => {});
   }
@@ -1376,11 +1414,17 @@ window.WT_ESP = [
       travRev: m.tr || '—', travDate: m.td || '', dwgRev: m.dr || '—', dwgDate: '', customer: m.cu || 'N/A', material: m.mat || '', risk: '', moveTo: m.fa ? 'fg' : 'stage', pages: m.pg, file: m.f + '.pdf', extra: m.x || [], dw: String(m.f).replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
       ops: m.ops.map((o) => ({ n: o[0], station: mapStation(o[2], o[1], floor, m.kind), mach: [o[2] || '—'], text: o[1] })), docs: [] };
   }
+  const RISK_NAME = { L: 'Low risk', M: 'Medium risk', H: 'High risk' };
+  const HAND_RID = { '40-1022 TRV MASTER': '40-1022', '207-7469 TRV KEY risk': '207-7469', '270-7257 TRV KEY risk': '270-7257', '1001050 TRV MASTER': '1001050', '1001249 PLEAT TRV': '1001249', '207-7469 PACKAGING TRAVELER': 'PK-207-7469', '270-7257 PACKAGING TRAVELER': 'PK-270-7257' };
+  function applyRisk() { const R = store.risk; if (!R) return; W.ROUTINGS.forEach((r) => { const f = r.master ? String(r.file || '').replace(/\.pdf$/i, '') : Object.keys(HAND_RID).find((k) => HAND_RID[k] === r.id), m = f && R[f]; if (m) r.ops.forEach((o) => { if (m[o.n]) o.risk = m[o.n]; }); }); }
+  // Small colored risk square, same colors as the paper traveler
+  const riskBox = (rk, big) => (rk ? '<span class="risk r' + rk + (big ? ' big' : '') + '" title="' + RISK_NAME[rk] + '">' + (big ? RISK_NAME[rk] : '') + '</span>' : '');
   function loadMaster() {
+    fetch('data/risk.json').then((r) => r.json()).then((x) => { store.risk = x; applyRisk(); render(); if (ui.modal) renderModal(); }).catch(() => { store.risk = null; });
     fetch('data/dwg-index.json').then((r) => r.json()).then((x) => { store.dwg = x; render(); }).catch(() => { store.dwg = {}; });
     fetch('data/routings.json').then((r) => r.json()).then((arr) => {
       arr.forEach((m) => { if (HAND[m.f]) return; const R = toRouting(m); W.ROUTINGS.push(R); [m.pn, m.wpn, String(m.f).split(' ')[0]].forEach((k) => { if (k && (midx[key(k)] || []).indexOf(R) < 0) (midx[key(k)] = midx[key(k)] || []).push(R); }); });
-      store.masterN = arr.length; render();
+      store.masterN = arr.length; applyRisk(); render();
     }).catch(() => { store.masterN = -1; });
   }
   const dwN = (r) => (r.docs.length || (r.master && store.dwg && store.dwg[r.dw] ? store.dwg[r.dw].n : 0));
@@ -1506,7 +1550,7 @@ window.WT_ESP = [
   }
   function workTab(j, r, i) {
     const op = j.ops[i], o = r.ops[i], now = Date.now(), holds = W.openHolds(j, op.n), b = W.bucket(j, i);
-    let h = '<div class="panel"><div class="row" style="justify-content:space-between"><h2>Op ' + op.n + ' · ' + esc(W.station(op.station).name) + '</h2>' +
+    let h = '<div class="panel"><div class="row" style="justify-content:space-between"><h2>Op ' + op.n + ' · ' + esc(W.station(op.station).name) + ' ' + riskBox(o.risk, true) + '</h2>' +
       (b ? pill(b, holds.length ? 'On hold' : op.paused ? 'Paused' : b === 'approval' ? 'Needs signature' : W.ST_LABEL[op.st]) : '<span class="pill plain">' + esc(W.ST_LABEL[op.st]) + '</span>') + '</div>';
     holds.forEach((x) => { h += '<div class="banner bad"><div><b>■ HOLD ' + x.id + ' · ' + esc(x.reason) + ' · ' + x.qty + ' pcs</b><br><span class="small">Opened by ' + esc(nm(x.by)) + ' · ' + esc(fTime(x.at)) + (x.note ? ' · ' + esc(x.note) : '') + '. Tag the parts and submit to Material Review for disposition.</span></div></div>'; });
     h += '<div class="chips">' + o.mach.map((m) => '<span class="chip">' + esc(m) + '</span>').join('') + (o.dwg ? '<span class="chip">DWG ' + esc(o.dwg) + '</span>' : '') + '</div>';
@@ -1558,13 +1602,35 @@ window.WT_ESP = [
     let h = '<div class="jobhead"><span class="row" style="flex-direction:column;gap:8px;align-items:stretch"><button class="btn sm" data-back>‹ Back</button><button class="btn sm" data-a="printJob" data-job="' + esc(j.id) + '">🖨 Print</button></span><div class="t"><h1><span class="mono">' + esc(j.pn) + '</span> ' + esc(liveStep(r.id, '@name', j.name, null).text) + '</h1>' +
       '<div class="facts"><span>Shop Order <b>' + esc(j.so) + '</b></span><span>Qty <b>' + j.qty + '</b></span><span>Due <b>' + esc(fDue(j.due)) + '</b></span><span>Type <b>' + esc(kindOf(r)) + '</b></span><span>Trav rev <b>' + esc(j.rel.travRev) + '</b></span><span>Dwg rev <b>' + esc(j.rel.dwgRev) + '</b></span>' + (hdr(r, 'material') ? '<span>Material <b class="notr">' + esc(hdr(r, 'material')) + '</b></span>' : '') + (j.rush ? '<span class="pill bad">ASAP</span>' : '') + (j.sample ? '<span class="pill plain">Sample data</span>' : '') + (ui.user && ui.user.role === 'manager' ? '<button class="btn sm" data-m="priority" data-job="' + esc(j.id) + '">' + (j.rush ? 'Change priority' : (j.rush ? 'Remove ASAP' : 'Mark ASAP')) + '</button>' : '') + '</div>' +
       '<p class="small muted">' + esc(W.where(j)) + (blk ? ' · Blocking: ' + esc(blk) : '') + '</p>' +
+      ((j.final || W.isFinal(r)) ? (W.shipOk(j) ? '<div class="banner ok"><div><b>Shipping release ✔</b> · PO <b class="mono">' + esc(j.ship.po) + '</b> · Sales Order <b class="mono">' + esc(j.ship.sales) + '</b> · ' + esc(nm(j.ship.by)) + ' ' + esc(fTime(j.ship.at)) + '</div>' + (ui.user && (W.canDispose(ui.user) || W.isApprover(ui.user)) ? '<button class="btn sm" data-m="ship" data-job="' + esc(j.id) + '">Change</button>' : '') + '</div>'
+        : '<div class="banner warn"><div><b>Shipping release needed.</b> Marty or QA enters the customer PO # and Sales Order #. Required before the closing signature.</div><button class="btn sm primary" data-m="ship" data-job="' + esc(j.id) + '">Enter PO / Sales Order</button></div>') : '') +
       (j.parent && store.jobs[j.parent] ? '<p class="small">Component for <button class="btn sm" data-open="' + esc(j.parent) + '">Shop Order ' + esc(store.jobs[j.parent].so) + ' · ' + esc(store.jobs[j.parent].pn) + '</button></p>' : '') +
       (j.needs || []).map((n) => { const k = store.jobs[n.id]; return '<p class="small"><b>Needs ' + esc(n.label) + ' before op ' + j.ops[n.i].n + ':</b> ' + (k ? (k.st === 'complete' ? '✔ received' : esc(W.where(k))) : 'job not found') + (n.waived ? ' · started without receipt by ' + esc(nm(n.waived.by)) : '') + ' <button class="btn sm" data-open="' + esc(n.id) + '">Shop Order ' + esc(n.so) + '</button></p>'; }).join('') + '</div></div>';
-    h += '<div class="oprail">' + j.ops.map((op, k) => '<button class="opchip ' + (k === i ? 'cur ' : '') + (op.st === 'done' ? 's-done ' : '') + (W.openHolds(j, op.n).length ? 's-hold' : '') + '" data-op="' + k + '"><b>' + op.n + '</b><span>' + esc(W.station(op.station).name) + '</span><span>' + esc(W.openHolds(j, op.n).length ? '■ Hold' : op.st === 'done' ? '✔ Done' : W.ST_LABEL[op.st]) + '</span></button>').join('') + '</div>';
+    h += '<div class="oprail">' + j.ops.map((op, k) => '<button class="opchip ' + (k === i ? 'cur ' : '') + (op.st === 'done' ? 's-done ' : '') + (W.openHolds(j, op.n).length ? 's-hold ' : '') + (r.ops[k] && r.ops[k].risk ? 'rk-' + r.ops[k].risk : '') + '" data-op="' + k + '"><b>' + op.n + '</b><span>' + esc(W.station(op.station).name) + '</span><span>' + esc(W.openHolds(j, op.n).length ? '■ Hold' : op.st === 'done' ? '✔ Done' : W.ST_LABEL[op.st]) + '</span></button>').join('') + '</div>';
     h += '<div class="tabs" role="tablist">' + [['work', 'Operation'], ['docs', 'Prints (' + dwN(r) + ')'], ['record', 'Record']].map((t) => '<button role="tab" class="' + (ui.tab === t[0] ? 'on' : '') + '" data-tab="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>';
     return h + (ui.tab === 'docs' ? docsTab(j, r) : ui.tab === 'record' ? recordTab(j, r) : workTab(j, r, i));
   }
 
+  const finRow = (t) => (store.logs.final || []).find((r) => String(r.t) === String(t));
+  // Read the Final Assembly Traveler Log in the browser (Excel or CSV) and share it with every tablet
+  function loadXLSX() { return window.XLSX ? Promise.resolve(window.XLSX) : new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; sc.onload = () => res(window.XLSX); sc.onerror = () => rej(new Error('Could not load the Excel reader. Check the internet connection.')); document.head.appendChild(sc); }); }
+  function parseFinalLog(rows) {
+    const hi = rows.findIndex((r) => r.some((c) => /traveler\s*no/i.test(String(c)))); const out = [];
+    const iso = (v) => { if (v === '' || v == null) return ''; if (v instanceof Date) return v.toISOString().slice(0, 10); if (typeof v === 'number' && v > 20000 && v < 80000) return new Date(Date.UTC(1899, 11, 30) + v * 864e5).toISOString().slice(0, 10); const d = new Date(v); return isNaN(d) ? '' : d.toISOString().slice(0, 10); };
+    const txt = (v) => (v == null ? '' : typeof v === 'number' && Number.isInteger(v) ? String(v) : String(v).trim());
+    rows.slice(hi + 1).forEach((r) => { const t = txt(r[0]), pn = txt(r[1]); if (!/^\d+$/.test(t) || !pn) return; const i8 = txt(r[8]);
+      out.push({ t, pn, d: txt(r[2]), po: txt(r[3]), i: iso(r[4]), u: iso(r[5]), c: iso(r[6]), q: txt(r[7]), so: /^P\d+/i.test(i8) ? i8.toUpperCase() : '', m: /^P\d+/i.test(i8) ? '' : i8 }); });
+    out.sort((a, b) => Number(a.t) - Number(b.t)); return out.slice(-3000);
+  }
+  async function uploadFinalLog(file) {
+    if (!ui.user || !(W.isApprover(ui.user) || W.canDispose(ui.user))) return toast('Marty, quality or a supervisor uploads the log.', 'bad');
+    try { toast('Reading ' + file.name + '…'); const X = await loadXLSX(), wb = X.read(await file.arrayBuffer(), { type: 'array', cellDates: true }), sh = wb.Sheets[wb.SheetNames[0]], rows = X.utils.sheet_to_json(sh, { header: 1, raw: true, defval: '' }), out = parseFinalLog(rows);
+      if (!out.length) return toast('No travelers found. Is this the Final Assembly Traveler Log?', 'bad');
+      store.logs.final = out; store.finMeta = { at: Date.now(), by: ui.user.id, file: file.name }; render();
+      if (store.mode === 'shared') await store.db.doc('logs/final').set({ rows: out, at: Date.now(), by: ui.user.id, file: file.name });
+      toast(out.length.toLocaleString() + ' final travelers loaded, last #' + out[out.length - 1].t);
+    } catch (e) { toast('Could not read the log: ' + (e.message || e), 'bad'); }
+  }
   function nextNo(floor) {
     let mx = 0; (store.logs[floor] || []).forEach((r) => { const n = Number(r.t); if (n > mx) mx = n; });
     jobs().forEach((j) => { if (!/^\d+$/.test(j.so)) return; const f = j.floor || W.sideOf(j.ops[j.ops.length - 1].station); if (f === floor && Number(j.so) > mx) mx = Number(j.so); });
@@ -1594,15 +1660,21 @@ window.WT_ESP = [
       }).join('') : '<div class="empty">No jobs yet. Release the first one from the Release job tab.</div>';
     }
     if (ui.mtab === 'release') {
-      const sel = ui.relRid && W.routing(ui.relRid) ? W.routing(ui.relRid) : null, fl = sel ? W.sideOf(sel.ops[sel.ops.length - 1].station) : '';
+      const sel = ui.relRid && W.routing(ui.relRid) ? W.routing(ui.relRid) : null, fin = sel && W.isFinal(sel), fl = sel ? (fin ? 'final' : W.sideOf(sel.ops[sel.ops.length - 1].station)) : '';
       h += '<div class="panel"><h2>Issue a traveler</h2><p class="muted">Three steps: find the part, enter the quantity, issue. No PC log needed. The traveler number is assigned for you.</p>' +
         '<label>1 · Part number — type it, scan it, or tap the keyboard microphone and say it<input id="rel-find" class="field" autocomplete="off" value="' + esc(ui.relQ || '') + '" placeholder="Example: 1001050"></label><div id="rel-hits" class="tiles">' + relHits(ui.relQ || '') + '</div>' +
-        (sel ? '<div class="banner info"><div><b class="mono" style="font-size:1.2rem">' + esc(sel.pn) + '</b> ' + esc(sel.name) + '<br><span class="small">' + esc(sel.kind || sel.form) + ' · traveler rev ' + esc(sel.travRev) + ' · ' + sel.ops.length + ' operations · ' + (fl === 'metal' ? 'Metal floor' : 'Filter floor') + '. This traveler is locked to that revision when you issue it.</span></div></div>' +
+        (sel ? '<div class="banner info"><div><b class="mono" style="font-size:1.2rem">' + esc(sel.pn) + '</b> ' + esc(sel.name) + '<br><span class="small">' + esc(sel.kind || sel.form) + ' · traveler rev ' + esc(sel.travRev) + ' · ' + sel.ops.length + ' operations · ' + (fin ? 'Final assembly / packing' : fl === 'metal' ? 'Metal floor' : 'Filter floor') + '. This traveler is locked to that revision when you issue it.</span></div></div>' +
           '<div class="grid2"><label>2 · Quantity<input id="rel-qty" class="field" type="number" inputmode="numeric" min="1"></label><label>Due date<input id="rel-due" class="field" type="date" value="' + new Date(now + 90 * 864e5).toISOString().slice(0, 10) + '"></label>' +
           '<label>Traveler number (next in the ' + fl + ' series)<input id="rel-so" class="field" autocomplete="off" inputmode="numeric" value="' + esc(nextNo(fl)) + '"></label><label class="check" style="flex-direction:row;align-items:center;gap:12px"><input id="rel-rush" type="checkbox" style="width:28px;height:28px;min-height:28px;flex:0 0 auto"> RUSH — run this first (ASAP)</label></div>' +
+          (fin ? '<div class="banner warn"><div><b>Final / packing traveler — shipping release.</b> Enter the customer PO # and Sales Order # now if you have them. If not, Marty or QA adds them on the traveler before the closing signature.</div></div><div class="grid2"><label>PO #<input id="rel-po" class="field" autocomplete="off" value="' + esc((finRow(nextNo('final')) || {}).po || '') + '"></label><label>Sales Order #<input id="rel-sales" class="field" autocomplete="off" placeholder="P88087" value="' + esc((finRow(nextNo('final')) || {}).so || '') + '"></label></div>' : '') +
           '<p class="small muted">Due date is set 90 days out, the same as your ' + fl + ' log. Change it if needed. Jobs run in due-date order unless marked RUSH.</p>' +
           (sel.lots ? '<label class="check" style="flex-direction:row;align-items:center;gap:12px"><input id="rel-set" type="checkbox" checked style="width:28px;height:28px;min-height:28px;flex:0 0 auto"> Also issue the baffle (1001050) and pleat pack (1001249) travelers for this order. Welding waits for the baffles and pouring waits for the pleat packs.</label>' : '') +
           '<button class="btn primary go" data-a="release" style="align-self:flex-start">3 · Issue to the floor</button>' : '<p class="muted">Pick a part above to continue.</p>') + '</div>';
+    }
+    if (ui.mtab === 'release') {
+      const FL = store.logs.final || [], last = FL.length ? FL[FL.length - 1] : null, meta = store.finMeta || {}, sup = ui.user && (W.isApprover(ui.user) || W.canDispose(ui.user));
+      h += '<div class="panel"><h2>Final assembly traveler log</h2><p class="small muted">' + (FL.length ? FL.length.toLocaleString() + ' final / packing travelers loaded, last #' + esc(last.t) + (meta.at ? ' · uploaded ' + esc(fTime(meta.at)) + ' by ' + esc(nm(meta.by)) : '') + '. PO # and Sales Order # fill in from here on the shipping release.' : 'Not loaded yet. Upload the Final Assembly Traveler Log so PO # and Sales Order # fill in by themselves.') + '</p>' +
+        (sup ? '<label class="btn" style="align-self:flex-start">Upload final assembly log (.xls or .xlsx)<input id="fin-file" type="file" accept=".xls,.xlsx,.xlsm,.csv" hidden></label>' : '<p class="small muted">Marty, quality or a supervisor uploads it.</p>') + '</div>';
     }
     if (ui.mtab === 'holds') {
       const hs = []; J.forEach((j) => W.openHolds(j).forEach((x) => hs.push('<div class="card b-hold"><span class="c-main"><span><b>■ ' + esc(x.reason) + '</b> · ' + x.qty + ' pcs · <span class="mono">' + esc(j.pn) + '</span> op ' + x.n + '</span><span class="small muted">Shop Order ' + esc(j.so) + ' · opened by ' + esc(nm(x.by)) + ' ' + esc(fTime(x.at)) + ' · open ' + fDur(now - x.at) + (x.note ? ' · ' + esc(x.note) : '') + '</span></span><span class="c-act"><span class="row"><button class="btn sm" data-open="' + esc(j.id) + '" data-i="' + x.i + '">Open job</button><button class="btn sm stop" data-m="dispose" data-job="' + esc(j.id) + '" data-hold="' + x.id + '">Disposition</button></span></span></div>')));
@@ -1748,8 +1820,10 @@ window.WT_ESP = [
           '<p><b class="notr">' + esc(hdr(rt, 'name')) + '</b>' + tag('@name') + ed('@name', 'name') + '</p><div class="facts"><span>Type <b>' + esc(kindOf(rt)) + '</b></span><span>Trav rev <b>' + esc(rt.travRev) + ' ' + esc(rt.travDate) + '</b></span><span>Dwg rev <b>' + esc(rt.dwgRev) + '</b></span><span>Customer <b class="notr">' + esc(hdr(rt, 'customer')) + '</b>' + ed('@customer', 'customer') + '</span>' + (rt.file ? '<span>File <b>' + esc(rt.file) + '</b></span>' : '') + '</div>' +
           '<p><b>Material:</b> <span class="notr">' + esc(hdr(rt, 'material') || '—') + '</span>' + tag('@material') + ed('@material', 'material') + '</p>' +
           (sup ? '<p class="small muted">✎ changes save right away and show on every traveler for this part on every tablet, including ones already running. The master PDF keeps the old text until drafting revises it. Red-lines → Save approved red-lines lists every change for them.</p>' : '') +
-          '<div class="tbl-wrap"><table><tr><th>Op</th><th>Tablet area</th><th>Location on paper</th><th>Description</th>' + (sup ? '<th></th>' : '') + '</tr>' + rt.ops.map((o) => '<tr><td class="mono">' + esc(o.n) + '</td><td>' + esc(W.station(o.station).name) + '</td><td>' + esc(o.mach.join(', ')) + '</td><td class="notr">' + (() => { const lv = liveStep(rt.id, o.n, o.text, null); return esc(lv.text) + (lv.how === 'redline' ? ' <span class="pill warn">✎ ' + esc(lv.x.id) + '</span>' : ''); })() + '</td>' + (sup ? '<td>' + ed(o.n) + '</td>' : '') + '</tr>').join('') + '</table></div>' +
+          (rt.ops.some((o) => o.risk) ? '<p class="small">' + ['L', 'M', 'H'].map((k) => riskBox(k, true)).join(' ') + '</p>' : '') + '<div class="tbl-wrap"><table><tr><th>Op</th><th>Risk</th><th>Tablet area</th><th>Location on paper</th><th>Description</th>' + (sup ? '<th></th>' : '') + '</tr>' + rt.ops.map((o) => '<tr><td class="mono">' + esc(o.n) + '</td><td>' + riskBox(o.risk) + '</td><td>' + esc(W.station(o.station).name) + '</td><td>' + esc(o.mach.join(', ')) + '</td><td class="notr">' + (() => { const lv = liveStep(rt.id, o.n, o.text, null); return esc(lv.text) + (lv.how === 'redline' ? ' <span class="pill warn">✎ ' + esc(lv.x.id) + '</span>' : ''); })() + '</td>' + (sup ? '<td>' + ed(o.n) + '</td>' : '') + '</tr>').join('') + '</table></div>' +
           ((rt.extra || []).length ? '<h3>Notes on the traveler</h3><ul class="clean small">' + rt.extra.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '') + (rt.master ? '<p class="small muted">Copied from the master PDF. The tablet area is my reading of the location column.</p>' : '') + (rt.docs.length ? '<h3>Prints and traveler pages</h3>' + rt.docs.map((d) => '<p class="small"><b>' + esc(d.t) + '</b></p><img src="' + esc(d.f) + '" alt="' + esc(d.t) + '" style="width:100%;border:1px solid var(--line);background:#fff">').join('') : (rt.dwLoading ? '<p class="muted">Loading prints…</p>' : '<p class="muted">Prints for this part are not on the tablet yet.</p>')); break; }
+      case 'ship': h = '<h2>Shipping release · Traveler ' + esc(j.so) + '</h2><p><span class="mono">' + esc(j.pn) + '</span> · ' + esc(j.name) + ' · ' + j.qty + ' pcs</p>' + (m.fromLog ? '<p class="small muted">Filled in from the final assembly log, traveler ' + esc(j.so) + '. Check them and save.</p>' : '') +
+        '<div class="grid2">' + inp('po', 'Customer PO #', m, 'autocomplete="off"') + inp('sales', 'Sales Order #', m, 'autocomplete="off" placeholder="P88087"') + '</div><p class="small muted">Prints on the traveler and on every box label. Saved with your name and the time.</p>' + foot('Save shipping release', 'go'); break;
       case 'mEdit': { const rt = W.routing(m.rid);
         h = '<h2>Correct ' + esc(opLabel(m.n)) + ' · <span class="mono">' + esc(rt.pn) + '</span></h2><p class="muted">Write it the way it should read. It changes on every traveler for this part on every tablet as soon as you save.</p>' +
           '<p class="small">Now reads: <span class="notr">' + esc(m.was || '—') + '</span></p><label>Should read<textarea data-f="text" id="m-text" class="notr" rows="4">' + esc(m.text || '') + '</textarea></label>' +
@@ -1797,6 +1871,7 @@ window.WT_ESP = [
         saveRl({ id, rid: j.rid, pn: j.pn, n: op.n, station: op.station, so: j.so, job: j.id, was, text: tx, reason: m.reason, note: String(m.note || '').trim(), by: ui.user.id, at: Date.now(), status: 'pending' });
         run(m.job, 'logNote', { a: 'Red-line sent', d: id + ' · op ' + op.n + ' · ' + m.reason });
         closeModal(); return toast('Red-line ' + id + ' sent. A signer approves it.'); }
+      case 'ship': ok = run(m.job, 'shipInfo', { po: m.po, sales: m.sales }); if (ok) toast('Shipping release saved'); break;
       case 'mEdit': { const rt = W.routing(m.rid), tx = String(m.text || '').trim();
         if (!ui.user || !W.isApprover(ui.user)) return toast('A supervisor or manager makes corrections.', 'bad');
         if (!m.reason) return toast('Pick what kind of change it is.', 'bad'); if (!tx || tx === m.was) return toast('Write it the way it should read.', 'bad');
@@ -1908,7 +1983,7 @@ window.WT_ESP = [
   const PRINT_CSS = '@page{size:letter;margin:0.4in}#printout{display:none}@media print{body>*:not(#printout){display:none!important}html,body{background:#fff!important}#printout{display:block!important;color:#000;font:10pt/1.3 Arial,Helvetica,sans-serif}' +
     '#printout,#printout *{box-sizing:border-box}#printout{width:100%;max-width:7.7in}#printout table{table-layout:fixed;min-width:0!important;width:100%!important;font-size:9pt}#printout td,#printout th{font-size:9pt;line-height:1.25;overflow-wrap:anywhere}#printout .sm,#printout td.sm{font-size:7.5pt}#printout td.mono{font-size:9pt}#printout th{white-space:normal!important;font-size:7pt!important;letter-spacing:0!important}#printout .hg .mono{font-size:10pt}' + '#printout h1{font:700 15pt Arial;margin:0}#printout h2{font:700 11pt Arial;margin:12pt 0 4pt;text-transform:uppercase;border-bottom:1.5pt solid #000}#printout table{border-collapse:collapse;width:100%}#printout td,#printout th{border:.75pt solid #000;padding:3pt 4pt;vertical-align:top;text-align:left}#printout th{background:#e6e6e6!important;font-size:8pt;text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
     '#printout tr{break-inside:avoid;page-break-inside:avoid}#printout .ph{display:flex;justify-content:space-between;align-items:flex-start;gap:12pt;margin-bottom:6pt}#printout .ph svg{height:.45in;width:auto}#printout .hg{display:grid;grid-template-columns:repeat(4,1fr);border:.75pt solid #000;border-right:0;border-bottom:0}#printout .hg div{border-right:.75pt solid #000;border-bottom:.75pt solid #000;padding:2pt 4pt;min-height:22pt}#printout .hg b{display:block;font-size:10pt}#printout .hg span{font-size:7pt;text-transform:uppercase;color:#333}' +
-    '#printout .sm{font-size:8pt}#printout .mono{font-family:Consolas,monospace}#printout .rl{font-size:7.5pt;font-weight:700}#printout .blank{height:26pt}#printout .dwg{break-before:page;page-break-before:always}#printout .dwg img{width:100%;max-height:9.4in;object-fit:contain;border:.75pt solid #000}#printout .foot{margin-top:10pt;font-size:7.5pt;color:#333}}';
+    '#printout .sm{font-size:8pt}#printout .mono{font-family:Consolas,monospace}#printout .rl{font-size:7.5pt;font-weight:700}#printout .blank{height:26pt}#printout .dwg{break-before:page;page-break-before:always}#printout .dwg img{width:100%;max-height:9.4in;object-fit:contain;border:.75pt solid #000}#printout .foot{margin-top:10pt;font-size:7.5pt;color:#333}#printout .prk,#printout .lg i{-webkit-print-color-adjust:exact;print-color-adjust:exact}#printout .pL{background:#92D050!important}#printout .pM{background:#FFFF00!important}#printout .pH{background:#FF0000!important}#printout .lg{font-size:7.5pt;margin-top:4pt}#printout .lg i{display:inline-block;width:14pt;height:8pt;border:.5pt solid #000;margin:0 3pt 0 8pt;vertical-align:middle}}';
   function printDoc(html) {
     let st = document.getElementById('print-css'); if (!st) { st = document.createElement('style'); st.id = 'print-css'; st.textContent = PRINT_CSS; document.head.appendChild(st); }
     let el = document.getElementById('printout'); if (!el) { el = document.createElement('div'); el.id = 'printout'; el.className = 'notr'; document.body.appendChild(el); }
@@ -1926,11 +2001,13 @@ window.WT_ESP = [
     let h = '<div class="ph"><div><div class="sm">WALKER ENGINEERING · ' + E(r.form) + '</div><h1>' + (blank ? 'Traveler — ' : 'Traveler #' + E(j.so) + ' — ') + '<span class="mono">' + E(blank ? r.pn : j.pn) + '</span></h1><div>' + E(hdr(r, 'name')) + '</div></div><div style="text-align:right">' + (code ? bc(code) + '<div class="mono sm">' + E(code) + '</div>' : '') + '</div></div>';
     h += '<div class="hg">' + cell('S.O. / Traveler #', blank ? '' : E(j.so)) + cell('Part number', '<span class="mono">' + E(blank ? r.pn : j.pn) + '</span>') + cell('Quantity', blank ? '' : E(j.qty)) + cell('Status', blank ? '' : E(jobStatus(j)[2]) + (j.rush ? ' · ASAP' : '')) +
       cell('Issued', blank ? '' : E(fTime(j.rel && j.rel.at)) + (j.rel && j.rel.by ? ' · ' + E(nm(j.rel.by)) : '')) + cell('Due', blank ? '' : E(fDue(j.due))) + cell('Completed', blank ? '' : (j.st === 'complete' ? E(fTime(j.doneAt)) : '')) + cell('Customer', E(hdr(r, 'customer'))) +
-      cell('Traveler rev', E((j ? j.rel.travRev : r.travRev) + ' ' + (r.travDate || ''))) + cell('Drawing rev', E(j ? j.rel.dwgRev : r.dwgRev)) + '<div style="grid-column:span 2"><span>Material</span><b>' + (E(hdr(r, 'material')) || '&nbsp;') + '</b></div></div>';
+      cell('Traveler rev', E((j ? j.rel.travRev : r.travRev) + ' ' + (r.travDate || ''))) + cell('Drawing rev', E(j ? j.rel.dwgRev : r.dwgRev)) + '<div style="grid-column:span 2"><span>Material</span><b>' + (E(hdr(r, 'material')) || '&nbsp;') + '</b></div>' +
+      (W.isFinal(r) ? cell('Customer PO #', j && j.ship ? '<span class="mono">' + E(j.ship.po) + '</span>' : '') + cell('Sales Order #', j && j.ship ? '<span class="mono">' + E(j.ship.sales) + '</span>' : '') + '<div style="grid-column:span 2"><span>Shipping release</span><b>' + (j && W.shipOk(j) ? E(nm(j.ship.by)) + ' · ' + E(fTime(j.ship.at)) : '&nbsp;') + '</b></div>' : '') + '</div>';
     // Operations
-    h += '<h2>Operations</h2><table><tr><th style="width:5%">Op</th><th style="width:13%">Area · machine</th><th>Operation</th><th style="width:11%">Operator</th><th style="width:12%">First article sign-off</th><th style="width:12%">Closing sign-off</th><th style="width:7%">Good</th><th style="width:6%">Bad</th></tr>' +
-      r.ops.map((o, i) => { const op = j ? j.ops[i] : null, lv = liveStep(r.id, o.n, o.text, j); return '<tr><td class="mono">' + E(o.n) + '</td><td class="sm">' + E(W.station(op ? op.station : o.station).name) + '<br>' + E(o.mach.join(', ')) + '</td><td>' + E(lv.text) + (lv.how === 'redline' ? '<div class="rl">✎ RED-LINE ' + E(lv.x.id) + ' · ' + E(nm(lv.x.okBy)) + ' ' + E(fTime(lv.x.okAt)) + '</div>' : lv.how === 'job' ? '<div class="rl">✎ CHANGED FOR THIS JOB · ' + E(nm(lv.x.by)) + ' ' + E(fTime(lv.x.at)) + (lv.x.reason ? ' · ' + E(lv.x.reason) : '') + '</div>' : '') + (op && op.paused ? '<div class="sm">Paused: ' + E(op.paused.reason) + '</div>' : '') + '</td>' +
+    h += '<h2>Operations</h2><table><tr><th style="width:5%">Op</th><th style="width:5%">Risk</th><th style="width:12%">Area · machine</th><th>Operation</th><th style="width:11%">Operator</th><th style="width:12%">First article sign-off</th><th style="width:12%">Closing sign-off</th><th style="width:7%">Good</th><th style="width:6%">Bad</th></tr>' +
+      r.ops.map((o, i) => { const op = j ? j.ops[i] : null, lv = liveStep(r.id, o.n, o.text, j); return '<tr><td class="mono">' + E(o.n) + '</td><td class="prk' + (o.risk ? ' p' + o.risk : '') + '"></td><td class="sm">' + E(W.station(op ? op.station : o.station).name) + '<br>' + E(o.mach.join(', ')) + '</td><td>' + E(lv.text) + (lv.how === 'redline' ? '<div class="rl">✎ RED-LINE ' + E(lv.x.id) + ' · ' + E(nm(lv.x.okBy)) + ' ' + E(fTime(lv.x.okAt)) + '</div>' : lv.how === 'job' ? '<div class="rl">✎ CHANGED FOR THIS JOB · ' + E(nm(lv.x.by)) + ' ' + E(fTime(lv.x.at)) + (lv.x.reason ? ' · ' + E(lv.x.reason) : '') + '</div>' : '') + (op && op.paused ? '<div class="sm">Paused: ' + E(op.paused.reason) + '</div>' : '') + '</td>' +
         '<td class="sm">' + (op ? E(op.who.map(nm).join(', ')) : '<div class="blank"></div>') + '</td><td>' + sgn(op, 'first') + '</td><td>' + sgn(op, 'final') + '</td><td class="mono">' + (op && op.good != null ? E(op.good) : '') + '</td><td class="mono">' + (op && op.scrap ? E(op.scrap) : '') + '</td></tr>'; }).join('') + '</table>';
+    if (r.ops.some((o) => o.risk)) h += '<div class="lg">Risk:<i class="pL"></i>Low<i class="pM"></i>Medium<i class="pH"></i>High</div>';
     // Red-line notes for this part
     const RL = rls().filter((x) => x.rid === r.id && x.status !== 'rejected').sort((a, b) => (a.okAt || a.at) - (b.okAt || b.at)), ED = j ? Object.keys(j.edits || {}).map((n) => Object.assign({ n }, j.edits[n])) : [];
     h += '<h2>Red-line notes</h2>' + (RL.length || ED.length ? '<table><tr><th style="width:9%">ID</th><th style="width:11%">Where</th><th>Was</th><th>Now reads</th><th style="width:17%">By · approved</th></tr>' +
@@ -1969,7 +2046,7 @@ window.WT_ESP = [
     return all.map((l, k) => { const code = j.so + '-' + l.id;
       return '<div class="lbl"><div class="lbl-top"><div><div class="lbl-cap">PART NO.</div><div class="lbl-pn">' + esc(j.pn) + '</div></div><div class="lbl-r"><div class="lbl-cap">TRAVELER NO.</div><div class="lbl-trv">' + esc(j.so) + '</div></div></div>' +
         '<div class="lbl-desc">' + esc(String(j.name).slice(0, 46)) + '</div>' +
-        '<div class="lbl-row"><b>QTY ' + l.qty + '</b> · BOX ' + (k + 1) + ' OF ' + all.length + ' · OP ' + l.n + ' DONE · TO <b>' + esc(W.station(l.to).name.toUpperCase()) + '</b>' + (j.rush ? ' · <b>ASAP</b>' : '') + '</div>' +
+        (j.ship ? '<div class="lbl-row">PO <b>' + esc(j.ship.po) + '</b> · SO <b>' + esc(j.ship.sales) + '</b></div>' : '') + '<div class="lbl-row"><b>QTY ' + l.qty + '</b> · BOX ' + (k + 1) + ' OF ' + all.length + ' · OP ' + l.n + ' DONE · TO <b>' + esc(W.station(l.to).name.toUpperCase()) + '</b>' + (j.rush ? ' · <b>ASAP</b>' : '') + '</div>' +
         '<div class="lbl-bc">' + bc(code) + '</div><div class="lbl-foot"><b>' + esc(code) + '</b><span>' + esc(fTime(l.at)) + ' · ' + esc(nm(l.by)) + '</span></div></div>'; }).join('');
   }
   const LBL_CSS = '.lbl{border:2px solid #000;border-radius:6px;padding:8px 10px;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;display:flex;flex-direction:column;gap:2px;break-inside:avoid;line-height:1.15}.lbl-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.lbl-r{text-align:right}.lbl-cap{font-size:9px;font-weight:700;letter-spacing:.08em}.lbl-pn{font-size:30px;font-weight:700;font-family:"Courier New",monospace;line-height:1}.lbl-trv{font-size:24px;font-weight:700;font-family:"Courier New",monospace;line-height:1}.lbl-desc{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lbl-row{font-size:12px}.lbl-bc svg{width:100%;height:44px;display:block;margin-top:3px}.lbl-foot{display:flex;justify-content:space-between;font-size:11px;font-family:"Courier New",monospace}';
@@ -2078,6 +2155,7 @@ window.WT_ESP = [
       if (d.m === 'correct') return openModal({ type: 'correct', job, i, who: ap, good: op.good, reason: '', pin: '' });
       if (!need()) return;
       if (d.m === 'setup') { const o = W.routing(j.rid).ops[i]; if (!(o.checks || []).length && !(o.fields || []).length) return void run(job, 'finishSetup', { i }); return openModal({ type: 'setup', job, i, chk: {} }); }
+      if (d.m === 'ship') { if (!(W.canDispose(ui.user) || W.isApprover(ui.user))) return toast('Marty, quality or a supervisor enters the PO and Sales Order.', 'bad'); const lr = finRow(j.so); return openModal({ type: 'ship', job, po: j.ship ? j.ship.po : (lr && lr.po) || '', sales: j.ship ? j.ship.sales : (lr && lr.so) || '', fromLog: !j.ship && !!lr }); }
       if (d.m === 'mid') return openModal({ type: 'mid', job, i, count: W.midTarget(op) });
       if (d.m === 'finish') return openModal({ type: 'finish', job, i, good: '', scrap: 0, shortReason: '', note: '' });
       if (d.m === 'move') { const next = j.ops[i + 1]; return openModal({ type: 'move', job, i, dest: W.finalDest(j, i), boxes: 1, qty: j.ops[i].st === 'running' ? '' : W.unmoved(j, i), direct: false, reason: '' }); }
@@ -2134,7 +2212,9 @@ window.WT_ESP = [
         try {
           const c2 = { u: ui.user, at: Date.now() }, base = { so: $('#rel-so').value.trim(), qty: $('#rel-qty').value, due: $('#rel-due').value, pri: 50, rush: $('#rel-rush').checked }, rid = ui.relRid, rt = W.routing(rid);
           if (!rt) return toast('Pick the part first.', 'bad');
-          const fl = W.sideOf(rt.ops[rt.ops.length - 1].station);
+          const fin = W.isFinal(rt), fl = fin ? 'final' : W.sideOf(rt.ops[rt.ops.length - 1].station);
+          if (fin && $('#rel-po')) base.ship = { po: $('#rel-po').value, sales: $('#rel-sales').value };
+          if (fin && (store.logs.final || []).some((r) => String(r.t) === base.so && r.pn)) return toast('Traveler number ' + base.so + ' is already used on the final assembly log. Use the next free number.', 'bad');
           if (['metal', 'filter'].some((f) => (store.logs[f] || []).some((r) => r.t === base.so))) return toast('Traveler number ' + base.so + ' is already used on the paper log. Use the next free number.', 'bad');
           const setEl = $('#rel-set'), kids = setEl && setEl.checked && rt.lots ? [['1001050', '-B', 'baffles', 0], ['1001249', '-P', 'pleat packs', 1]].map((k) => ({ job: W.newJob(Object.assign({}, base, { rid: k[0], so: base.so + k[1] }), c2), label: k[2], i: k[3] })) : [];
           const j = W.newJob(Object.assign({}, base, { rid, needs: kids.map((k) => ({ id: k.job.id, so: k.job.so, pn: k.job.pn, label: k.label, i: k.i })) }), c2);
@@ -2153,6 +2233,7 @@ window.WT_ESP = [
       return void run(d.job, d.a, { i: Number(d.i) });
     }
   });
+  document.addEventListener('change', (e) => { const t = e.target; if (t && t.id === 'fin-file' && t.files && t.files[0]) { uploadFinalLog(t.files[0]); t.value = ''; } });
   document.addEventListener('input', (e) => {
     ui.touched = Date.now(); const t = e.target, m = ui.modal;
     if (t.id === 'q') return search(t.value);
