@@ -280,6 +280,28 @@ td.num { font-variant-numeric: tabular-nums; text-align: right; }
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 window.WT_ES = {
+"Supplier part bad":"Pieza de proveedor mala",
+"Return to supplier":"Regresar al proveedor",
+"Supplier":"Proveedor",
+"Their PO / lot / part # (if you have it)":"Su PO / lote / no. de parte (si lo tienes)",
+"Enter the supplier name.":"Escribe el nombre del proveedor.",
+"Supplier problems":"Problemas de proveedor",
+"Bad parts from suppliers found at the machines. Use this for supplier returns and corrective actions.":"Piezas malas de proveedores encontradas en las máquinas. Úsalo para devoluciones y acciones correctivas.",
+"New build, prototype or one-off — no traveler yet?":"¿Pieza nueva, prototipo o trabajo único sin viajero?",
+"+ Start a work order":"+ Iniciar orden de trabajo",
+"Steps, in order":"Pasos, en orden",
+"+ Add step":"+ Agregar paso",
+"Issue work order to the floor":"Emitir orden de trabajo al piso",
+"Cancel":"Cancelar",
+"What to do at this step":"Qué hacer en este paso",
+"Work order number":"Número de orden de trabajo",
+"Part number (or prototype name)":"Número de parte (o nombre del prototipo)",
+"Description":"Descripción",
+"Customer (optional)":"Cliente (opcional)",
+"Floor":"Piso",
+"Material / notes (optional)":"Material / notas (opcional)",
+"Write at least one step.":"Escribe al menos un paso.",
+"Enter the part number or prototype name.":"Escribe el número de parte o nombre del prototipo.",
 "Workload by area right now":"Carga de trabajo por área ahora",
 "Open operations on the tablets in each department, and who is on them.":"Operaciones abiertas en las tabletas de cada departamento, y quién las trabaja.",
 "Area":"Área",
@@ -603,9 +625,9 @@ window.WT_ESP = [
   };
 
   const PAUSE_REASONS = ['Break / lunch', 'Waiting on material', 'Machine down', 'Tooling or fixture', 'Pulled to another job', 'End of shift', 'Waiting on instructions'];
-  const HOLD_REASONS = ['Dimension out', 'Visual defect', 'Wrong material', 'Wrong marking', 'Damaged', 'Count does not match', 'Instruction unclear'];
+  const HOLD_REASONS = ['Supplier part bad', 'Dimension out', 'Visual defect', 'Wrong material', 'Wrong marking', 'Damaged', 'Count does not match', 'Instruction unclear'];
   const BLOCK_REASONS = ['Waiting on material', 'Waiting on components', 'Machine down', 'Tooling not available'];
-  const DISPOSITIONS = [['rework', 'Rework and re-inspect'], ['scrap', 'Scrap'], ['use', 'Use as is'], ['recount', 'Accept corrected count']];
+  const DISPOSITIONS = [['rework', 'Rework and re-inspect'], ['rts', 'Return to supplier'], ['scrap', 'Scrap'], ['use', 'Use as is'], ['recount', 'Accept corrected count']];
 
   /* ---------- helpers ---------- */
   const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -786,14 +808,17 @@ window.WT_ESP = [
         op = guard(job, i, ctx); if (['first_piece', 'authorized', 'running'].indexOf(op.st) < 0) fail('Bad parts are logged while the operation is running.');
         const q = Math.floor(Number(p.qty)); if (!(q >= 1)) fail('Enter how many are bad.'); if (!p.reason) fail('Pick what is wrong with them.');
         if (op.scrap + q > op.qtyIn) fail('That is more than the ' + op.qtyIn + ' pieces at this operation.');
-        touch(job, i, ctx); op.scrap += q; log(job, ctx, 'Bad parts logged', 'Op ' + op.n + ' · ' + q + ' pcs · ' + p.reason + (p.note ? ' · ' + p.note : '')); break;
+        const sup = p.reason === 'Supplier part bad' ? { name: String(p.supName || '').trim(), ref: String(p.supRef || '').trim() } : null; if (sup && !sup.name) fail('Enter the supplier name.');
+        touch(job, i, ctx); op.scrap += q; if (sup) (job.supIssues = job.supIssues || []).push({ n: op.n, qty: q, sup, note: p.note || '', by: ctx.u.id, at: ctx.at, kind: 'scrap' });
+        log(job, ctx, 'Bad parts logged', 'Op ' + op.n + ' · ' + q + ' pcs · ' + p.reason + (sup ? ' · supplier ' + sup.name + (sup.ref ? ' · ' + sup.ref : '') : '') + (p.note ? ' · ' + p.note : '')); break;
       }
       case 'hold': {
         op = guard(job, i, ctx, { ignorePause: true }); if (op.st === 'pending' || op.st === 'done') fail('No parts at this operation.');
         if (!p.reason) fail('Pick a reason.'); const q = Math.floor(Number(p.qty)); if (!(q >= 1)) fail('Enter the quantity affected.');
-        job.holds.push({ id: 'H' + (job.holds.length + 1), n: op.n, i, src: 'operator', reason: p.reason, qty: q, note: p.note || '', by: ctx.u.id, at: ctx.at, open: true, prev: openSeg(op) ? openSeg(op).t : null });
+        const sup = p.reason === 'Supplier part bad' ? { name: String(p.supName || '').trim(), ref: String(p.supRef || '').trim() } : null; if (sup && !sup.name) fail('Enter the supplier name.');
+        job.holds.push({ id: 'H' + (job.holds.length + 1), n: op.n, i, src: 'operator', reason: p.reason, qty: q, note: p.note || '', by: ctx.u.id, at: ctx.at, open: true, prev: openSeg(op) ? openSeg(op).t : null, sup });
         if (openSeg(op)) seg(op, 'hold', ctx);
-        log(job, ctx, 'Hold raised', 'Op ' + op.n + ' · ' + p.reason + ' · ' + q + ' pcs'); break;
+        log(job, ctx, 'Hold raised', 'Op ' + op.n + ' · ' + p.reason + ' · ' + q + ' pcs' + (sup ? ' · supplier ' + sup.name + (sup.ref ? ' · ' + sup.ref : '') : '')); break;
       }
       case 'dispose': {
         const h = job.holds.find((x) => x.id === p.id && x.open); if (!h) fail('That hold is already closed.');
@@ -802,7 +827,7 @@ window.WT_ESP = [
         if ((p.action === 'use' || p.action === 'recount') && !(p.note || '').trim()) fail('A note is required for this disposition.');
         op = job.ops[h.i];
         h.open = false; h.disp = { by: ctx.u.id, at: ctx.at, action: p.action, note: p.note || '' };
-        if (p.action === 'scrap' && h.src !== 'receipt') op.scrap += h.qty;
+        if ((p.action === 'scrap' || p.action === 'rts') && h.src !== 'receipt') op.scrap += h.qty;
         if (h.src === 'first') { op.st = 'setup_done'; seg(op, null, ctx); }
         else if (h.src === 'final') { op.st = 'running'; op.pend = null; seg(op, 'run', ctx); }
         else if (h.src === 'mid') { seg(op, op.paused ? 'paused' : 'run', ctx); }
@@ -1060,6 +1085,7 @@ window.WT_ESP = [
       store.jobs = m; store.loaded = true; render(); setTimeout(endOfDay, 1500);
     }, () => { store.mode = 'local'; loadLocal(); store.loaded = true; render(); });
     db.collection('logs').onSnapshot((s) => { s.docs.forEach((d) => { const x = d.data(); store.logs[d.id] = (x && x.rows) || []; if (d.id === 'final' && x) store.finMeta = { at: x.at, by: x.by, file: x.file }; }); render(); }, () => {});
+    db.collection('routings').onSnapshot((s) => { s.docs.forEach((d) => { const r = d.data(); if (r && r.id && !W.routing(r.id)) W.ROUTINGS.push(W.clone(r)); }); render(); }, () => {});
     db.collection('prints').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.pn) m[d.id] = x; }); store.prints = m; render(); if (ui.modal) renderModal(); }, () => {});
     db.collection('redlines').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.redlines = m; applyAreas(); render(); if (ui.modal) renderModal(); }, () => {});
     db.doc('config/main').onSnapshot((s) => { if (s.exists) { mergeCfg(s.data()); render(); } }, () => {});
@@ -1261,6 +1287,10 @@ window.WT_ESP = [
     const open = all.filter((x) => x.r.s === 'O' && x.r.i), buckets = [['0–30 days', 0, 30], ['31–60', 31, 60], ['61–90', 61, 90], ['91–180', 91, 180], ['Over 180', 181, 1e9]];
     const ageRows = buckets.map((b) => { const xs = open.filter((x) => { const a = (now - ts(x.r.i)) / DAY; return a >= b[1] && a <= b[2] + 0.99; }); return [b[0], xs.length, xs.filter((x) => x.r.u && ts(x.r.u) < now).length + ' past due']; });
     h += '<div class="panel"><h2>Open travelers by age</h2><p class="small muted">Days since issued. ' + open.length + ' open in the logs.</p>' + bars(ageRows, { title: 'Open travelers by age', fmt: (v) => String(v) }) + '</div>';
+    { const SI = []; jobs().forEach((j) => { (j.holds || []).forEach((x) => { if (x.reason === 'Supplier part bad') SI.push({ j, at: x.at, n: x.n, qty: x.qty, sup: x.sup || {}, st: x.open ? 'OPEN hold' : ((W.DISPOSITIONS.find((d) => d[0] === x.disp.action) || [0, x.disp.action])[1]) }); }); (j.supIssues || []).forEach((x) => SI.push({ j, at: x.at, n: x.n, qty: x.qty, sup: x.sup, st: 'Logged as bad' })); });
+      if (SI.length) { SI.sort((a, b) => b.at - a.at); const by = {}; SI.forEach((x) => { const k = x.sup.name || '—'; by[k] = (by[k] || 0) + x.qty; });
+        h += '<div class="panel"><h2>Supplier problems</h2><p class="small muted">Bad parts from suppliers found at the machines. Use this for supplier returns and corrective actions.</p>' + bars(Object.keys(by).sort((a, b) => by[b] - by[a]).map((k) => [k, by[k]]), { title: 'Bad pieces by supplier', fmt: (v) => v + ' pcs', color: 'var(--s4)' }) +
+          '<div class="tbl-wrap"><table><tr><th>When</th><th>Supplier</th><th>Their PO / lot</th><th>Traveler</th><th>Op</th><th>Qty</th><th>Status</th></tr>' + SI.slice(0, 40).map((x) => '<tr><td class="num">' + esc(fTime(x.at)) + '</td><td>' + esc(x.sup.name || '—') + '</td><td class="mono">' + esc(x.sup.ref || '') + '</td><td><button class="btn sm" data-open="' + esc(x.j.id) + '">' + esc(x.j.so) + ' · ' + esc(x.j.pn) + '</button></td><td>' + esc(x.n) + '</td><td class="num">' + x.qty + '</td><td>' + esc(x.st) + '</td></tr>').join('') + '</table></div></div>'; } }
     // Workload: what is open in each area right now, and who carried the work this week
     { const A = {}; jobs().filter((j) => j.st !== 'complete').forEach((j) => j.ops.forEach((o, i) => { const b = W.bucket(j, i); if (!b) return; const a = A[o.station] = A[o.station] || { ops: 0, pcs: 0, jobs: {}, people: {} }; a.ops++; a.pcs += o.qtyIn || 0; a.jobs[j.id] = 1; const w = onIt({ st: j.st, ops: [o] }); if (w) w.split(', ').forEach((n) => { a.people[n] = 1; }); }));
       const ks = W.STATIONS.filter((st) => A[st.id]);
@@ -1581,6 +1611,9 @@ window.WT_ESP = [
     sec += M('redline', '✎ Red-line this step', 'sm');
     return '<div class="actionbar"><div class="msg">' + msg + '</div><div class="row">' + main + '</div><div class="row">' + sec + '</div></div>';
   }
+  // Supplier details appear when the reason is a bad supplier part
+  function supList() { const S = {}; jobs().forEach((j) => { (j.holds || []).forEach((h) => { if (h.sup && h.sup.name) S[h.sup.name] = 1; }); (j.supIssues || []).forEach((x) => { if (x.sup.name) S[x.sup.name] = 1; }); }); return Object.keys(S).sort(); }
+  function supF(m) { if (m.reason !== 'Supplier part bad') return ''; return '<div class="grid2"><label>Supplier<input data-f="supName" id="m-supName" class="field" list="sup-list" autocomplete="off" value="' + esc(m.supName || '') + '"></label><datalist id="sup-list">' + supList().map((n) => '<option value="' + esc(n) + '">').join('') + '</datalist>' + inp('supRef', 'Their PO / lot / part # (if you have it)', m, 'autocomplete="off"') + '</div>'; }
   function rlCard(x, withJob) {
     const can = ui.user && W.isApprover(ui.user) && x.by !== ui.user.id && W.covers(ui.user, x.station);
     return '<div class="banner warn"><div><b>✎ Red-line ' + esc(x.id) + ' waiting for approval</b> · ' + esc(x.reason) + ' · by ' + esc(nm(x.by)) + ' ' + esc(fTime(x.at)) + (withJob ? ' · <span class="mono">' + esc(x.pn) + '</span> ' + esc(opLabel(x.n)) + (x.so ? ' · Shop Order ' + esc(x.so) : ' · from the library') : '') +
@@ -1591,7 +1624,7 @@ window.WT_ESP = [
     const op = j.ops[i], o = r.ops[i], now = Date.now(), holds = W.openHolds(j, op.n), b = W.bucket(j, i);
     let h = '<div class="panel"><div class="row" style="justify-content:space-between"><h2>Op ' + op.n + ' · ' + esc(W.station(op.station).name) + ' ' + riskBox(rk(r, o), true) + '</h2>' +
       (b ? pill(b, holds.length ? 'On hold' : op.paused ? 'Paused' : b === 'approval' ? 'Needs signature' : W.ST_LABEL[op.st]) : '<span class="pill plain">' + esc(W.ST_LABEL[op.st]) + '</span>') + '</div>';
-    holds.forEach((x) => { h += '<div class="banner bad"><div><b>■ HOLD ' + x.id + ' · ' + esc(x.reason) + ' · ' + x.qty + ' pcs</b><br><span class="small">Opened by ' + esc(nm(x.by)) + ' · ' + esc(fTime(x.at)) + (x.note ? ' · ' + esc(x.note) : '') + '. Tag the parts and submit to Material Review for disposition.</span></div></div>'; });
+    holds.forEach((x) => { h += '<div class="banner bad"><div><b>■ HOLD ' + x.id + ' · ' + esc(x.reason) + (x.sup && x.sup.name ? ' · ' + esc(x.sup.name) + (x.sup.ref ? ' (' + esc(x.sup.ref) + ')' : '') : '') + ' · ' + x.qty + ' pcs</b><br><span class="small">Opened by ' + esc(nm(x.by)) + ' · ' + esc(fTime(x.at)) + (x.note ? ' · ' + esc(x.note) : '') + '. Tag the parts and submit to Material Review for disposition.</span></div></div>'; });
     h += '<div class="chips">' + o.mach.map((m) => '<span class="chip">' + esc(m) + '</span>').join('') + (o.dwg ? '<span class="chip">DWG ' + esc(o.dwg) + '</span>' : '') + '</div>';
     const ls2 = liveStep(j.rid, op.n, o.text, j), ed = ls2.how === 'job' ? ls2.x : null;
     h += '<p class="instr notr">' + esc(ls2.text) + '</p>' + (ed ? '<p class="small"><b>Changed for this job</b> by ' + esc(nm(ed.by)) + ' · ' + esc(fTime(ed.at)) + '. Master traveler: <span class="notr">' + esc(o.text) + '</span></p>' : '') +
@@ -1747,12 +1780,24 @@ window.WT_ESP = [
           '<button class="btn primary go" data-a="release" style="align-self:flex-start">3 · Issue to the floor</button>' : '<p class="muted">Pick a part above to continue.</p>') + '</div>';
     }
     if (ui.mtab === 'release') {
+      const can = ui.user && W.canDispose(ui.user), st = ui.wo;
+      h += '<div class="panel"><h2>New build, prototype or one-off — no traveler yet?</h2><p class="small muted">Write a quick work order right here: part, quantity and the steps in order, each sent to its department. It runs on the tablets like any traveler (sign-offs, bad parts, holds, time, prints). It also lands in the Traveler library so drafting can turn it into a real traveler later.</p>' +
+        (!st ? '<button class="btn" data-a="woStart" style="align-self:flex-start">+ Start a work order</button>' :
+        '<div class="grid2"><label>Part number (or prototype name)<input id="wo-pn" class="field" autocomplete="off" value="' + esc(st.pn) + '"></label><label>Description<input id="wo-name" class="field" autocomplete="off" value="' + esc(st.name) + '"></label>' +
+        '<label>Quantity<input id="wo-qty" class="field" type="number" inputmode="numeric" min="1" value="' + esc(st.qty) + '"></label><label>Due date<input id="wo-due" class="field" type="date" value="' + esc(st.due) + '"></label>' +
+        '<label>Customer (optional)<input id="wo-cust" class="field" autocomplete="off" value="' + esc(st.cust) + '"></label><label>Floor<select id="wo-floor" class="field">' + ['metal', 'filter'].map((f) => '<option value="' + f + '"' + (st.floor === f ? ' selected' : '') + '>' + (f === 'metal' ? 'Metal floor' : 'Filter floor') + '</option>').join('') + '</select></label>' +
+        '<label>Work order number<input id="wo-so" class="field" autocomplete="off" inputmode="numeric" value="' + esc(st.so || nextNo(st.floor)) + '"></label><label>Material / notes (optional)<input id="wo-mat" class="field" autocomplete="off" value="' + esc(st.mat) + '"></label></div>' +
+        '<h3>Steps, in order</h3>' + st.steps.map((x, k) => '<div class="row" style="align-items:flex-end;gap:8px;flex-wrap:nowrap"><b class="mono" style="min-width:36px">' + String((k + 1) * 10).padStart(3, '0') + '</b><select class="field wo-st" style="max-width:190px">' + W.STATIONS.map((o) => '<option value="' + o.id + '"' + (x.st === o.id ? ' selected' : '') + '>' + esc(o.name) + '</option>').join('') + '</select><input class="field wo-tx" style="flex:1" placeholder="What to do at this step" value="' + esc(x.text) + '">' + (st.steps.length > 1 ? '<button class="btn sm" data-a="woDel" data-k="' + k + '">✕</button>' : '') + '</div>').join('') +
+        '<div class="row"><button class="btn sm" data-a="woAdd">+ Add step</button></div><p class="small muted">Prints: after issuing, open it in the Traveler library and tap ⬆ Upload new print revision, or let drafting\'s Released Prints sync add it by part number.</p>' +
+        '<div class="row"><button class="btn primary go" data-a="woIssue"' + (can ? '' : ' disabled') + '>Issue work order to the floor</button><button class="btn" data-a="woCancel">Cancel</button></div>' + (can ? '' : '<p class="small muted">A manager, supervisor or quality signs in first.</p>')) + '</div>';
+    }
+    if (ui.mtab === 'release') {
       const FL = store.logs.final || [], last = FL.length ? FL[FL.length - 1] : null, meta = store.finMeta || {}, sup = ui.user && (W.isApprover(ui.user) || W.canDispose(ui.user));
       h += '<div class="panel"><h2>Final assembly traveler log</h2><p class="small muted">' + (FL.length ? FL.length.toLocaleString() + ' final / packing travelers loaded, last #' + esc(last.t) + (meta.at ? ' · uploaded ' + esc(fTime(meta.at)) + ' by ' + esc(nm(meta.by)) : '') + '. PO # and Sales Order # fill in from here on the shipping release.' : 'Not loaded yet. Upload the Final Assembly Traveler Log so PO # and Sales Order # fill in by themselves.') + '</p>' +
         (sup ? '<label class="btn" style="align-self:flex-start">Upload final assembly log (.xls or .xlsx)<input id="fin-file" type="file" accept=".xls,.xlsx,.xlsm,.csv" hidden></label>' : '<p class="small muted">Marty, quality or a supervisor uploads it.</p>') + '</div>';
     }
     if (ui.mtab === 'holds') {
-      const hs = []; J.forEach((j) => W.openHolds(j).forEach((x) => hs.push('<div class="card b-hold"><span class="c-main"><span><b>■ ' + esc(x.reason) + '</b> · ' + x.qty + ' pcs · <span class="mono">' + esc(j.pn) + '</span> op ' + x.n + '</span><span class="small muted">Shop Order ' + esc(j.so) + ' · opened by ' + esc(nm(x.by)) + ' ' + esc(fTime(x.at)) + ' · open ' + fDur(now - x.at) + (x.note ? ' · ' + esc(x.note) : '') + '</span></span><span class="c-act"><span class="row"><button class="btn sm" data-open="' + esc(j.id) + '" data-i="' + x.i + '">Open job</button><button class="btn sm stop" data-m="dispose" data-job="' + esc(j.id) + '" data-hold="' + x.id + '">Disposition</button></span></span></div>')));
+      const hs = []; J.forEach((j) => W.openHolds(j).forEach((x) => hs.push('<div class="card b-hold"><span class="c-main"><span><b>■ ' + esc(x.reason) + (x.sup && x.sup.name ? ' · ' + esc(x.sup.name) + (x.sup.ref ? ' (' + esc(x.sup.ref) + ')' : '') : '') + '</b> · ' + x.qty + ' pcs · <span class="mono">' + esc(j.pn) + '</span> op ' + x.n + '</span><span class="small muted">Shop Order ' + esc(j.so) + ' · opened by ' + esc(nm(x.by)) + ' ' + esc(fTime(x.at)) + ' · open ' + fDur(now - x.at) + (x.note ? ' · ' + esc(x.note) : '') + '</span></span><span class="c-act"><span class="row"><button class="btn sm" data-open="' + esc(j.id) + '" data-i="' + x.i + '">Open job</button><button class="btn sm stop" data-m="dispose" data-job="' + esc(j.id) + '" data-hold="' + x.id + '">Disposition</button></span></span></div>')));
       h += hs.length ? hs.join('') : '<div class="empty">No open holds.</div>';
     }
     if (ui.mtab === 'numbers') {
@@ -1860,8 +1905,8 @@ window.WT_ESP = [
       }
       case 'pause': h = '<h2>Pause · why?</h2>' + tiles('reason', W.PAUSE_REASONS, m) + '<button class="btn" data-close>Cancel</button>'; break;
       case 'block': h = '<h2>Can’t start · why?</h2>' + tiles('reason', W.BLOCK_REASONS, m) + '<button class="btn" data-close>Cancel</button>'; break;
-      case 'scrap': h = '<h2>Log bad parts · op ' + op.n + '</h2><p class="muted">Use this any time during the run. They are counted as scrap and already included when you finish the operation.' + (op.scrap ? ' Logged so far: ' + op.scrap + '.' : '') + '</p>' + tiles('reason', W.HOLD_REASONS, m) + inp('qty', 'How many are bad?', m, 'type="number" inputmode="numeric" min="1"') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Log bad parts'); break;
-      case 'hold': h = '<h2>Raise a hold · op ' + op.n + '</h2>' + tiles('reason', W.HOLD_REASONS, m) + inp('qty', 'Quantity affected', m, 'type="number" inputmode="numeric" min="1"') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Put on hold', 'stop'); break;
+      case 'scrap': h = '<h2>Log bad parts · op ' + op.n + '</h2><p class="muted">Use this any time during the run. Bad parts from a supplier? Pick Supplier part bad. They are counted as scrap and already included when you finish the operation.' + (op.scrap ? ' Logged so far: ' + op.scrap + '.' : '') + '</p>' + tiles('reason', W.HOLD_REASONS, m) + supF(m) + inp('qty', 'How many are bad?', m, 'type="number" inputmode="numeric" min="1"') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Log bad parts'); break;
+      case 'hold': h = '<h2>Raise a hold · op ' + op.n + '</h2><p class="muted">Use this when parts can\'t be used yet, including bad parts from a supplier before or during the job. Tag the parts and set them aside. Quality decides: return to supplier, rework, use as is or scrap.</p>' + tiles('reason', W.HOLD_REASONS, m) + supF(m) + inp('qty', 'Quantity affected', m, 'type="number" inputmode="numeric" min="1"') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Put on hold', 'stop'); break;
       case 'editStep': h = '<h2>Edit step · op ' + op.n + '</h2><p class="muted">Changes this job only. The master traveler stays the same. The change and the old text go in the record.</p><label>Instruction<textarea data-f="text" id="m-text" style="min-height:160px">' + esc(m.text || '') + '</textarea></label>' + inp('reason', 'Reason for the change', m) + foot('Save change'); break;
       case 'redline': { const o2 = W.routing(j.rid).ops[m.i]; h = '<h2>Red-line this step · op ' + op.n + '</h2><p class="muted">Write the step the way it should read. A signer approves it, and then every traveler for this part shows the new step on every tablet.</p>' +
         tiles('reason', RL_REASONS, m) + '<label>New step<textarea data-f="text" id="m-text" style="min-height:150px" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.text || '') + '</textarea></label>' +
@@ -1942,8 +1987,8 @@ window.WT_ESP = [
       }
       case 'mid': ok = run(m.job, 'reqMid', { i: m.i, count: m.count }); break;
       case 'finish': ok = run(m.job, 'finish', { i: m.i, good: m.good === '' ? NaN : m.good, scrap: m.scrap, shortReason: m.shortReason, note: m.note }); break;
-      case 'scrap': ok = run(m.job, 'scrap', { i: m.i, reason: m.reason, qty: m.qty, note: m.note }); if (ok) toast('Bad parts logged'); break;
-      case 'hold': ok = run(m.job, 'hold', { i: m.i, reason: m.reason, qty: m.qty, note: m.note }); break;
+      case 'scrap': ok = run(m.job, 'scrap', { i: m.i, reason: m.reason, qty: m.qty, note: m.note, supName: m.supName, supRef: m.supRef }); if (ok) toast('Bad parts logged'); break;
+      case 'hold': ok = run(m.job, 'hold', { i: m.i, reason: m.reason, qty: m.qty, note: m.note, supName: m.supName, supRef: m.supRef }); break;
       case 'flag': ok = run(m.job, 'flag', { i: m.i, text: m.text }); if (ok) toast('Sent for review'); break;
       case 'redline': { const j = store.jobs[m.job], op = j.ops[m.i], o2 = W.routing(j.rid).ops[m.i], tx = String(m.text || '').trim(), was = liveStep(j.rid, op.n, o2.text, null).text;
         if (!m.reason) return toast('Pick what kind of change it is.', 'bad'); if (!tx || tx === was) return toast('Write the step the way it should read.', 'bad');
@@ -2203,6 +2248,25 @@ window.WT_ESP = [
     if (d.lsort) { ui.lsort = d.lsort; return render(); }
     if (d.lfloor) { ui.lfloor = d.lfloor; return render(); }
     if (d.master) { $('#results').hidden = true; return openModal({ type: 'master', rid: d.master }); }
+    if (/^wo(Start|Add|Del|Cancel|Issue)$/.test(d.a || '')) {
+      const woRead = () => { const st = ui.wo; if (!st || !$('#wo-pn')) return; st.pn = $('#wo-pn').value; st.name = $('#wo-name').value; st.qty = $('#wo-qty').value; st.due = $('#wo-due').value; st.cust = $('#wo-cust').value; st.floor = $('#wo-floor').value; st.so = $('#wo-so').value; st.mat = $('#wo-mat').value; const S = [...document.querySelectorAll('.wo-st')], X = [...document.querySelectorAll('.wo-tx')]; st.steps = S.map((e, k) => ({ st: e.value, text: X[k].value })); };
+      if (d.a === 'woStart') { ui.wo = { pn: '', name: '', qty: '', due: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), cust: '', floor: 'metal', so: '', mat: '', steps: [{ st: 'metal', text: '' }, { st: 'metal', text: '' }, { st: 'qc', text: 'Inspect and count' }] }; return render(); }
+      if (d.a === 'woCancel') { ui.wo = null; return render(); }
+      woRead();
+      if (d.a === 'woAdd') { ui.wo.steps.push({ st: ui.wo.steps.length ? ui.wo.steps[ui.wo.steps.length - 1].st : 'metal', text: '' }); return render(); }
+      if (d.a === 'woDel') { ui.wo.steps.splice(Number(d.k), 1); return render(); }
+      const st = ui.wo, steps = st.steps.filter((x) => String(x.text).trim()), so = String(st.so || '').trim();
+      if (!ui.user || !W.canDispose(ui.user)) return toast('A manager, supervisor or quality issues work orders.', 'bad');
+      if (!String(st.pn).trim()) return toast('Enter the part number or prototype name.', 'bad'); if (!steps.length) return toast('Write at least one step.', 'bad'); if (!so) return toast('Enter the work order number.', 'bad');
+      if (store.jobs['so-' + so.replace(/[^A-Za-z0-9_-]/g, '-')] || ['metal', 'filter', 'final'].some((f) => (store.logs[f] || []).some((r) => String(r.t) === so))) return toast('Number ' + so + ' is already used. Use the next free number.', 'bad');
+      const rid = 'WO:' + so, rt = { id: rid, wo: true, master: false, floor: st.floor, pn: String(st.pn).trim(), wpn: String(st.pn).trim(), name: String(st.name).trim() || 'Work order', kind: 'WORK ORDER', form: 'Work order · no master traveler', fa: false, travRev: 'WO', travDate: new Date().toLocaleDateString('en-US'), dwgRev: '—', customer: String(st.cust).trim() || 'N/A', material: String(st.mat).trim(), risk: '', moveTo: 'stage', file: '', extra: [], dw: '', docs: [], by: ui.user.id, at: Date.now(),
+        ops: steps.map((x, k) => ({ n: String((k + 1) * 10).padStart(3, '0'), station: x.st, mach: [W.station(x.st).name], text: String(x.text).trim() })) };
+      try { W.ROUTINGS.push(rt); const j = W.newJob({ rid, so, qty: st.qty, due: st.due, pri: 50 }, { u: ui.user, at: Date.now() }); j.floor = st.floor;
+        if (store.mode === 'shared') store.db.doc('routings/' + rid.replace(/[^A-Za-z0-9_-]/g, '-')).set(W.clone(rt)).catch(() => toast('Could not save the work order steps. Check the connection.', 'bad'));
+        save(j); ui.wo = null; openJob(j.id); toast('Work order ' + so + ' issued'); }
+      catch (e) { W.ROUTINGS.splice(W.ROUTINGS.indexOf(rt), 1); if (e.user) return toast(e.message, 'bad'); throw e; }
+      return;
+    }
     if (d.a === 'setRisk' || d.a === 'setArea') { if (!ui.user || !W.isApprover(ui.user)) return toast('A supervisor or manager makes this change.', 'bad'); const rt = W.routing(d.rid), o = rt.ops.find((q) => String(q.n) === String(d.n)); return openModal({ type: d.a, rid: rt.id, n: o.n, v: d.a === 'setRisk' ? rk(rt, o) : o.station }); }
     if (d.a === 'mEdit') { if (!ui.user || !W.isApprover(ui.user)) return toast('A supervisor or manager makes corrections.', 'bad'); const rt = W.routing(d.rid), o = rt.ops.find((x) => String(x.n) === String(d.n)), n = o ? o.n : d.n, was = d.fld ? hdr(rt, d.fld) : liveStep(rt.id, n, o ? o.text : '', null).text; return openModal({ type: 'mEdit', rid: rt.id, n, was, text: was, reason: '', note: '' }); }
     if (d.a === 'printJob') return printTraveler(store.jobs[d.job]);
