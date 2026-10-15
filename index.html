@@ -1039,6 +1039,7 @@ window.WT_ESP = [
       store.jobs = m; store.loaded = true; render(); setTimeout(endOfDay, 1500);
     }, () => { store.mode = 'local'; loadLocal(); store.loaded = true; render(); });
     db.collection('logs').onSnapshot((s) => { s.docs.forEach((d) => { const x = d.data(); store.logs[d.id] = (x && x.rows) || []; if (d.id === 'final' && x) store.finMeta = { at: x.at, by: x.by, file: x.file }; }); render(); }, () => {});
+    db.collection('prints').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.pn) m[d.id] = x; }); store.prints = m; render(); if (ui.modal) renderModal(); }, () => {});
     db.collection('redlines').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.redlines = m; render(); if (ui.modal) renderModal(); }, () => {});
     db.doc('config/main').onSnapshot((s) => { if (s.exists) { mergeCfg(s.data()); render(); } }, () => {});
   }
@@ -1573,7 +1574,43 @@ window.WT_ESP = [
       '<p class="small muted">Clock time on this operation, not labor hours. Worked on by: ' + (op.who.length ? op.who.map(nm).map(esc).join(', ') : 'no one yet') + '.</p></div>';
     return h + actions(j, i);
   }
+  /* ---------- current released prints from PDM (drop folder sync or uploaded in the app) ---------- */
+  const pKey = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  function printsFor2(r, j) {
+    const P = store.prints || {}; if (!Object.keys(P).length || !r) return [];
+    const ks = []; const add = (v) => { const k = pKey(v); if (k.length >= 4 && P[k] && ks.indexOf(k) < 0) ks.push(k); };
+    [j && j.pn, r.pn, r.wpn, String(r.file || '').split(' ')[0]].forEach(add);
+    const txt = [hdr(r, 'material')].concat(r.ops.map((o) => o.text + ' ' + (o.dwg || ''))).join(' ');
+    (txt.match(/\b\d{7}\b|\b\d{2,3}-\d{4}(?:-\d{1,2})?\b|\b\d[A-Z]-\d{4}\b/g) || []).forEach(add);
+    return ks.map((k) => Object.assign({ key: k }, P[k]));
+  }
+  const PDFR = {};
+  function loadPdfJs() { return window.pdfjsLib ? Promise.resolve(window.pdfjsLib) : new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'; sc.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; res(window.pdfjsLib); }; sc.onerror = () => rej(new Error('pdf viewer')); document.head.appendChild(sc); }); }
+  // Turns a released PDF into page images once per tablet, then shows them like the other prints
+  function pdfPages(path) {
+    const c = PDFR[path]; if (c) return c.pages || null;
+    PDFR[path] = { pages: null };
+    loadPdfJs().then((lib) => fetch(path).then((x) => x.arrayBuffer()).then((buf) => lib.getDocument({ data: buf }).promise)).then(async (doc) => {
+      const out = []; for (let n = 1; n <= Math.min(doc.numPages, 12); n++) { const pg = await doc.getPage(n), vp = pg.getViewport({ scale: 1.8 }), cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height; await pg.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise; out.push(cv.toDataURL('image/png')); }
+      PDFR[path].pages = out; render(); if (ui.modal) renderModal();
+    }).catch(() => { PDFR[path].pages = []; PDFR[path].fail = true; render(); });
+    return null;
+  }
+  function curPrintsHtml(r, j, compact) {
+    const L = printsFor2(r, j); if (!L.length) return '';
+    const own = L.find((x) => [j && j.pn, r.pn, r.wpn].some((v) => pKey(v) === x.key)), want = j ? j.rel.dwgRev : r.dwgRev;
+    let h = (own && want && want !== '—' && String(own.rev).toUpperCase() !== String(want).toUpperCase() ? '<div class="banner warn"><div><b>Drawing rev changed.</b> This ' + (j ? 'traveler' : 'master traveler') + ' says drawing rev <b>' + esc(want) + '</b>, the current released print is rev <b>' + esc(own.rev) + '</b>. Use the current print and tell quality / Tom C. to update the traveler.</div></div>' : '');
+    h += '<div class="panel"><h2>Current released prints</h2><p class="small muted">Latest revision released by drafting. Updates on every tablet as soon as a new revision is released.</p>' + L.map((x) => {
+      const pg = pdfPages(x.path);
+      return '<details' + (compact ? '' : ' open') + '><summary><b class="mono">' + esc(x.pn) + '</b> · Rev <b>' + esc(x.rev) + '</b> · released ' + esc(fTime(x.at)) + (x.by ? ' · ' + esc(nm(x.by)) : '') + '</summary>' + (pg ? (pg.length ? pg.map((u, k) => '<img src="' + u + '" alt="' + esc(x.pn) + ' page ' + (k + 1) + '" style="width:100%;border:1px solid var(--line);background:#fff;margin-top:6px">').join('') : '<p class="muted">Could not open this PDF on the tablet.</p>') : '<p class="muted">Loading print…</p>') + '</details>';
+    }).join('') + '</div>';
+    return h;
+  }
   function docsTab(j, r) {
+    const cur = curPrintsHtml(r, j); if (cur) return cur + '<h3 style="margin-top:12px">Pages from the master traveler file</h3>' + docsTab0(j, r);
+    return docsTab0(j, r);
+  }
+  function docsTab0(j, r) {
     if (!r.docs.length && r.master && store.dwg && store.dwg[r.dw] && !r.dwFail) return '<div class="empty">Loading prints…</div>';
     if (!r.docs.length) return '<div class="banner info"><div><b>Prints for this part are not on the tablet yet.</b> The steps were copied from ' + esc(r.file || 'the master traveler') + (r.pages ? ' (' + r.pages + ' pages, including its drawings)' : '') + '. Use the paper drawing for this job until the drawing pages are loaded.</div></div>';
     const d = r.docs[Math.min(ui.doc, r.docs.length - 1)];
@@ -1821,7 +1858,10 @@ window.WT_ESP = [
           '<p><b>Material:</b> <span class="notr">' + esc(hdr(rt, 'material') || '—') + '</span>' + tag('@material') + ed('@material', 'material') + '</p>' +
           (sup ? '<p class="small muted">✎ changes save right away and show on every traveler for this part on every tablet, including ones already running. The master PDF keeps the old text until drafting revises it. Red-lines → Save approved red-lines lists every change for them.</p>' : '') +
           (rt.ops.some((o) => o.risk) ? '<p class="small">' + ['L', 'M', 'H'].map((k) => riskBox(k, true)).join(' ') + '</p>' : '') + '<div class="tbl-wrap"><table><tr><th>Op</th><th>Risk</th><th>Tablet area</th><th>Location on paper</th><th>Description</th>' + (sup ? '<th></th>' : '') + '</tr>' + rt.ops.map((o) => '<tr><td class="mono">' + esc(o.n) + '</td><td>' + riskBox(o.risk) + '</td><td>' + esc(W.station(o.station).name) + '</td><td>' + esc(o.mach.join(', ')) + '</td><td class="notr">' + (() => { const lv = liveStep(rt.id, o.n, o.text, null); return esc(lv.text) + (lv.how === 'redline' ? ' <span class="pill warn">✎ ' + esc(lv.x.id) + '</span>' : ''); })() + '</td>' + (sup ? '<td>' + ed(o.n) + '</td>' : '') + '</tr>').join('') + '</table></div>' +
+          (sup && window.WT_SB ? '<button class="btn sm" data-m="upPrint" data-rid="' + esc(rt.id) + '" style="align-self:flex-start">⬆ Upload new print revision</button>' : '') + curPrintsHtml(rt, null, true) +
           ((rt.extra || []).length ? '<h3>Notes on the traveler</h3><ul class="clean small">' + rt.extra.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '') + (rt.master ? '<p class="small muted">Copied from the master PDF. The tablet area is my reading of the location column.</p>' : '') + (rt.docs.length ? '<h3>Prints and traveler pages</h3>' + rt.docs.map((d) => '<p class="small"><b>' + esc(d.t) + '</b></p><img src="' + esc(d.f) + '" alt="' + esc(d.t) + '" style="width:100%;border:1px solid var(--line);background:#fff">').join('') : (rt.dwLoading ? '<p class="muted">Loading prints…</p>' : '<p class="muted">Prints for this part are not on the tablet yet.</p>')); break; }
+      case 'upPrint': { const rt = W.routing(m.rid); h = '<h2>Upload new print revision</h2><p class="muted">The PDF Tom released. It replaces the current print for this part number on every traveler and every tablet. The old revision is kept in the history.</p>' +
+        inp('pn', 'Part number on the print', m, 'autocomplete="off"') + inp('rev', 'Revision', m, 'autocomplete="off" placeholder="C"') + '<label>Released PDF<input id="up-file" type="file" accept="application/pdf,.pdf"></label>' + foot('Upload print', 'go'); break; }
       case 'ship': h = '<h2>Shipping release · Traveler ' + esc(j.so) + '</h2><p><span class="mono">' + esc(j.pn) + '</span> · ' + esc(j.name) + ' · ' + j.qty + ' pcs</p>' + (m.fromLog ? '<p class="small muted">Filled in from the final assembly log, traveler ' + esc(j.so) + '. Check them and save.</p>' : '') +
         '<div class="grid2">' + inp('po', 'Customer PO #', m, 'autocomplete="off"') + inp('sales', 'Sales Order #', m, 'autocomplete="off" placeholder="P88087"') + '</div><p class="small muted">Prints on the traveler and on every box label. Saved with your name and the time.</p>' + foot('Save shipping release', 'go'); break;
       case 'mEdit': { const rt = W.routing(m.rid);
@@ -1871,6 +1911,14 @@ window.WT_ESP = [
         saveRl({ id, rid: j.rid, pn: j.pn, n: op.n, station: op.station, so: j.so, job: j.id, was, text: tx, reason: m.reason, note: String(m.note || '').trim(), by: ui.user.id, at: Date.now(), status: 'pending' });
         run(m.job, 'logNote', { a: 'Red-line sent', d: id + ' · op ' + op.n + ' · ' + m.reason });
         closeModal(); return toast('Red-line ' + id + ' sent. A signer approves it.'); }
+      case 'upPrint': { const f = $('#up-file') && $('#up-file').files[0], pn = String(m.pn || '').trim(), rev = String(m.rev || '').trim().toUpperCase();
+        if (!pn || !rev || !f) return toast('Enter the part number and revision, and pick the PDF.', 'bad');
+        const key = pKey(pn), path = 'pdm/' + key + '__' + rev.replace(/[^A-Z0-9]/g, '') + '.pdf';
+        toast('Uploading ' + pn + ' rev ' + rev + '…');
+        (async () => { try { const { error } = await window.WT_SB.storage.from('files').upload(path, f, { upsert: true, contentType: 'application/pdf' }); if (error) throw error;
+          const old = (store.prints || {})[key], hist = ((old && old.hist) || []).concat(old ? [{ rev: old.rev, path: old.path, at: old.at, by: old.by }] : []).slice(-10);
+          const doc = { pn, rev, path, at: Date.now(), by: ui.user.id, src: 'app', name: f.name, hist }; await store.db.doc('prints/' + key).set(doc); (store.prints = store.prints || {})[key] = doc; closeModal(); render(); toast(pn + ' rev ' + rev + ' is now the current print on every tablet'); }
+          catch (e) { toast('Upload failed: ' + (e.message || e), 'bad'); } })(); return; }
       case 'ship': ok = run(m.job, 'shipInfo', { po: m.po, sales: m.sales }); if (ok) toast('Shipping release saved'); break;
       case 'mEdit': { const rt = W.routing(m.rid), tx = String(m.text || '').trim();
         if (!ui.user || !W.isApprover(ui.user)) return toast('A supervisor or manager makes corrections.', 'bad');
@@ -2155,6 +2203,7 @@ window.WT_ESP = [
       if (d.m === 'correct') return openModal({ type: 'correct', job, i, who: ap, good: op.good, reason: '', pin: '' });
       if (!need()) return;
       if (d.m === 'setup') { const o = W.routing(j.rid).ops[i]; if (!(o.checks || []).length && !(o.fields || []).length) return void run(job, 'finishSetup', { i }); return openModal({ type: 'setup', job, i, chk: {} }); }
+      if (d.m === 'upPrint') { if (!W.isApprover(ui.user) && !W.canDispose(ui.user)) return toast('Drafting, quality or a supervisor uploads prints.', 'bad'); const rt = W.routing(d.rid); return openModal({ type: 'upPrint', rid: rt.id, pn: rt.wpn || rt.pn, rev: '' }); }
       if (d.m === 'ship') { if (!(W.canDispose(ui.user) || W.isApprover(ui.user))) return toast('Marty, quality or a supervisor enters the PO and Sales Order.', 'bad'); const lr = finRow(j.so); return openModal({ type: 'ship', job, po: j.ship ? j.ship.po : (lr && lr.po) || '', sales: j.ship ? j.ship.sales : (lr && lr.so) || '', fromLog: !j.ship && !!lr }); }
       if (d.m === 'mid') return openModal({ type: 'mid', job, i, count: W.midTarget(op) });
       if (d.m === 'finish') return openModal({ type: 'finish', job, i, good: '', scrap: 0, shortReason: '', note: '' });

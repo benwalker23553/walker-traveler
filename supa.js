@@ -100,7 +100,7 @@
   const realFetch = window.fetch.bind(window);
   window.fetch = function (u, o) {
     const s = typeof u === 'string' ? u : (u && u.url) || '';
-    if (/^(data|dwg|docs)\//.test(s)) return authed.then(() => getFile(s)).then((b) => new Response(b, { status: 200 }));
+    if (/^(data|dwg|docs|pdm)\//.test(s)) return authed.then(() => getFile(s)).then((b) => new Response(b, { status: 200 }));
     return realFetch(u, o);
   };
   // <img src="docs/..."> → load from private storage
