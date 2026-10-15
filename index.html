@@ -280,6 +280,16 @@ td.num { font-variant-numeric: tabular-nums; text-align: right; }
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 window.WT_ES = {
+"Parts list from Sage":"Lista de partes de Sage",
+"Goes into:":"Va en:",
+"Qty per":"Cant. por pieza",
+"Cost and margin":"Costo y margen",
+"Prices and costs are only for supervisors and administrators. They are not sent to this tablet.":"Los precios y costos son solo para supervisores y administradores. No se envían a esta tableta.",
+"Prices and costs are locked":"Precios y costos bloqueados",
+"Enter my PIN to open":"Ingresar mi PIN para abrir",
+"Too many wrong PINs. Locked for a few minutes.":"Demasiados PIN incorrectos. Bloqueado unos minutos.",
+"Could not check the PIN. Check the connection and try again.":"No se pudo verificar el PIN. Revise la conexión e intente de nuevo.",
+"Wrong PIN.":"PIN incorrecto.",
 "Final assembly / packing":"Ensamble final / empaque",
 "Final travelers, PO and Sales Order for shipping":"Viajeros finales, PO y Orden de Venta para embarque",
 "Production traveler":"Viajero de producción",
@@ -1033,11 +1043,49 @@ window.WT_ESP = [
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage unavailable */ } } };
 
-  const ui = { station: 'all', user: null, view: 'station', jobId: null, opI: 0, tab: 'work', mtab: 'release', lsort: 'part', lfilt: 'active', lfloor: 'both', back: 'station', doc: 0, zoom: 100, modal: null, touched: Date.now() };
+  const ui = { station: 'all', user: null, view: 'station', jobId: null, opI: 0, tab: 'work', mtab: 'release', lsort: 'part', lfilt: 'active', lfloor: 'both', back: 'station', doc: 0, zoom: 100, modal: null, touched: Date.now(), fin: null, finTok: null, finErr: '' };
   const store = { logs: {}, jobs: {}, cfg: W.clone(W.DEFAULT_CFG), mode: 'starting', loaded: false, queue: {}, busy: {}, redlines: {}, offline: false, readonly: false, db: null, sample: null, downloads: null };
 
   /* ---------- formatting ---------- */
   const person = (id) => store.cfg.roster.find((r) => r.id === id);
+  /* ---------- server-checked people, PINs and the financial vault ----------
+     On the shop server, PINs and roles are checked by the database (hashed PINs, lockout after 5 wrong tries).
+     Prices and costs are never in the shared data. They come only from fin_get with a short-lived token that the
+     server issues when a supervisor or administrator signs in with their PIN. The token lives in memory only and is
+     revoked on sign-out, idle lock and end of shift. */
+  const SRV = () => !!(window.WT_SB && store.mode === 'shared');
+  const rpc = async (fn, args) => { const r = await window.WT_SB.rpc(fn, args || {}); if (r.error) throw r.error; return r.data; };
+  const hasPin = (p) => !!(p && (SRV() ? p.hasPin : p.pin));
+  function applyStaff() {
+    if (!store.staff || !store.staff.length) return;
+    store.cfg.roster = store.staff.map((x) => ({ id: x.id, name: x.name, area: x.area, role: x.role, side: x.side || '', hasPin: !!x.hasPin, fin: !!x.fin }));
+    if (ui.user) { const u = person(ui.user.id); if (!u) signOutUser(); else ui.user = Object.assign({}, u); }
+  }
+  async function loadStaff() { if (!SRV()) return; try { const r = await rpc('staff_roster'); if (Array.isArray(r) && r.length) { store.staff = r; applyStaff(); render(); if (ui.modal) renderModal(); } } catch (e) { /* offline: keep the last list */ } }
+  function finEnd() { const t = ui.finTok; ui.finTok = null; ui.fin = null; ui.finErr = ''; if (t && SRV()) rpc('fin_lock', { p_token: t }).catch(() => {}); }
+  function signOutUser() { finEnd(); ui.user = null; ui.signedAt = 0; if (ui.view === 'finance') ui.view = 'home'; }
+  async function finLoad() {
+    if (!ui.finTok || !SRV()) return;
+    try { ui.fin = await rpc('fin_get', { p_token: ui.finTok }); ui.finErr = ''; }
+    catch (e) { ui.fin = null; ui.finTok = null; ui.finErr = 'Your price and cost view locked. Enter your PIN to open it again.'; }
+    render();
+  }
+  function signedIn(p, r) {
+    ui.user = Object.assign({}, p, r ? { role: r.role, side: r.side || '', fin: !!r.fin } : {});
+    ui.touched = Date.now(); ui.signedAt = Date.now(); ui.finTok = (r && r.finToken) || null; ui.fin = null; ui.finErr = '';
+    if (ui.finTok) finLoad();
+  }
+  const pinWhy = (r) => r.reason === 'locked' ? 'Too many wrong PINs. Locked for a few minutes' + (r.until ? ' (until ' + r.until + ')' : '') + '.' : r.reason === 'no pin' ? 'No PIN yet. Tap Sign in at the top once to create it.' : 'Wrong PIN.';
+  // Ask the server to check a PIN, then run the modal's submit again.
+  function pinGate(m) {
+    if (m.busy) return; const p = person(m.who); if (!p) return toast('Tap your name.', 'bad');
+    m.busy = true;
+    rpc('pin_check', { p_id: p.id, p_pin: m.pin || '' }).then((r) => {
+      m.busy = false; if (ui.modal !== m) return;
+      if (!r || !r.ok) { m.pin = ''; renderModal(); return toast(pinWhy(r || {}), 'bad'); }
+      m.pinOk = m.who + ':' + m.pin; submit();
+    }).catch(() => { m.busy = false; toast('Could not check the PIN. Check the connection and try again.', 'bad'); });
+  }
   const nm = (id) => (id === 'system' ? 'End of shift (automatic)' : person(id) ? person(id).name : id || '—');
   const fTime = (t) => (t ? new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—');
   const fDue = (d) => (d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'No due date');
@@ -1079,7 +1127,7 @@ window.WT_ESP = [
 
   /* ---------- data ---------- */
   function loadLocal() { try { store.jobs = JSON.parse(ls.get('wt-jobs') || '{}'); const c = JSON.parse(ls.get('wt-cfg') || 'null'); if (c) store.cfg = c; } catch (e) { store.jobs = {}; } }
-  function mergeCfg(c) { c = W.clone(c); store.cfg = { rules: Object.assign({}, W.DEFAULT_CFG.rules, c.rules || {}), roster: c.roster && c.roster.length ? c.roster : W.clone(W.DEFAULT_CFG.roster), costs: c.costs || {}, shift: c.shift || null }; W.setShift(store.cfg.shift); if (ui.user) ui.user = store.cfg.roster.find((r) => r.id === ui.user.id) || null; }
+  function mergeCfg(c) { c = W.clone(c); store.cfg = { rules: Object.assign({}, W.DEFAULT_CFG.rules, c.rules || {}), roster: c.roster && c.roster.length ? c.roster : W.clone(W.DEFAULT_CFG.roster), shift: c.shift || null }; if (!window.WT_SB) store.cfg.costs = c.costs || {}; W.setShift(store.cfg.shift); if (store.staff) applyStaff(); else if (ui.user) { const u = store.cfg.roster.find((r) => r.id === ui.user.id); if (!u) signOutUser(); else ui.user = u; } }
   async function init() {
     render();
     let db = null;
@@ -1093,9 +1141,11 @@ window.WT_ESP = [
     }, () => { store.mode = 'local'; loadLocal(); store.loaded = true; render(); });
     db.collection('logs').onSnapshot((s) => { s.docs.forEach((d) => { const x = d.data(); store.logs[d.id] = (x && x.rows) || []; if (d.id === 'final' && x) store.finMeta = { at: x.at, by: x.by, file: x.file }; }); render(); }, () => {});
     db.collection('routings').onSnapshot((s) => { s.docs.forEach((d) => { const r = d.data(); if (r && r.id && !W.routing(r.id)) W.ROUTINGS.push(W.clone(r)); }); render(); }, () => {});
+    db.collection('sage').onSnapshot((s) => { s.docs.forEach((d) => { if (d.id === 'bom') { const x = d.data(); store.sageBom = (x && x.bom) || {}; store.sageAt = x && x.at; } }); render(); }, () => {});
     db.collection('prints').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.pn) m[d.id] = x; }); store.prints = m; render(); if (ui.modal) renderModal(); }, () => {});
     db.collection('redlines').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.redlines = m; applyAreas(); render(); if (ui.modal) renderModal(); }, () => {});
     db.doc('config/main').onSnapshot((s) => { if (s.exists) { mergeCfg(s.data()); render(); } }, () => {});
+    loadStaff(); setInterval(loadStaff, 60000);
   }
   // Each tablet queues what the person did. Before saving, it takes a short lock on that traveler and reads the latest copy.
   // If another tablet changed the traveler in the meantime, the same actions are applied again on top of that copy,
@@ -1161,6 +1211,7 @@ window.WT_ESP = [
       if (ref.acquire) { for (let k = 0; k < 12; k++) { const l = await ref.acquire({ holder: DEV, ttlMs: 8000 }); if (l && l.acquired) break; await sleep(250); } }
       let c = W.clone(store.cfg);
       if (fn && ref.get) { const s = await ref.get(); if (s && s.exists && s.data().roster) { c = W.clone(s.data()); fn(c); } }
+      if (window.WT_SB) { delete c.costs; c.roster = (c.roster || []).map((r) => ({ id: r.id, name: r.name, area: r.area, role: r.role, side: r.side || '' })); }
       await ref.set(c);
     } catch (e) { toast('Could not save settings. Check the connection and try again.', 'bad'); }
   }
@@ -1280,8 +1331,38 @@ window.WT_ESP = [
       let x = L; const y = 4 + k * H, tot = SERIES.reduce((a, s) => a + (r[1][s[0]] || 0), 0);
       return '<text x="' + (L - 8) + '" y="' + (y + 16) + '" text-anchor="end" class="ax">' + esc(r[0]) + '</text>' + SERIES.map((s) => { const v = r[1][s[0]] || 0, bw = v / max * w; if (!v) return ''; const g = '<rect x="' + x + '" y="' + (y + 4) + '" width="' + Math.max(1, bw - 2) + '" height="' + (H - 10) + '" rx="3" fill="' + s[2] + '"><title>' + esc(r[0] + ' · ' + s[1] + ': ' + fDur(v)) + '</title></rect>'; x += bw; return g; }).join('') + '<text x="' + (x + 6) + '" y="' + (y + 16) + '" class="val">' + esc(fDur(tot)) + '</text>'; }).join('') + '</svg></div>';
   }
+  function finLockedPanel() {
+    if (!ui.user || !ui.user.fin) return '<div class="panel"><h2>Cost and margin</h2><p class="muted">Prices and costs are only for supervisors and administrators. They are not sent to this tablet.</p></div>';
+    return '<div class="panel"><h2>Cost and margin</h2>' + (ui.finTok ? '<p class="muted">Loading…</p>' : '<p class="muted">' + esc(ui.finErr || 'Prices and costs are locked.') + '</p><button class="btn primary" data-m="finpin" style="align-self:flex-start">Enter my PIN to open</button>') + '</div>';
+  }
+  // Supervisors and administrators only. Everything on this screen comes from fin_get with a live token; nothing is stored on the tablet.
+  function renderFinance() {
+    let h = '<div class="head"><div><h1>Prices and costs</h1><p class="muted">From Sage, read ' + esc((ui.fin && ui.fin.recon && ui.fin.recon.meta && ui.fin.recon.meta.read) || '') + '. Selling prices and costs are kept apart. Locks when you sign out.</p></div>' + (ui.fin ? '<button class="btn" data-a="finLock">Lock now</button>' : '') + '</div>';
+    if (!SRV()) return h + '<div class="banner warn"><div>Prices and costs open only on the shop server with a supervisor or administrator PIN.</div></div>';
+    if (!ui.fin) return h + finLockedPanel();
+    const F = ui.fin, I = F.items || {}, SO = F.so || [], BOM = F.bom || {}, up = (s) => String(s || '').toUpperCase();
+    const flags = (F.recon && F.recon.flags) || [];
+    h += '<div class="panel"><h2>Check these (' + flags.length + ')</h2>' + flags.map((f) => '<div class="banner ' + (f.lvl === 'bad' ? 'bad' : f.lvl === 'warn' ? 'warn' : 'info') + '"><div><b>' + esc(f.t) + '</b><br><span class="small">' + esc(f.d) + '</span></div></div>').join('') + '</div>';
+    // Open travelers matched to Sage
+    const open = []; jobs().filter((j) => j.st !== 'complete').forEach((j) => open.push({ t: j.so, pn: j.pn, d: j.name, q: Number(j.qty) || 0, src: 'Tablet' }));
+    paper().filter((x) => x.r.s === 'O').forEach((x) => String(x.r.pn || '').split('/').forEach((pn) => open.push({ t: x.r.t, pn: pn.trim(), d: x.r.d, q: Number(x.r.q) || 0, src: 'Log' })));
+    const soBy = {}; SO.forEach((l) => { (soBy[up(l.pn)] = soBy[up(l.pn)] || []).push(l); });
+    const parentOf = {}; Object.keys(BOM).forEach((p) => (BOM[p] || []).forEach((c) => { if (c.c && c.c !== 'TOTAL') (parentOf[up(c.c)] = parentOf[up(c.c)] || []).push(p); }));
+    const rows = open.map((o) => { const k = up(o.pn); let sl = soBy[k] || []; let via = '';
+      if (!sl.length) { for (const p of parentOf[k] || []) { const pp = [p].concat(parentOf[up(p)] || []); for (const q of pp) if (soBy[up(q)]) { sl = soBy[up(q)]; via = q; break; } if (sl.length) break; } }
+      const it = I[o.pn] || I[k] || null, rem = sl.reduce((a, l) => a + (Number(l.qty) - Number(l.shipped || 0)), 0), val = sl.reduce((a, l) => a + Number(l.amt || 0), 0);
+      const cost = it && it.std != null ? Number(it.std) : null, price = !via && sl.length ? Number(sl[0].price) : null;
+      return { o, sl, via, it, rem, val, cost, price, margin: price && cost != null ? (price - cost) / price : null }; })
+      .filter((r) => r.sl.length || r.it);
+    h += '<div class="panel"><h2>Open travelers with a Sage order or cost (' + rows.length + ')</h2><div class="tbl-wrap"><table><tr><th>Traveler</th><th>Part</th><th class="num">Trav. qty</th><th>Sage orders</th><th class="num">Open on orders</th><th class="num">Unit price</th><th class="num">Open order value</th><th class="num">Sage BOM cost / pc</th><th class="num">Margin</th><th>Notes</th></tr>' +
+      rows.map((r) => '<tr><td class="mono">' + esc(r.o.t) + '</td><td class="mono">' + esc(r.o.pn) + '</td><td class="num">' + r.o.q + '</td><td class="small">' + (r.sl.length ? r.sl.map((l) => esc(l.so) + ' · ' + esc(l.cust) + ' · ship ' + esc(l.ship || '')).join('<br>') + (r.via ? '<br><i>via kit ' + esc(r.via) + '</i>' : '') : '<span class="muted">No open order</span>') + '</td><td class="num">' + (r.sl.length ? r.rem : '—') + '</td><td class="num">' + money(r.price) + '</td><td class="num">' + (r.sl.length ? money(r.val) : '—') + '</td><td class="num">' + money(r.cost) + '</td><td class="num">' + (r.margin == null ? '—' : '<b' + (r.margin < 0 ? ' style="color:var(--bad)"' : '') + '>' + Math.round(r.margin * 100) + '%</b>') + '</td><td class="small">' + (r.via && I[r.via] ? 'Kit ' + esc(r.via) + ' sells ' + money(Number(I[r.via].price)) + ' · kit BOM cost ' + money(I[r.via].std == null ? null : Number(I[r.via].std)) + '. ' : '') + esc((r.it && r.it.method) || '') + (r.sl.length && !r.via && r.rem > r.o.q ? ' <b>Orders exceed this traveler.</b>' : '') + '</td></tr>').join('') + '</table></div><p class="small muted">Unit price = customer selling price on the Sage order. Sage BOM cost = the estimated cost rollup in the Sage bill of materials (some include labor lines). They are never combined into one number except margin.</p></div>';
+    const tot = SO.reduce((a, l) => a + Number(l.amt || 0), 0);
+    h += '<div class="panel"><h2>Open Sage sales order lines (' + SO.length + ') · ' + money(tot) + ' open</h2><div class="tbl-wrap"><table><tr><th>Order</th><th>Customer</th><th>Part</th><th class="num">Open qty</th><th>Ship by</th><th class="num">Unit price</th><th class="num">Open value</th><th>Traveler</th></tr>' +
+      SO.map((l) => { const t = open.filter((o) => up(o.pn) === up(l.pn)).map((o) => o.t); return '<tr><td class="mono">' + esc(l.so) + '</td><td>' + esc(l.cust) + '</td><td class="mono">' + esc(l.pn) + '<br><span class="small">' + esc(l.d || '') + '</span></td><td class="num">' + (Number(l.qty) - Number(l.shipped || 0)) + '</td><td>' + esc(l.ship || '') + '</td><td class="num">' + money(Number(l.price)) + '</td><td class="num">' + money(Number(l.amt)) + '</td><td class="mono small">' + (t.length ? esc(t.join(', ')) : '<span class="muted">—</span>') + '</td></tr>'; }).join('') + '</table></div></div>';
+    return h;
+  }
   function renderImprove() {
-    const now = Date.now(), PR = prompts(), mgr = ui.user && ui.user.role === 'manager', C = store.cfg.costs || {};
+    const now = Date.now(), PR = prompts(), mgr = ui.user && ui.user.role === 'manager', C = SRV() ? ((ui.fin && ui.fin.settings && ui.fin.settings.costs) || {}) : (store.cfg.costs || {});
     let h = '<div class="head"><div><h1>Improve</h1><p class="muted">What to fix this week, where the time goes, and what each job costs. Updates live as the floor works.</p></div></div>';
     h += '<div class="panel"><h2>Do this week (' + PR.length + ')</h2>' + (PR.length ? PR.map((p) => '<div class="banner ' + p.lvl + '"><div><b>' + esc(p.t) + '</b><br><span class="small">' + esc(p.d) + '</span>' + (p.list ? '<div class="row" style="flex-wrap:wrap;margin-top:6px">' + p.list + '</div>' : '') + '</div>' + (p.open ? '<button class="btn sm" data-open="' + esc(p.open[0]) + '" data-i="' + p.open[1] + '">Open</button>' : p.rl ? '<button class="btn sm" data-m="rlList">Open</button>' : '') + '</div>').join('') : '<p class="muted">Nothing needs attention right now.</p>') + '</div>';
     // Paper history: lead time and on-time by month
@@ -1317,7 +1398,8 @@ window.WT_ESP = [
       h += '<div class="panel"><h2>Time by person and step</h2>' + bars(people.map((id) => [nm(id), per[id].tot / HOUR]), { title: 'Hours by person', fmt: (v) => v.toFixed(1) + ' h', color: 'var(--s2)' }) +
         '<div class="tbl-wrap"><table><tr><th>Person</th>' + Object.values(SEGN).map((n) => '<th>' + n + '</th>').join('') + '<th>Total</th></tr>' + people.map((id) => '<tr><td>' + esc(nm(id)) + '</td>' + Object.keys(SEGN).map((k) => '<td class="num">' + (per[id][k] ? fDur(per[id][k]) : '—') + '</td>').join('') + '<td class="num"><b>' + fDur(per[id].tot) + '</b></td></tr>').join('') + '</table></div><p class="small muted">Clock time between button presses while signed in, not payroll hours.</p></div>';
     }
-    // Cost and material per job
+    // Cost and material per job: only for supervisors/administrators with an unlocked financial session.
+    if (SRV() && !ui.fin) return h + finLockedPanel();
     const rate = Number(C.rate) || 0, oh = Number(C.oh) || 0, matc = C.mat || {};
     const rows = jobs().slice(0, 40).map((j) => { const r = W.routing(j.rid) || {}; let lab = 0; j.ops.forEach((o) => { lab += W.dur(o, 'setup', now) + W.dur(o, 'run', now) + W.dur(o, 'first_piece', now); });
       const made = W.goodDone(j), scrap = W.totalScrap(j), unit = matc[j.pn] != null && matc[j.pn] !== '' ? Number(matc[j.pn]) : null;
@@ -1357,12 +1439,14 @@ window.WT_ESP = [
       ['Rules', 'You can only sign for your floor. Nobody signs work they did themselves.', 'Reglas', 'Solo firmas tu piso. Nadie firma su propio trabajo.'],
       ['Traveler library', 'Main menu → Traveler library. Open any traveler before it is issued. Tap ✎ to fix wording, material, risk color or department; it changes every traveler for that part.', 'Biblioteca de viajeros', 'Menú → Biblioteca de viajeros. Abre cualquier viajero antes de emitirlo. Toca ✎ para corregir texto, material, riesgo o departamento; cambia todos los viajeros de esa parte.'],
       ['Supplier holds', 'Supplier part bad holds show the supplier and their PO or lot. Pick Return to supplier, rework, use as is or scrap.', 'Retenciones de proveedor', 'Las retenciones de proveedor muestran el proveedor y su PO o lote. Escoge Regresar al proveedor, retrabajo, usar como está o scrap.'],
+      ['Prices and costs', 'Main menu → Prices and costs. Sage selling prices, open order value, Sage BOM cost and margin for open travelers, plus a list of Sage gaps to fix. It opens with your PIN and locks when you sign out, after idle, or at end of shift. Operators never get this data.', 'Precios y costos', 'Menú → Precios y costos. Precios de venta de Sage, valor abierto de órdenes, costo de BOM y margen de los viajeros abiertos, y una lista de faltantes en Sage. Abre con tu PIN y se bloquea al salir, por inactividad o al fin del turno. Los operadores nunca reciben estos datos.'],
       ['Improve · analytics', 'Check it each morning: late travelers, steps running long, signatures waiting, workload by area, effort by person, supplier problems.', 'Mejorar · análisis', 'Revísalo cada mañana: atrasados, pasos largos, firmas esperando, carga por área, esfuerzo por persona, problemas de proveedor.']] },
     manager: { en: 'Manager / office', es: 'Gerente / oficina', video: 'training/manager.mp4', steps: [
       ['Issue a traveler', 'Main menu → Issue a traveler. Type, scan or say the part number, enter quantity, Issue. Number and due date fill in.', 'Emitir viajero', 'Menú → Emitir un viajero. Escribe, escanea o di el número de parte, cantidad, Emitir. Número y fecha se llenan solos.'],
       ['Rush', 'Jobs run by due date. Check RUSH, or Mark ASAP on a job, to send it to the top of every tablet.', 'Urgente', 'Los trabajos van por fecha. Marca URGENTE para mandarlo arriba en todas las tabletas.'],
       ['Paper traveler to tablet', 'Search the traveler number, tap the operation it is at now, check the count, GO LIVE ON TABLET.', 'De papel a tableta', 'Busca el número, toca la operación donde va, revisa la cantidad, PASAR A LA TABLETA.'],
       ['New build or prototype', 'No traveler yet? Issue a traveler → Start a work order. Part, quantity, steps in order, each to its department. It runs like any traveler.', 'Pieza nueva o prototipo', '¿Sin viajero? Emitir viajero → Iniciar orden de trabajo. Parte, cantidad, pasos en orden, cada uno a su departamento. Corre como cualquier viajero.'],
+      ['Who sees prices', 'Manage → People. Allow or remove price access per supervisor. Only an administrator can change it, and it is checked on the server. PIN resets also happen on the server.', 'Quién ve precios', 'Administrar → Personas. Permite o quita el acceso a precios por supervisor. Solo un administrador lo cambia y se verifica en el servidor. El reinicio de PIN también es en el servidor.'],
       ['Improve · analytics', 'Weekly list of what to fix, workload by area, effort by person this week, supplier problems, lead time, cost per job.', 'Mejorar · análisis', 'Pendientes de la semana, carga por área, esfuerzo por persona, problemas de proveedor, tiempos, costo por trabajo.'],
       ['Costs', 'Enter labor rate, overhead % and material cost per piece once. Cost per good piece shows for every job.', 'Costos', 'Escribe tarifa, % de gastos y costo de material por pieza una vez. Sale el costo por pieza buena en cada trabajo.'],
       ['People, PINs and schedule', 'Manage → People + rules: add people, reset a forgotten PIN, set the work schedule (Mon–Thu 6:30–5:00). Only approved signers can sign.', 'Personas, PIN y horario', 'Administrar → Personas y reglas: agrega gente, borra un PIN olvidado, pon el horario (lun–jue 6:30–5:00). Solo firmantes aprobados firman.'],
@@ -1397,6 +1481,7 @@ window.WT_ESP = [
       tile('data-nav="list" data-lf="sign"', 'Needs a signature', 'Supervisors start here', sign, sign ? 'warn' : '') +
       tile('data-nav="list" data-lf="hold"', 'On hold', 'Waiting on a disposition', hold, hold ? 'bad' : '') +
       tile('data-m="rlList"', 'Red-lines', 'Step changes to approve', rlPending().length, rlPending().length ? 'warn' : '') +
+      (SRV() && ui.user && ui.user.fin ? tile('data-nav="finance"', 'Prices and costs', 'Sage orders, BOM cost, margin · supervisors and admins', ui.fin && ui.fin.recon && ui.fin.recon.flags ? ui.fin.recon.flags.filter((f) => f.lvl === 'bad').length : null, 'warn') : '') +
       tile('data-nav="train"', 'Training', 'How to use this, for every role', null) +
       tile('data-nav="improve"', 'Improve · analytics', 'Charts: time, people, areas, suppliers, cost, late jobs', prompts().length, prompts().length ? 'warn' : '') +
       tile('data-nav="manage" data-mtab="release"', 'Issue a traveler', ui.user && W.canDispose(ui.user) ? 'Start a new job: part, quantity, go' : 'Manager or QA signs in first', null) +
@@ -1699,9 +1784,18 @@ window.WT_ESP = [
     }).join('') + '</div>';
     return h;
   }
+  // Parts list from the Sage bill of materials: part numbers and quantities only. Never prices or costs.
+  function sageParts(pn) {
+    const B = store.sageBom || {}, k = String(pn || '').toUpperCase(), L = B[k] || B[pn];
+    const parents = Object.keys(B).filter((p) => (B[p] || []).some((c) => String(c[0]).toUpperCase() === k));
+    if (!L && !parents.length) return '';
+    return '<div class="panel" style="margin-bottom:12px"><h3>Parts list from Sage</h3>' + (L ? '<div class="tbl-wrap"><table><tr><th>Part</th><th>Description</th><th class="num">Qty per</th></tr>' + L.map((c) => '<tr><td class="mono">' + esc(c[0]) + '</td><td>' + esc(c[1] || '') + '</td><td class="num">' + esc(c[2] == null ? '' : c[2]) + '</td></tr>').join('') + '</table></div>' : '') +
+      (parents.length ? '<p class="small">Goes into: ' + parents.map((x) => '<span class="mono chip">' + esc(x) + '</span>').join(' ') + '</p>' : '') + '<p class="small muted">From the Sage bill of materials' + (store.sageAt ? ', read ' + esc(store.sageAt) : '') + '. If it does not match the traveler, tell a supervisor.</p></div>';
+  }
   function docsTab(j, r) {
-    const cur = curPrintsHtml(r, j); if (cur) return cur + '<h3 style="margin-top:12px">Pages from the master traveler file</h3>' + docsTab0(j, r);
-    return docsTab0(j, r);
+    const sp = sageParts(j ? j.pn : r && r.pn);
+    const cur = curPrintsHtml(r, j); if (cur) return sp + cur + '<h3 style="margin-top:12px">Pages from the master traveler file</h3>' + docsTab0(j, r);
+    return sp + docsTab0(j, r);
   }
   function docsTab0(j, r) {
     if (!r.docs.length && r.master && store.dwg && store.dwg[r.dw] && !r.dwFail) return '<div class="empty">Loading prints…</div>';
@@ -1856,7 +1950,7 @@ window.WT_ESP = [
       h += '<div class="panel"><h2>Work schedule</h2><p class="small muted">Now: <b>' + esc(W.shiftText()) + '</b>. Job and operator time only counts inside these hours. At the end of each work day every running job is clocked out and every tablet signs out, so people sign in with their PIN to start again the next day.</p>' +
         (ui.user && ui.user.role === 'manager' ? '<div class="row">' + DN.map((n, k) => '<label class="check" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" class="sh-day" data-d="' + k + '"' + (SH.days.indexOf(k) >= 0 ? ' checked' : '') + ' style="width:24px;height:24px;min-height:24px">' + n + '</label>').join('') + '</div><div class="grid2"><label>Start<input id="sh-start" class="field" type="time" value="' + esc(SH.start.padStart(5, '0')) + '"></label><label>End<input id="sh-end" class="field" type="time" value="' + esc(SH.end.padStart(5, '0')) + '"></label></div><button class="btn primary" data-a="saveShift" style="align-self:flex-start">Save schedule</button>' : '<p class="small muted">A manager changes the schedule.</p>') + '</div>';
       h += '<div class="banner info"><div><b>PINs.</b> Each person creates their own 4-digit PIN the first time they tap their name. Suggested: birth month and year, so March 1985 is 0385. A manager can reset anyone’s PIN here.</div></div>' +
-        '<div class="panel"><h2>People</h2><div class="tbl-wrap"><table><tr><th>Name</th><th>Area</th><th>Role</th><th>PIN</th><th></th></tr>' + store.cfg.roster.slice().sort((a, b) => a.name.localeCompare(b.name)).map((p) => '<tr><td>' + esc(p.name) + '</td><td>' + esc(p.area) + '</td><td>' + ({ operator: 'Operator', approver: p.side ? 'Supervisor, ' + p.side + ' side — signs checks' : 'Approved signer — both sides', qa: 'Quality — dispositions holds', manager: 'Manager — releases, priorities, can sign' }[p.role]) + '</td><td>' + (p.pin ? 'Set' : '<b>Not set yet</b>') + '</td><td>' + (mgr ? '<span class="row">' + (p.pin ? '<button class="btn sm" data-a="resetPin" data-id="' + esc(p.id) + '">Reset PIN</button>' : '') + (p.id !== ui.user.id ? '<button class="btn sm" data-a="rmPerson" data-id="' + esc(p.id) + '">Remove</button>' : '') + '</span>' : '') + '</td></tr>').join('') + '</table></div>' +
+        '<div class="panel"><h2>People</h2><div class="tbl-wrap"><table><tr><th>Name</th><th>Area</th><th>Role</th><th>PIN</th><th></th></tr>' + store.cfg.roster.slice().sort((a, b) => a.name.localeCompare(b.name)).map((p) => '<tr><td>' + esc(p.name) + '</td><td>' + esc(p.area) + '</td><td>' + ({ operator: 'Operator', approver: p.side ? 'Supervisor, ' + p.side + ' side — signs checks' : 'Approved signer — both sides', qa: 'Quality — dispositions holds', manager: 'Manager — releases, priorities, can sign' }[p.role]) + '</td><td>' + (hasPin(p) ? 'Set' : '<b>Not set yet</b>') + (SRV() ? '<br><span class="small">' + (p.fin ? 'Sees prices and costs' : 'No prices or costs') + '</span>' : '') + '</td><td>' + (mgr ? '<span class="row">' + (hasPin(p) ? '<button class="btn sm" data-a="resetPin" data-id="' + esc(p.id) + '">Reset PIN</button>' : '') + (SRV() && p.role !== 'operator' && p.id !== ui.user.id ? '<button class="btn sm" data-a="finFlag" data-id="' + esc(p.id) + '">' + (p.fin ? 'Remove price access' : 'Allow price access') + '</button>' : '') + (p.id !== ui.user.id ? '<button class="btn sm" data-a="rmPerson" data-id="' + esc(p.id) + '">Remove</button>' : '') + '</span>' : '') + '</td></tr>').join('') + '</table></div>' +
         (sup ? '<h3>Add a person</h3><div class="grid2"><label>Name<input id="pp-name" class="field" autocomplete="off"></label><label>Area<select id="pp-area" class="field">' + W.STATIONS.map((s) => '<option>' + esc(s.name) + '</option>').join('') + '<option>Quality</option><option>Office</option></select></label><label>Role<select id="pp-role" class="field"><option value="operator">Operator</option>' + (mgr ? '<option value="approver:metal">Supervisor — metal side</option><option value="approver:filter">Supervisor — filter side</option><option value="approver:">Approved signer — both sides</option><option value="qa">Quality</option><option value="manager">Manager</option>' : '') + '</select></label></div><p class="small muted">They create their own PIN the first time they sign in.</p><button class="btn" data-a="addPerson" style="align-self:flex-start">Add person</button>' : '<p class="muted">Supervisors and managers can add people here.</p>') + '</div>' +
         '<div class="panel"><h2>Rules</h2><p>Every operation needs two supervisor signatures: the first article, and the closing signature. There is no midpoint check.</p><div class="grid2"><label>Sign a tablet out after this many idle seconds<input id="ru-idle" class="field" type="number" min="30" value="' + R.idleLock + '"' + (mgr ? '' : ' disabled') + '></label></div><label class="check" style="display:flex;gap:12px;align-items:center"><input id="ru-self" type="checkbox" style="width:28px;height:28px"' + (R.selfApprove ? ' checked' : '') + (mgr ? '' : ' disabled') + '> An approver may sign a check on an operation they ran themselves</label>' + (mgr ? '<button class="btn" data-a="saveRules" style="align-self:flex-start">Save rules</button>' : '') + '<p class="small muted"></p></div>';
     }
@@ -1888,8 +1982,9 @@ window.WT_ESP = [
   function verify(m, only) {
     const p = person(m.who); if (!p) { toast('Tap your name.', 'bad'); return null; }
     if (only && !(only === 'qa' ? W.canDispose(p) : W.isApprover(p))) { toast(p.name + ' is not set up to do that.', 'bad'); return null; }
-    if (!p.pin) { toast(p.name + ' has no PIN yet. Tap Sign in at the top once to create it.', 'bad'); return null; }
-    if (p.pin !== m.pin) { m.pin = ''; renderModal(); toast('Wrong PIN.', 'bad'); return null; }
+    if (!hasPin(p)) { toast(p.name + ' has no PIN yet. Tap Sign in at the top once to create it.', 'bad'); return null; }
+    if (SRV()) { if (m.pinOk !== m.who + ':' + m.pin) { m.pin = ''; renderModal(); toast('Wrong PIN.', 'bad'); return null; } }
+    else if (p.pin !== m.pin) { m.pin = ''; renderModal(); toast('Wrong PIN.', 'bad'); return null; }
     return p;
   }
   function renderModal() {
@@ -1898,7 +1993,8 @@ window.WT_ESP = [
     const j = m.job ? store.jobs[m.job] : null, op = j && m.i != null ? j.ops[m.i] : null;
     let h = '', wide = false;
     switch (m.type) {
-      case 'login': { const lp = person(m.who), fresh = lp && !lp.pin;
+      case 'finpin': h = '<h2>Prices and costs are locked</h2><p><b>' + esc(nm(m.who)) + '</b>, enter your PIN to open them. They lock again when you sign out, after ' + store.cfg.rules.idleLock + ' s idle, or at the end of the shift.</p>' + pad(m) + foot('Open'); break;
+      case 'login': { const lp = person(m.who), fresh = lp && !hasPin(lp);
         h = '<h2>Who is working?</h2>' + who(m) + (lp ? (fresh ? '<div class="banner info"><div><b>' + esc(lp.name) + ', ' + (m.first ? 'enter the same PIN again to confirm.' : 'create your PIN.') + '</b> Use your birth month and year so you never forget it. March 1985 is 0385.</div></div>' : '<p><b>' + esc(lp.name) + '</b>, enter your PIN.</p>') + pad(m) : '<p class="muted">Tap your name. First time here, you will create your own PIN.</p><button class="btn sm" data-m="join" style="align-self:flex-start">My name is not here — add me</button>') + foot(fresh ? (m.first ? 'Save my PIN' : 'Next') : 'Sign in'); break; }
       case 'station': { const grp = (f) => W.STATIONS.filter((s) => s.kind === 'work' && s.floor === f).map((s) => '<button class="btn" data-station="' + s.id + '"><span>' + esc(s.name) + '</span><small>' + esc(s.note) + '</small></button>').join('');
         h = '<h2>Which work area is this tablet at?</h2><h3>Metal floor</h3><div class="tiles"><button class="btn" data-station="allmetal"><span>Whole metal floor</span><small>One shared tablet · every metal area</small></button>' + grp('metal') + '</div><h3>Filter floor</h3><div class="tiles"><button class="btn" data-station="allfilter"><span>Whole filter floor</span><small>One shared tablet · every filter area</small></button>' + grp('filter') + '</div><div class="tiles"><button class="btn" data-station="all"><span>All work areas</span><small>Supervisor and office view</small></button></div><p class="small muted">Each tablet remembers its area.</p><button class="btn" data-close>Close</button>'; break; }
@@ -1993,7 +2089,22 @@ window.WT_ESP = [
   function submit() {
     const m = ui.modal; let ok = false, p;
     switch (m.type) {
+      case 'finpin': { if ((m.pin || '').length !== 4 || m.busy) return; m.busy = true;
+        rpc('pin_login', { p_id: m.who, p_pin: m.pin }).then((r) => { m.busy = false; if (ui.modal !== m) return; if (!r || !r.ok) { m.pin = ''; renderModal(); return toast(pinWhy(r || {}), 'bad'); }
+          if (!r.finToken) { closeModal(); return toast('Your account is not set up to see prices or costs.', 'bad'); }
+          if (ui.finTok) rpc('fin_lock', { p_token: ui.finTok }).catch(() => {}); ui.finTok = r.finToken; ui.user = Object.assign({}, ui.user, { role: r.role, fin: true }); closeModal(); finLoad(); }).catch(() => { m.busy = false; toast('Could not check the PIN. Check the connection.', 'bad'); }); return; }
       case 'login': { const lp = person(m.who); if (!lp) return toast('Tap your name.', 'bad');
+        if (SRV()) {
+          if ((m.pin || '').length !== 4) return toast('Enter 4 digits.', 'bad');
+          if (!hasPin(lp)) { if (!m.first) { m.first = m.pin; m.pin = ''; return renderModal(); } if (m.first !== m.pin) { m.first = ''; m.pin = ''; renderModal(); return toast('Those did not match. Start again.', 'bad'); } }
+          if (m.busy) return; m.busy = true; const fresh = !hasPin(lp);
+          rpc(fresh ? 'pin_create' : 'pin_login', { p_id: lp.id, p_pin: m.pin }).then((r) => {
+            m.busy = false; if (ui.modal !== m) return;
+            if (!r || !r.ok) { m.pin = ''; m.first = ''; renderModal(); loadStaff(); return toast(r && r.reason === 'exists' ? 'A PIN is already set. Enter it to sign in.' : pinWhy(r || {}), 'bad'); }
+            signedIn(person(lp.id) || lp, r); if (fresh) loadStaff(); closeModal(); if (ui.view === 'home') ui.view = 'station'; render(); toast((fresh ? 'PIN saved. ' : '') + 'Signed in as ' + lp.name);
+          }).catch(() => { m.busy = false; toast('Could not check the PIN. Check the connection and try again.', 'bad'); });
+          return;
+        }
         if (!lp.pin) {
           if ((m.pin || '').length !== 4) return toast('Enter 4 digits.', 'bad');
           if (!m.first) { m.first = m.pin; m.pin = ''; return renderModal(); }
@@ -2001,11 +2112,11 @@ window.WT_ESP = [
           lp.pin = m.pin; delete lp.tempPin; { const pid = lp.id, pin = m.pin; saveCfg((c) => { const x = c.roster.find((y) => y.id === pid); if (x) { x.pin = pin; delete x.tempPin; } }); } ui.user = lp; ui.touched = Date.now(); ui.signedAt = Date.now(); closeModal(); if (ui.view === 'home') ui.view = 'station'; render(); return toast('PIN saved. Signed in as ' + lp.name);
         } }
       case 'login-go': p = verify(m); if (!p) return; ui.user = p; ui.touched = Date.now(); ui.signedAt = Date.now(); closeModal(); if (ui.view === 'home') ui.view = 'station'; render(); toast('Signed in as ' + p.name); return;
-      case 'sign': if (!m.result) return toast('Choose pass or fail.', 'bad'); p = verify(m, true); if (!p) return;
+      case 'sign': if (!m.result) return toast('Choose pass or fail.', 'bad'); if (SRV() && m.pinOk !== m.who + ':' + m.pin && person(m.who)) return pinGate(m); p = verify(m, true); if (!p) return;
         ok = run(m.job, 'sign', { i: m.i, type: m.ctype, result: m.result, checked: m.checked, meas: m.meas, note: m.note, reason: m.reason, qty: m.qty }, p);
         if (ok) toast(m.result === 'pass' ? 'Signed by ' + p.name : 'Hold opened by ' + p.name, m.result === 'pass' ? '' : 'bad'); break;
-      case 'dispose': p = verify(m, 'qa'); if (!p) return; ok = run(m.job, 'dispose', { id: m.hold, action: m.action, note: m.note }, p); break;
-      case 'correct': p = verify(m, true); if (!p) return; ok = run(m.job, 'correct', { i: m.i, good: m.good, reason: m.reason }, p); break;
+      case 'dispose': if (SRV() && m.pinOk !== m.who + ':' + m.pin && person(m.who)) return pinGate(m); p = verify(m, 'qa'); if (!p) return; ok = run(m.job, 'dispose', { id: m.hold, action: m.action, note: m.note }, p); break;
+      case 'correct': if (SRV() && m.pinOk !== m.who + ':' + m.pin && person(m.who)) return pinGate(m); p = verify(m, true); if (!p) return; ok = run(m.job, 'correct', { i: m.i, good: m.good, reason: m.reason }, p); break;
       case 'setup': {
         const o = W.routing(store.jobs[m.job].rid).ops[m.i];
         if ((o.checks || []).some((c, k) => !m.chk[k])) return toast('Tick every setup check first.', 'bad');
@@ -2056,7 +2167,9 @@ window.WT_ESP = [
       case 'reroute': ok = run(m.job, 'reroute', { lot: m.lot, dest: m.dest, reason: 'Redirected at ' + areaName() }); break;
       case 'priority': ok = run(m.job, 'priority', { pri: m.pri, rush: m.rush, reason: m.reason }); break;
       case 'join': { const n = (m.name || '').trim(); if (n.length < 2) return toast('Type your name.', 'bad'); if (store.cfg.roster.some((x) => x.name.toLowerCase() === n.toLowerCase())) return toast(n + ' is already on the list. Go back and tap your name.', 'bad');
-        const id = n.toLowerCase().replace(/[^a-z0-9]/g, '') + Date.now().toString(36).slice(-3); { const np = { id, name: n, area: m.area, role: 'operator', side: '', pin: '', self: true }; store.cfg.roster.push(np); saveCfg((c) => { if (!c.roster.some((y) => y.id === id)) c.roster.push(W.clone(np)); }); } return openModal({ type: 'login', who: id, pin: '', first: '' }); }
+        const id = n.toLowerCase().replace(/[^a-z0-9]/g, '') + Date.now().toString(36).slice(-3);
+        if (SRV()) { rpc('staff_join', { p_id: id, p_name: n, p_area: m.area || '' }).then(() => loadStaff()).then(() => openModal({ type: 'login', who: id, pin: '', first: '' })).catch(() => toast('Could not add. Check the connection.', 'bad')); return; }
+        { const np = { id, name: n, area: m.area, role: 'operator', side: '', pin: '', self: true }; store.cfg.roster.push(np); saveCfg((c) => { if (!c.roster.some((y) => y.id === id)) c.roster.push(W.clone(np)); }); } return openModal({ type: 'login', who: id, pin: '', first: '' }); }
       case 'ask': ask(); return;
     }
     if (ok) closeModal();
@@ -2190,7 +2303,7 @@ window.WT_ESP = [
   function render() {
     const main = $('#main'); if (!main) return;
     const y = window.scrollY;
-    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
+    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
     $('#b-home').textContent = '⌂ Main menu'; $('#b-list').textContent = '☰ Travelers'; $('#q').setAttribute('placeholder', 'Search or scan'); $('#b-lang').textContent = LANG === 'es' ? 'English' : 'Español';
     if (!document.fullscreenElement) $('#b-full').textContent = '⛶ Full';
     $('#b-station').textContent = 'Area: ' + areaName();
@@ -2244,7 +2357,7 @@ window.WT_ESP = [
       const mc = { u: { id: 'system', name: 'End of shift', role: 'system' }, at: end, cfg: store.cfg };
       try { const j2 = W.act(j, 'endDay', {}, mc); if (j2 !== j) save(j2, [['endDay', {}, mc]]); } catch (e) { /* another tablet already did it */ }
     });
-    if (ui.user && ui.signedAt && ui.signedAt < end && dayChecked < end) { ui.user = null; ui.signedAt = 0; closeModal(); render(); toast('End of shift. Everyone is signed out. Sign in with your PIN to start again.'); }
+    if (ui.user && ui.signedAt && ui.signedAt < end && dayChecked < end) { signOutUser(); closeModal(); render(); toast('End of shift. Everyone is signed out. Sign in with your PIN to start again.'); }
     dayChecked = end;
   }
   setInterval(endOfDay, 60000);
@@ -2268,7 +2381,7 @@ window.WT_ESP = [
     if (t.id === 'b-list') { ui.view = 'list'; return render(); }
     if (t.id === 'b-home') { ui.view = 'home'; closeModal(); $('#results').hidden = true; render(); return window.scrollTo(0, 0); }
     if (t.id === 't-area') return openModal({ type: 'station' });
-    if (t.id === 't-out') { ui.user = null; render(); return toast('Signed out'); }
+    if (t.id === 't-out') { signOutUser(); render(); return toast('Signed out'); }
     if ('back' in d) { ui.view = ui.back || 'station'; return render(); }
     if (d.relkind) { ui.relKind = d.relkind; ui.relRid = null; return render(); }
     if (d.rel) { ui.relRid = d.rel; return render(); }
@@ -2307,7 +2420,7 @@ window.WT_ESP = [
       try { if (!de.requestFullscreen) no(); else (document.fullscreenElement ? document.exitFullscreen() : de.requestFullscreen()).catch(no); } catch (er) { no(); } return; }
     if (t.id === 'b-zin' || t.id === 'b-zout') { setZoom(ui.scale + (t.id === 'b-zin' ? 10 : -10)); return; }
     if (t.id === 'b-manage') { ui.view = ui.view === 'manage' ? 'list' : 'manage'; return render(); }
-    if (t.id === 'b-user') { if (ui.user) { ui.user = null; render(); toast('Signed out'); } else openModal({ type: 'login', who: null, pin: '' }); return; }
+    if (t.id === 'b-user') { if (ui.user) { signOutUser(); render(); toast('Signed out'); } else openModal({ type: 'login', who: null, pin: '' }); return; }
     if ('close' in d) return closeModal();
     if ('submit' in d) return submit();
     if (d.station) return setStation(d.station);
@@ -2320,7 +2433,7 @@ window.WT_ESP = [
     if (d.doc) { ui.doc = Number(d.doc); return render(); }
     if (d.zoom) { ui.zoom = Number(d.zoom); return render(); }
     if (d.libdoc) { const r = W.routing(d.libdoc), x = r.docs[Number(d.k)]; $('#results').hidden = true; $('#modal').innerHTML = '<div class="sheet wide"><div class="row" style="justify-content:space-between"><h2>' + esc(x.t) + (x.rev ? ' · Rev ' + esc(x.rev) : '') + '</h2><button class="btn sm" data-close>Close</button></div>' + (x.flag ? '<div class="banner warn"><div><b>Check revision.</b> ' + esc(x.flag) + '</div></div>' : '') + '<div class="viewer"><img src="' + esc(x.f) + '" alt="' + esc(x.t) + '" style="width:160%"></div></div>'; $('#modal').hidden = false; ui.modal = { type: 'lib' }; return; }
-    if (d.pin && m) { if (d.pin === 'clr') m.pin = ''; else if (d.pin === 'del') m.pin = (m.pin || '').slice(0, -1); else if ((m.pin || '').length < 4) m.pin = (m.pin || '') + d.pin; renderModal(); if (m.type === 'login' && (m.pin || '').length === 4) setTimeout(() => { if (ui.modal === m && (m.pin || '').length === 4) submit(); }, 120); return; }
+    if (d.pin && m) { if (d.pin === 'clr') m.pin = ''; else if (d.pin === 'del') m.pin = (m.pin || '').slice(0, -1); else if ((m.pin || '').length < 4) m.pin = (m.pin || '') + d.pin; renderModal(); if ((m.type === 'login' || m.type === 'finpin') && (m.pin || '').length === 4) setTimeout(() => { if (ui.modal === m && (m.pin || '').length === 4) submit(); }, 120); return; }
     if (d.set && m) {
       m[d.set] = d.v; if (d.set === 'who') { m.pin = ''; m.first = ''; }
       if ((m.type === 'pause' || m.type === 'block') && d.set === 'reason') { if (run(m.job, m.type, { i: m.i, reason: d.v })) closeModal(); return; }
@@ -2330,6 +2443,7 @@ window.WT_ESP = [
     if (d.q && m) { m.q = d.q; renderModal(); return ask(); }
     if (d.m) {
       if (d.m === 'login') return openModal({ type: 'login', who: null, pin: '' });
+      if (d.m === 'finpin') { if (!ui.user) return openModal({ type: 'login', who: null, pin: '' }); return openModal({ type: 'finpin', who: ui.user.id, pin: '' }); }
       if (d.m === 'rlList') return openModal({ type: 'rlList' });
       if (d.m === 'labels') return openModal({ type: 'labels', job: d.job, lots: null });
       if (d.m === 'join') return openModal({ type: 'join', name: '', area: ui.station && !multi() ? W.station(ui.station).name : W.STATIONS[0].name });
@@ -2365,9 +2479,12 @@ window.WT_ESP = [
         if (!sh.days.length || !sh.start || !sh.end || sh.end <= sh.start) return toast('Pick the work days and a start before the end.', 'bad');
         store.cfg.shift = sh; W.setShift(sh); saveCfg((c) => { c.shift = sh; }); render(); return toast('Schedule saved: ' + W.shiftText());
       }
+      if (d.a === 'finLock') { finEnd(); ui.finErr = 'Locked.'; render(); return toast('Prices and costs locked'); }
       if (d.a === 'saveCosts') {
         if (!ui.user || ui.user.role !== 'manager') return toast('A manager saves costs.', 'bad');
         const co = { rate: $('#co-rate').value, oh: $('#co-oh').value, mat: {} }; document.querySelectorAll('.co-mat').forEach((e) => { if (e.value !== '') co.mat[e.dataset.pn] = e.value; });
+        if (SRV()) { if (!ui.finTok) return openModal({ type: 'finpin', who: ui.user.id, pin: '' }); const prev = (ui.fin && ui.fin.settings && ui.fin.settings.costs) || {}; const nv = { rate: co.rate, oh: co.oh, mat: Object.assign({}, prev.mat || {}, co.mat) };
+          rpc('fin_save_settings', { p_token: ui.finTok, p: nv }).then(() => { toast('Costs saved'); finLoad(); }).catch(() => { toast('Could not save. Enter your PIN again.', 'bad'); ui.finTok = null; ui.fin = null; render(); }); return; }
         store.cfg.costs = co; saveCfg((c) => { c.costs = Object.assign({}, c.costs || {}, { rate: co.rate, oh: co.oh, mat: Object.assign({}, (c.costs || {}).mat || {}, co.mat) }); }); return toast('Costs saved');
       }
       if (d.a === 'rlOk' || d.a === 'rlNo' || d.a === 'rlCsv') {
@@ -2411,7 +2528,13 @@ window.WT_ESP = [
         catch (err) { if (err.user) toast(err.message, 'bad'); else throw err; } return;
       }
       if (d.a === 'addPerson') { const n = $('#pp-name').value.trim(), rv = W.isApprover(ui.user) && ui.user.role === 'manager' ? $('#pp-role').value : 'operator'; if (!W.isApprover(ui.user)) return toast('Supervisors and managers can add people.', 'bad'); if (!n) return toast('Enter a name.', 'bad'); if (store.cfg.roster.some((x) => x.name.toLowerCase() === n.toLowerCase())) return toast(n + ' is already on the list.', 'bad');
+        if (SRV()) { const np = { id: n.toLowerCase().replace(/[^a-z0-9]/g, '') + Date.now().toString(36).slice(-3), name: n, area: $('#pp-area').value, role: rv.split(':')[0], side: rv.split(':')[1] || '', fin: rv.split(':')[0] === 'manager' };
+          const go = np.role === 'operator' ? rpc('staff_join', { p_id: np.id, p_name: np.name, p_area: np.area }) : ui.finTok ? rpc('staff_save', { p_token: ui.finTok, p: np }) : Promise.reject(new Error('pin'));
+          go.then(() => { loadStaff(); toast(n + ' added'); }).catch((e) => { if (e && e.message === 'pin') openModal({ type: 'finpin', who: ui.user.id, pin: '' }); else toast('Could not add. Check the connection.', 'bad'); }); return; }
         { const np = { id: n.toLowerCase().replace(/[^a-z0-9]/g, '') + Date.now().toString(36).slice(-3), name: n, area: $('#pp-area').value, role: rv.split(':')[0], side: rv.split(':')[1] || '', pin: '' }; store.cfg.roster.push(np); saveCfg((c) => { if (!c.roster.some((y) => y.id === np.id)) c.roster.push(W.clone(np)); }); } return toast(n + ' added'); }
+      if (SRV() && (d.a === 'resetPin' || d.a === 'rmPerson' || d.a === 'finFlag')) { const x = person(d.id); if (!x || ui.user.role !== 'manager') return; if (!ui.finTok) return openModal({ type: 'finpin', who: ui.user.id, pin: '' });
+        const call = d.a === 'resetPin' ? rpc('pin_reset', { p_token: ui.finTok, p_id: x.id }) : d.a === 'rmPerson' ? rpc('staff_remove', { p_token: ui.finTok, p_id: x.id }) : rpc('staff_save', { p_token: ui.finTok, p: { id: x.id, name: x.name, area: x.area, role: x.role, side: x.side || '', fin: !x.fin } });
+        call.then(() => { loadStaff(); toast(d.a === 'resetPin' ? x.name + ' will create a new PIN at next sign-in' : d.a === 'rmPerson' ? x.name + ' removed' : x.name + (x.fin ? ' can no longer see prices or costs' : ' can now see prices and costs')); }).catch(() => { toast('Not saved. Enter your PIN again.', 'bad'); ui.finTok = null; ui.fin = null; render(); }); return; }
       if (d.a === 'resetPin') { const x = person(d.id); if (x && ui.user.role === 'manager') { x.pin = ''; { const pid = x.id; saveCfg((c) => { const y = c.roster.find((z) => z.id === pid); if (y) y.pin = ''; }); } toast(x.name + ' will create a new PIN at next sign-in'); } return; }
       if (d.a === 'rmPerson') { { const pid = d.id; store.cfg.roster = store.cfg.roster.filter((p) => p.id !== pid); return saveCfg((c) => { c.roster = c.roster.filter((p) => p.id !== pid); }); } }
       if (d.a === 'saveRules') { store.cfg.rules = { idleLock: Math.max(30, Number($('#ru-idle').value) || 180), selfApprove: $('#ru-self').checked }; { const rl = W.clone(store.cfg.rules); saveCfg((c) => { c.rules = Object.assign({}, c.rules, rl); }); } return toast('Rules saved'); }
@@ -2442,7 +2565,7 @@ window.WT_ESP = [
   window.addEventListener('online', () => { store.offline = false; Object.keys(store.queue).forEach(pump); renderSync(); });
   window.addEventListener('offline', renderSync);
   setInterval(() => {
-    if (ui.user && !ui.modal && Date.now() - ui.touched > store.cfg.rules.idleLock * 1000) { ui.user = null; render(); toast('Signed out after ' + store.cfg.rules.idleLock + ' s idle'); return; }
+    if (ui.user && !ui.modal && Date.now() - ui.touched > store.cfg.rules.idleLock * 1000) { signOutUser(); render(); toast('Signed out after ' + store.cfg.rules.idleLock + ' s idle'); return; }
     const a = document.activeElement; if (!ui.modal && !(a && /INPUT|SELECT|TEXTAREA/.test(a.tagName))) render();
   }, 30000);
 
