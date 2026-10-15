@@ -280,6 +280,13 @@ td.num { font-variant-numeric: tabular-nums; text-align: right; }
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 window.WT_ES = {
+"Final assembly / packing":"Ensamble final / empaque",
+"Final travelers, PO and Sales Order for shipping":"Viajeros finales, PO y Orden de Venta para embarque",
+"Production traveler":"Viajero de producción",
+"Improve · analytics":"Mejorar · análisis",
+"Charts: time, people, areas, suppliers, cost, late jobs":"Gráficas: tiempo, personal, áreas, proveedores, costo, atrasos",
+"Final assembly":"Ensamble final",
+"Final assembly and packing travelers. Numbers continue the Final Assembly log. Enter the customer PO # and Sales Order # for shipping.":"Viajeros de ensamble final y empaque. Los números siguen el registro de Ensamble Final. Captura el PO del cliente y la Orden de Venta para embarque.",
 "Supplier part bad":"Pieza de proveedor mala",
 "Return to supplier":"Regresar al proveedor",
 "Supplier":"Proveedor",
@@ -625,7 +632,7 @@ window.WT_ESP = [
   };
 
   const PAUSE_REASONS = ['Break / lunch', 'Waiting on material', 'Machine down', 'Tooling or fixture', 'Pulled to another job', 'End of shift', 'Waiting on instructions'];
-  const HOLD_REASONS = ['Supplier part bad', 'Dimension out', 'Visual defect', 'Wrong material', 'Wrong marking', 'Damaged', 'Count does not match', 'Instruction unclear'];
+  const HOLD_REASONS = ['Dimension out', 'Visual defect', 'Wrong material', 'Wrong marking', 'Damaged', 'Count does not match', 'Instruction unclear', 'Supplier part bad'];
   const BLOCK_REASONS = ['Waiting on material', 'Waiting on components', 'Machine down', 'Tooling not available'];
   const DISPOSITIONS = [['rework', 'Rework and re-inspect'], ['rts', 'Return to supplier'], ['scrap', 'Scrap'], ['use', 'Use as is'], ['recount', 'Accept corrected count']];
 
@@ -1378,8 +1385,9 @@ window.WT_ESP = [
       tile('data-nav="list" data-lf="hold"', 'On hold', 'Waiting on a disposition', hold, hold ? 'bad' : '') +
       tile('data-m="rlList"', 'Red-lines', 'Step changes to approve', rlPending().length, rlPending().length ? 'warn' : '') +
       tile('data-nav="train"', 'Training', 'How to use this, for every role', null) +
-      tile('data-nav="improve"', 'Improve', 'What to fix this week, time and cost', prompts().length, prompts().length ? 'warn' : '') +
+      tile('data-nav="improve"', 'Improve · analytics', 'Charts: time, people, areas, suppliers, cost, late jobs', prompts().length, prompts().length ? 'warn' : '') +
       tile('data-nav="manage" data-mtab="release"', 'Issue a traveler', ui.user && W.canDispose(ui.user) ? 'Start a new job: part, quantity, go' : 'Manager or QA signs in first', null) +
+      tile('data-nav="list" data-lf="active" data-lfl="final"', 'Final assembly / packing', 'Final travelers, PO and Sales Order for shipping', paper().filter((x) => x.f === 'final' && x.r.s === 'O').length + jobs().filter((j) => j.st !== 'complete' && (j.final || j.floor === 'final')).length) +
       tile('data-nav="library"', 'Traveler library', 'Look at any traveler before issuing · fix wording, material, steps', null) +
       tile('data-nav="floor"', 'Where is everything', 'Parts in each of the nine areas', null) +
       tile('id="t-area"', 'Change area', 'Pick which area this tablet is at', null) +
@@ -1455,7 +1463,8 @@ window.WT_ESP = [
   }
   const ts = (iso) => (iso ? Date.parse(iso + 'T12:00:00') : 0);
   const sDate = (t) => (t ? new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—');
-  function paper() { const out = []; ['metal', 'filter'].forEach((f) => (store.logs[f] || []).forEach((r) => { if (!store.jobs['so-' + r.t]) out.push({ r, f }); })); return out; }
+  const finS = (r) => { if (r.s) return r; const iss = r.i ? Date.parse(r.i + 'T12:00:00') : 0; r.s = !r.c && iss && Date.now() - iss < 45 * 864e5 ? 'O' : 'C'; r.d = r.d || ''; return r; };
+  function paper() { const out = []; ['metal', 'filter', 'final'].forEach((f) => (store.logs[f] || []).forEach((r) => { if (!store.jobs['so-' + r.t]) out.push({ r: f === 'final' ? finS(r) : r, f }); })); return out; }
   const BASE = W.ROUTINGS.slice(), midx = {};
   const HAND = { '40-1022 TRV MASTER': 1, '207-7469 TRV KEY risk': 1, '270-7257 TRV KEY risk': 1, '1001050 TRV MASTER': 1, '1001249 PLEAT TRV': 1, '207-7469 PACKAGING TRAVELER': 1, '270-7257 PACKAGING TRAVELER': 1 };
   const key = (s) => String(s || '').trim().toUpperCase();
@@ -1527,7 +1536,7 @@ window.WT_ESP = [
     const chip = (grp, v, label) => '<button class="btn sm ' + (ui[grp] === v ? 'sel' : '') + '" data-' + grp + '="' + v + '">' + label + '</button>';
     const n = (f) => items.filter(F[f]).length;
     let h = '<div class="head"><div><h1>Travelers</h1><p class="muted">Every traveler on the floor, from your metal and filter logs. Tap one to open it.</p></div>' + '<span class="row">' + (ui.user && W.canDispose(ui.user) ? '<button class="btn" data-nav="manage" data-mtab="release">+ Issue a traveler</button>' : '') + (store.downloads ? '<button class="btn sm" data-a="csv">Save list as spreadsheet</button>' : '') + '</span>' + '</div>' +
-      '<div class="row"><span class="small muted" style="min-width:52px">Floor</span>' + chip('lfloor', 'both', 'Both') + chip('lfloor', 'metal', 'Metal') + chip('lfloor', 'filter', 'Filter') + '</div>' +
+      '<div class="row"><span class="small muted" style="min-width:52px">Floor</span>' + chip('lfloor', 'both', 'Both') + chip('lfloor', 'metal', 'Metal') + chip('lfloor', 'filter', 'Filter') + chip('lfloor', 'final', 'Final assembly / packing') + '</div>' +
       '<div class="row"><span class="small muted" style="min-width:52px">Show</span>' + chip('lfilt', 'active', 'Open ' + n('active')) + chip('lfilt', 'late', 'Past due ' + n('late')) + chip('lfilt', 'sign', 'Needs signature ' + n('sign')) + chip('lfilt', 'hold', 'On hold ' + n('hold')) + chip('lfilt', 'done', 'Closed ' + n('done')) + chip('lfilt', 'all', 'All ' + items.length) + '</div>' +
       '<div class="row"><span class="small muted" style="min-width:52px">Sort</span>' + chip('lsort', 'part', 'Part · most volume first') + chip('lsort', 'issued', 'Date issued') + chip('lsort', 'due', 'Due date') + chip('lsort', 'pri', 'Run order') + '</div>';
     if (!store.loaded) return h + '<div class="empty">Connecting to the shop record.</div>';
@@ -1541,8 +1550,8 @@ window.WT_ESP = [
     const rowP = (x) => { const r = x.r, open = r.s === 'O', pd = open && x.due && x.due < now, c = pd ? 'bad' : open ? 'navy' : 'ok';
       return '<div class="card trow" style="border-left-color:var(--' + c + ')"><button class="tmain" data-paper="' + esc(r.t) + '" data-floor="' + x.floor + '">' +
         '<span class="tcol tdate"><small>ISSUED</small><b class="num">' + esc(sDate(x.iss)) + '</b><small>#' + esc(r.t) + '</small></span>' +
-        '<span class="tcol tpart"><span class="pn mono">' + esc(r.pn) + '</span><span class="small">' + esc(r.d) + '</span><span class="small muted">Qty ' + (r.q == null ? '—' : r.q) + (r.m ? ' · made ' + esc(r.m) : '') + ' · due ' + esc(sDate(x.due)) + (r.o ? ' · ' + esc(r.o) : '') + (routingsFor(r.pn).length ? ' · master on file' : '') + '</span></span>' +
-        '<span class="tcol tstat"><span class="pill ' + (pd ? 'bad' : open ? 'info' : 'ok') + '">' + (pd ? '! Past due' : open ? '▶ Open' : '✔ Closed') + '</span><span class="small"><b>' + (x.floor === 'metal' ? 'Metal floor' : 'Filter floor') + ' · paper</b></span></span></button></div>'; };
+        '<span class="tcol tpart"><span class="pn mono">' + esc(r.pn) + '</span><span class="small">' + esc(r.d) + '</span><span class="small muted">Qty ' + (r.q == null ? '—' : r.q) + (r.m ? ' · made ' + esc(r.m) : '') + ' · due ' + esc(sDate(x.due)) + (r.o ? ' · ' + esc(r.o) : '') + (r.po ? ' · PO ' + esc(r.po) : '') + (r.so ? ' · SO ' + esc(r.so) : '') + (routingsFor(r.pn).length ? ' · master on file' : '') + '</span></span>' +
+        '<span class="tcol tstat"><span class="pill ' + (pd ? 'bad' : open ? 'info' : 'ok') + '">' + (pd ? '! Past due' : open ? '▶ Open' : '✔ Closed') + '</span><span class="small"><b>' + (x.floor === 'metal' ? 'Metal floor' : x.floor === 'final' ? 'Final assembly' : 'Filter floor') + ' · paper</b></span></span></button></div>'; };
     const row = (x) => (x.k === 'j' ? rowJ(x.j) : rowP(x));
     const asap = L.filter((x) => x.k === 'j' && x.j.rush && x.open);
     if (asap.length) { h += '<section class="sec"><div class="ghead" style="border-color:var(--bad)"><h2>ASAP — run these first</h2><span class="small muted">' + asap.length + ' traveler' + (asap.length > 1 ? 's' : '') + '</span></div>' + asap.map(row).join('') + '</section>'; L = L.filter((x) => asap.indexOf(x) < 0); }
@@ -1744,10 +1753,13 @@ window.WT_ESP = [
     jobs().forEach((j) => { if (!/^\d+$/.test(j.so)) return; const f = j.floor || W.sideOf(j.ops[j.ops.length - 1].station); if (f === floor && Number(j.so) > mx) mx = Number(j.so); });
     return mx ? String(mx + 1) : '';
   }
-  function relHits(raw) {
+  // Marty / quality land on final assembly by default; everyone else on production
+  function relKind() { return ui.relKind || (ui.user && ui.user.role !== 'manager' && /quality/i.test(ui.user.area || '') ? 'final' : 'prod'); }
+  function relHits(raw, fk) {
+    fk = fk || relKind();
     raw = (raw || '').trim(); if (raw.length < 2) return '';
     raw = stripAsk(raw); const q = (spoken(raw) || raw).toLowerCase(), nq = normKey(q);
-    const hits = W.ROUTINGS.filter((r) => normKey(r.pn).indexOf(nq) >= 0 || (nq.length >= 4 && /[a-z]{4}/.test(q) && String(r.name).toLowerCase().indexOf(q) >= 0)).sort((a, b) => (normKey(a.pn) === nq ? 0 : 1) - (normKey(b.pn) === nq ? 0 : 1) || a.pn.localeCompare(b.pn, undefined, { numeric: true })).slice(0, 12);
+    const hits = W.ROUTINGS.filter((r) => (fk !== 'final' || W.isFinal(r)) && (normKey(r.pn).indexOf(nq) >= 0 || normKey(r.wpn || '').indexOf(nq) >= 0 || (nq.length >= 4 && /[a-z]{4}/.test(q) && String(r.name).toLowerCase().indexOf(q) >= 0))).sort((a, b) => (normKey(a.pn) === nq ? 0 : 1) - (normKey(b.pn) === nq ? 0 : 1) || a.pn.localeCompare(b.pn, undefined, { numeric: true })).slice(0, 12);
     if (!hits.length) return '<p class="muted">No master traveler found for “' + esc(raw) + '”. Check the number, or the master traveler for this part has not been loaded.</p>';
     return hits.map((r) => '<button class="btn sm ' + (ui.relRid === r.id ? 'sel' : '') + '" data-rel="' + esc(r.id) + '"><span class="mono">' + esc(r.pn) + '</span><small>' + esc(String(r.name).slice(0, 44)) + ' · ' + esc(r.kind || (r.id.indexOf('PK-') === 0 ? 'FINAL ASSEMBLY' : 'TRV')) + ' · rev ' + esc(r.travRev) + '</small></button>').join('');
   }
@@ -1769,8 +1781,10 @@ window.WT_ESP = [
     }
     if (ui.mtab === 'release') {
       const sel = ui.relRid && W.routing(ui.relRid) ? W.routing(ui.relRid) : null, fin = sel && W.isFinal(sel), fl = sel ? (fin ? 'final' : W.sideOf(sel.ops[sel.ops.length - 1].station)) : '';
-      h += '<div class="panel"><h2>Issue a traveler</h2><p class="muted">Three steps: find the part, enter the quantity, issue. No PC log needed. The traveler number is assigned for you.</p>' +
-        '<label>1 · Part number — type it, scan it, or tap the keyboard microphone and say it<input id="rel-find" class="field" autocomplete="off" value="' + esc(ui.relQ || '') + '" placeholder="Example: 1001050"></label><div id="rel-hits" class="tiles">' + relHits(ui.relQ || '') + '</div>' +
+      const fk = relKind();
+      h += '<div class="panel"><h2>Issue a traveler</h2><div class="row"><button class="btn ' + (fk === 'prod' ? 'sel' : '') + '" data-relkind="prod">Production traveler</button><button class="btn ' + (fk === 'final' ? 'sel' : '') + '" data-relkind="final">Final assembly / packing</button></div>' +
+        (fk === 'final' ? '<p class="muted">Final assembly and packing travelers. Numbers continue the Final Assembly log. Enter the customer PO # and Sales Order # for shipping.</p>' : '<p class="muted">Three steps: find the part, enter the quantity, issue. No PC log needed. The traveler number is assigned for you.</p>') +
+        '<label>1 · Part number — type it, scan it, or tap the keyboard microphone and say it<input id="rel-find" class="field" autocomplete="off" value="' + esc(ui.relQ || '') + '" placeholder="Example: 1001050"></label><div id="rel-hits" class="tiles">' + relHits(ui.relQ || '', fk) + '</div>' +
         (sel ? '<div class="banner info"><div><b class="mono" style="font-size:1.2rem">' + esc(sel.pn) + '</b> ' + esc(sel.name) + '<br><span class="small">' + esc(sel.kind || sel.form) + ' · traveler rev ' + esc(sel.travRev) + ' · ' + sel.ops.length + ' operations · ' + (fin ? 'Final assembly / packing' : fl === 'metal' ? 'Metal floor' : 'Filter floor') + '. This traveler is locked to that revision when you issue it.</span></div></div>' +
           '<div class="grid2"><label>2 · Quantity<input id="rel-qty" class="field" type="number" inputmode="numeric" min="1"></label><label>Due date<input id="rel-due" class="field" type="date" value="' + new Date(now + 90 * 864e5).toISOString().slice(0, 10) + '"></label>' +
           '<label>Traveler number (next in the ' + fl + ' series)<input id="rel-so" class="field" autocomplete="off" inputmode="numeric" value="' + esc(nextNo(fl)) + '"></label><label class="check" style="flex-direction:row;align-items:center;gap:12px"><input id="rel-rush" type="checkbox" style="width:28px;height:28px;min-height:28px;flex:0 0 auto"> RUSH — run this first (ASAP)</label></div>' +
@@ -1930,7 +1944,7 @@ window.WT_ESP = [
       case 'priority': h = '<h2>Rush · Shop Order ' + esc(j.so) + '</h2><p class="muted">Jobs run in due-date order. ASAP jumps the line.</p><label class="check"><input type="checkbox" data-f="rush"' + (m.rush ? ' checked' : '') + '> ASAP — goes to the top of every list on every tablet</label>' + inp('reason', 'Reason for the change', m) + foot('Save'); break;
       case 'paper': { const r = (store.logs[m.floor] || []).find((x) => x.t === m.t) || {}, rts = routingsFor(r.pn), open = r.s === 'O';
         const f = (l, v) => '<div><b>' + (v === '' || v == null ? '—' : esc(v)) + '</b><span>' + l + '</span></div>';
-        h = '<h2>Traveler #' + esc(r.t) + ' · paper</h2><p><span class="mono" style="font-size:1.3rem">' + esc(r.pn) + '</span> ' + esc(r.d) + '</p><div class="kv">' + f('Status', open ? 'Open' : 'Closed') + f('Floor', m.floor === 'metal' ? 'Metal' : 'Filter') + f('Qty planned', r.q) + f('Qty made', r.m) + f('Issued', sDate(ts(r.i))) + f('Due', sDate(ts(r.u))) + f('Closed', sDate(ts(r.c))) + f('Operator', r.o) + '</div>' + (r.n ? '<p><b>Notes on the log:</b> ' + esc(r.n) + '</p>' : '') +
+        h = '<h2>Traveler #' + esc(r.t) + ' · paper</h2><p><span class="mono" style="font-size:1.3rem">' + esc(r.pn) + '</span> ' + esc(r.d) + '</p><div class="kv">' + f('Status', open ? 'Open' : 'Closed') + f('Floor', m.floor === 'metal' ? 'Metal' : m.floor === 'final' ? 'Final assembly' : 'Filter') + (m.floor === 'final' ? f('PO #', r.po) + f('Sales Order #', r.so) : '') + f('Qty planned', r.q) + f('Qty made', r.m) + f('Issued', sDate(ts(r.i))) + f('Due', sDate(ts(r.u))) + f('Closed', sDate(ts(r.c))) + f('Operator', r.o) + '</div>' + (r.n ? '<p><b>Notes on the log:</b> ' + esc(r.n) + '</p>' : '') +
           (rts.length ? (rts.close ? '<div class="banner warn"><div><b>No exact match for ' + esc(r.pn) + '.</b> This is the closest master traveler in your folder. Check it is the right one before going live.</div></div>' : '') + '<h3>Master traveler' + (rts.length > 1 ? 's' : '') + ' on file</h3>' + rts.map((rt) => '<div class="banner info"><div><b>' + esc(kindOf(rt)) + '</b><br><span class="small">' + (rt.file ? esc(rt.file) + ' · ' : '') + rt.ops.length + ' operations · traveler rev ' + esc(rt.travRev) + (rt.travDate ? ' (' + esc(rt.travDate) + ')' : '') + ' · starts at ' + esc(W.station(rt.master ? mapStation(rt.ops[0].mach[0], rt.ops[0].text, m.floor, rt.kind) : rt.ops[0].station).name) + '</span></div><span class="row"><button class="btn sm" data-master="' + esc(rt.id) + '">Steps, prints and original traveler</button>' + '</span></div>' + (open ? (() => { const si = m.start && m.start.split('~')[0] === rt.id ? Number(m.start.split('~')[1]) : 0; return '<h3>Where is this traveler right now?</h3><p class="small muted">Tap the operation it is at. Earlier operations are marked done on paper.</p><div class="tiles">' + rt.ops.map((o, k) => '<button class="btn sm ' + (k === si ? 'sel' : '') + '" data-set="start" data-v="' + esc(rt.id) + '~' + k + '"><span>Op ' + esc(o.n) + '</span><small>' + esc(W.station(rt.master ? mapStation(o.mach[0], o.text, m.floor, rt.kind) : o.station).name) + ' · ' + esc(String(o.text || '').slice(0, 46)) + '</small></button>').join('') + '</div>' + inp('qtyNow', 'Pieces at this operation', m, 'type="number" inputmode="numeric" min="1"') + '<button class="btn primary go" style="min-height:64px;font-size:1.3rem" data-a="adopt" data-t="' + esc(r.t) + '" data-floor="' + m.floor + '" data-rid="' + esc(rt.id) + '" data-start="' + si + '">GO LIVE ON TABLET</button>'; })() : '')).join('') + (open ? '' : '<p class="muted">Closed on paper.</p>')
             : '<p class="muted">' + (store.masterN ? 'No master traveler found for this part number.' : 'Loading master travelers…') + '</p>') + (PRINTS_ONLY[key(r.pn)] ? (() => { const pr = printsFor(PRINTS_ONLY[key(r.pn)]); return '<h3>Prints on file</h3>' + (pr.docs.length ? pr.docs.map((d) => '<img src="' + esc(d.f) + '" alt="' + esc(d.t) + '" style="width:100%;border:1px solid var(--line);background:#fff">').join('') : '<p class="muted">Loading prints…</p>') + '<p class="small muted">This part has a print but no traveler of its own yet.</p>'; })() : '') + '<button class="btn" data-close>Close</button>'; break; }
       case 'master': { wide = true; const rt = W.routing(m.rid); ensureDocs(rt); const sup = ui.user && W.isApprover(ui.user), canIss = ui.user && W.canDispose(ui.user);
@@ -2243,6 +2257,7 @@ window.WT_ESP = [
     if (t.id === 't-area') return openModal({ type: 'station' });
     if (t.id === 't-out') { ui.user = null; render(); return toast('Signed out'); }
     if ('back' in d) { ui.view = ui.back || 'station'; return render(); }
+    if (d.relkind) { ui.relKind = d.relkind; ui.relRid = null; return render(); }
     if (d.rel) { ui.relRid = d.rel; return render(); }
     if (d.a === 'csv') { return void saveCsv(); }
     if (d.lsort) { ui.lsort = d.lsort; return render(); }
@@ -2285,7 +2300,7 @@ window.WT_ESP = [
     if (d.station) return setStation(d.station);
     if (d.open) return openJob(d.open, d.i);
     if (d.trole) { ui.trole = d.trole; return render(); }
-    if (d.nav) { ui.view = d.nav; if (d.mtab) ui.mtab = d.mtab; if (d.lf) ui.lfilt = d.lf; $('#results').hidden = true; return render(); }
+    if (d.nav) { ui.view = d.nav; if (d.mtab) ui.mtab = d.mtab; if (d.lf) ui.lfilt = d.lf; if (d.nav === 'list') ui.lfloor = d.lfl || 'both'; $('#results').hidden = true; return render(); }
     if (d.mtab) { ui.mtab = d.mtab; return render(); }
     if (d.tab) { ui.tab = d.tab; return render(); }
     if (d.op) { ui.opI = Number(d.op); ui.tab = 'work'; return render(); }
