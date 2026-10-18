@@ -123,7 +123,7 @@ p { margin: 0; }
 .opchip { flex: 0 0 auto; min-width: 104px; min-height: 60px; text-align: left; border: 1.5px solid var(--line); background: var(--panel); border-radius: var(--r); padding: 6px 10px; display: flex; flex-direction: column; }
 .opchip b { font-family: var(--f-mono); font-size: 1.05rem; } .opchip span { font-size: .74rem; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
 .opchip.cur { border-color: var(--navy); border-width: 3px; } .opchip.s-done { background: var(--ok-bg); } .opchip.s-hold { background: var(--bad-bg); border-color: var(--bad); }
-.tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--navy); overflow-x: auto; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 2px solid var(--navy); }
 .tabs button { min-height: 48px; padding: 4px 16px; border: 0; background: none; font-family: var(--f-display); font-size: 1.2rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--ink2); border-radius: var(--r) var(--r) 0 0; white-space: nowrap; }
 .tabs button.on { background: var(--navy); color: var(--on-navy); }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
@@ -258,6 +258,23 @@ td.num { font-variant-numeric: tabular-nums; text-align: right; }
 .risk.rL { background: #92D050; } .risk.rM { background: #FFFF00; } .risk.rH { background: #FF0000; color: #fff; }
 .opchip.rk-L { border-top: 6px solid #92D050; } .opchip.rk-M { border-top: 6px solid #FFFF00; } .opchip.rk-H { border-top: 6px solid #FF0000; }
 
+/* audit 2026-10-18: nothing on a shop tablet below ~13.5px; long Spanish words wrap inside tiles */
+.small { font-size: .92rem; }
+th { font-size: .82rem; }
+.count span, .kv span { font-size: .82rem; }
+.opchip span { font-size: .8rem; }
+.pill { font-size: .82rem; }
+.pri small { font-size: .78rem; }
+.tdate small { font-size: .8rem; }
+.sync { font-size: .85rem; }
+#results .kind { font-size: .82rem; }
+.due { font-size: .9rem; }
+.zoomer span { font-size: .85rem; }
+.mtile .mt-t { overflow-wrap: normal; overflow: hidden; }
+.opchip span, .tdate small, .pri small { font-size: .85rem; }
+button small, .tiles small { font-size: .85rem; }
+#b-zout, #b-zin { min-width: 44px; }
+
 </style>
 <header class="top">
   <button id="b-home" class="brandbtn" type="button">⌂ Main menu</button>
@@ -280,6 +297,30 @@ td.num { font-variant-numeric: tabular-nums; text-align: right; }
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 window.WT_ES = {
+"Recent":"Reciente",
+"Older":"Anterior",
+"The final assembly log has no finish dates, so Open here means issued in the last 45 days.":"El registro de ensamble final no tiene fechas de terminado; Abierto aquí significa emitido en los últimos 45 días.",
+"Print this record":"Imprimir este registro",
+"First articles and closing signatures":"Primeras piezas y firmas de cierre",
+"Prices and costs":"Precios y costos",
+"Sage orders, cost, margin":"Órdenes de Sage, costo, margen",
+"Part, quantity, go":"Parte, cantidad, listo",
+"PO and Sales Order for shipping":"PO y Orden de Venta para embarque",
+"Read or fix any master traveler":"Ver o corregir cualquier viajero maestro",
+"Late jobs, time, people, suppliers":"Atrasos, tiempo, personal, proveedores",
+"Parts in each area right now":"Piezas en cada área ahora",
+"Holds, numbers, people, rules":"Retenciones, números, personal, reglas",
+"Holds and numbers":"Retenciones y números",
+"How to use this":"Cómo usar esto",
+"Which area this tablet is at":"En qué área está esta tableta",
+"Tablet jobs past due":"Trabajos atrasados en tableta",
+"Paused":"Pausado",
+"Lock now":"Bloquear ahora",
+"Check these":"Revisa esto",
+"No open order":"Sin orden abierta",
+"PIN · prices":"PIN · precios",
+"Sees prices and costs":"Ve precios y costos",
+"No prices or costs":"Sin precios ni costos",
 "Parts list from Sage":"Lista de partes de Sage",
 "Goes into:":"Va en:",
 "Qty per":"Cant. por pieza",
@@ -524,7 +565,7 @@ window.WT_ESP = [
 [/^Waiting for approval \((\d+)\)$/, 'Esperando aprobación ($1)'],
 [/^Updated by red-line (\S+)$/, 'Actualizado por corrección $1'],
 [/^PIN saved\. Signed in as (.+)$/, 'PIN guardado. Sesión de $1'],
-[/^Signed in as (.+)$/, 'Sesión de $1'],
+[/^Signed in as ([^.]+)$/, 'Sesión de $1'],
 [/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d+)$/, '$1 $3 $2'],
 [/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d+)$/, '$2 $1'],
 [/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d+), (.+)$/, '$2 $1, $3'],
@@ -1089,7 +1130,7 @@ window.WT_ESP = [
   const nm = (id) => (id === 'system' ? 'End of shift (automatic)' : person(id) ? person(id).name : id || '—');
   const fTime = (t) => (t ? new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—');
   const fDue = (d) => (d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'No due date');
-  function fDur(ms) { const m = Math.round(ms / 60000); if (m < 1) return ms > 0 ? '<1 min' : '0 min'; if (m < 60) return m + ' min'; const h = Math.floor(m / 60); return h + ' h ' + (m % 60) + ' min'; }
+  function fDur(ms) { const m = Math.round(ms / 60000); if (m < 1) return ms > 0 ? '<1 min' : '0 min'; if (m < 60) return m + ' min'; const h = Math.floor(m / 60); if (h < 24) return h + ' h ' + (m % 60) + ' min'; const d = Math.floor(h / 24); return d + (d === 1 ? ' day ' : ' days ') + (h % 24) + ' h'; }
   const dueBadge = (j) => { if (!j.due) return '<span class="due none">No due date</span>'; const d0 = new Date(); d0.setHours(12, 0, 0, 0); const n = Math.round((new Date(j.due + 'T12:00:00').getTime() - d0.getTime()) / 864e5);
     if (j.st === 'complete') return '<span class="due">Due ' + esc(fDue(j.due)) + '</span>';
     if (n < 0) return '<span class="due late">LATE ' + (-n) + (n === -1 ? ' DAY' : ' DAYS') + ' · ' + esc(fDue(j.due)) + '</span>';
@@ -1262,7 +1303,7 @@ window.WT_ESP = [
       });
     });
     const cnt = (n, l) => '<div class="count"><b class="num">' + n + '</b><span>' + l + '</span></div>';
-    let h = '<div class="head"><div><h1>' + esc(st.name) + '</h1><p class="muted">' + esc(st.note || '') + '</p></div><div class="counts">' + cnt(B.ready.length, 'Ready') + cnt(B.progress.length, 'Running') + cnt(B.approval.length, 'To sign') + cnt(B.hold.length, 'On hold') + cnt(inc.length, 'Incoming') + '</div></div>';
+    let h = '<div class="head"><div><h1>' + esc(st.name) + '</h1><p class="muted">' + esc(st.note || '') + '</p></div><div class="counts">' + cnt(B.ready.length, 'Ready') + cnt(B.progress.length, 'In progress') + cnt(B.approval.length, 'To sign') + cnt(B.hold.length, 'On hold') + cnt(inc.length, 'Incoming') + '</div></div>';
     if (!store.loaded) h += '<div class="empty">Connecting to the shop record. Jobs released by the office will list here in priority order.</div>';
     else if (!Object.keys(store.jobs).length) h += '<div class="banner info"><div><b>No jobs released yet.</b> Released jobs appear here sorted by priority. A manager releases the first one from Manage → Release job.</div><button class="btn sm" data-nav="manage" data-mtab="release">Release a job</button></div>';
     h += '<div class="cols"><div class="col">' +
@@ -1342,6 +1383,7 @@ window.WT_ESP = [
     if (!ui.fin) return h + finLockedPanel();
     const F = ui.fin, I = F.items || {}, SO = F.so || [], BOM = F.bom || {}, up = (s) => String(s || '').toUpperCase();
     const flags = (F.recon && F.recon.flags) || [];
+    const today = new Date().toISOString().slice(0, 10), shipD = (d) => !d ? '—' : '<span' + (d < today ? ' style="color:var(--bad);font-weight:600"' : '') + '>' + esc(new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.slice(0, 4) === today.slice(0, 4) ? undefined : 'numeric' })) + (d < today ? ' · late' : '') + '</span>';
     h += '<div class="panel"><h2>Check these (' + flags.length + ')</h2>' + flags.map((f) => '<div class="banner ' + (f.lvl === 'bad' ? 'bad' : f.lvl === 'warn' ? 'warn' : 'info') + '"><div><b>' + esc(f.t) + '</b><br><span class="small">' + esc(f.d) + '</span></div></div>').join('') + '</div>';
     // Open travelers matched to Sage
     const open = []; jobs().filter((j) => j.st !== 'complete').forEach((j) => open.push({ t: j.so, pn: j.pn, d: j.name, q: Number(j.qty) || 0, src: 'Tablet' }));
@@ -1354,11 +1396,15 @@ window.WT_ESP = [
       const cost = it && it.std != null ? Number(it.std) : null, price = !via && sl.length ? Number(sl[0].price) : null;
       return { o, sl, via, it, rem, val, cost, price, margin: price && cost != null ? (price - cost) / price : null }; })
       .filter((r) => r.sl.length || r.it);
-    h += '<div class="panel"><h2>Open travelers with a Sage order or cost (' + rows.length + ')</h2><div class="tbl-wrap"><table><tr><th>Traveler</th><th>Part</th><th class="num">Trav. qty</th><th>Sage orders</th><th class="num">Open on orders</th><th class="num">Unit price</th><th class="num">Open order value</th><th class="num">Sage BOM cost / pc</th><th class="num">Margin</th><th>Notes</th></tr>' +
-      rows.map((r) => '<tr><td class="mono">' + esc(r.o.t) + '</td><td class="mono">' + esc(r.o.pn) + '</td><td class="num">' + r.o.q + '</td><td class="small">' + (r.sl.length ? r.sl.map((l) => esc(l.so) + ' · ' + esc(l.cust) + ' · ship ' + esc(l.ship || '')).join('<br>') + (r.via ? '<br><i>via kit ' + esc(r.via) + '</i>' : '') : '<span class="muted">No open order</span>') + '</td><td class="num">' + (r.sl.length ? r.rem : '—') + '</td><td class="num">' + money(r.price) + '</td><td class="num">' + (r.sl.length ? money(r.val) : '—') + '</td><td class="num">' + money(r.cost) + '</td><td class="num">' + (r.margin == null ? '—' : '<b' + (r.margin < 0 ? ' style="color:var(--bad)"' : '') + '>' + Math.round(r.margin * 100) + '%</b>') + '</td><td class="small">' + (r.via && I[r.via] ? 'Kit ' + esc(r.via) + ' sells ' + money(Number(I[r.via].price)) + ' · kit BOM cost ' + money(I[r.via].std == null ? null : Number(I[r.via].std)) + '. ' : '') + esc((r.it && r.it.method) || '') + (r.sl.length && !r.via && r.rem > r.o.q ? ' <b>Orders exceed this traveler.</b>' : '') + '</td></tr>').join('') + '</table></div><p class="small muted">Unit price = customer selling price on the Sage order. Sage BOM cost = the estimated cost rollup in the Sage bill of materials (some include labor lines). They are never combined into one number except margin.</p></div>';
+    h += '<div class="panel"><h2>Open travelers with a Sage order or cost (' + rows.length + ')</h2><div class="tbl-wrap"><table><tr><th>Traveler</th><th>Sage order</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Order value</th><th class="num">Cost / pc</th><th class="num">Margin</th></tr>' +
+      rows.map((r) => '<tr><td><b class="mono">' + esc(r.o.t) + '</b><br><span class="mono small">' + esc(r.o.pn) + '</span></td><td class="small">' + (r.sl.length ? r.sl.map((l) => '<b>' + esc(l.so) + '</b> ' + esc(l.cust) + ' · ship ' + shipD(l.ship)).join('<br>') : '<span class="muted">No open order</span>') +
+        (r.via ? '<br><i>Goes into kit ' + esc(r.via) + (I[r.via] ? ': kit sells ' + money(Number(I[r.via].price)) + ', kit cost ' + money(I[r.via].std == null ? null : Number(I[r.via].std)) : '') + '</i>' : '') + (r.it && /labor|No Sage BOM/i.test(r.it.method || '') ? '<br><b style="color:var(--warn)">' + esc(r.it.method.replace(/^Sage BOM est\. cost rollup - /, '')) + '</b>' : '') + (r.sl.length && !r.via && r.rem > r.o.q ? '<br><b style="color:var(--bad)">Orders need ' + r.rem + ', traveler is ' + r.o.q + '</b>' : '') + '</td>' +
+        '<td class="num">' + r.o.q + (r.sl.length ? '<br><span class="small muted">orders ' + r.rem + '</span>' : '') + '</td><td class="num">' + money(r.price) + '</td><td class="num">' + (r.sl.length && !r.via ? money(r.val) : '—') + '</td><td class="num">' + money(r.cost) + '</td><td class="num">' + (r.margin == null ? '—' : '<b' + (r.margin < 0 ? ' style="color:var(--bad)"' : '') + '>' + Math.round(r.margin * 100) + '%</b>') + '</td></tr>').join('') +
+      '</table></div><p class="small muted">Price = customer selling price on the Sage order. Cost / pc = Sage bill-of-materials cost (some include labor). Margin = (price − cost) ÷ price.</p></div>';
+    SO.sort((a, b) => String(a.ship || '').localeCompare(String(b.ship || '')) || String(a.so).localeCompare(String(b.so)));
     const tot = SO.reduce((a, l) => a + Number(l.amt || 0), 0);
-    h += '<div class="panel"><h2>Open Sage sales order lines (' + SO.length + ') · ' + money(tot) + ' open</h2><div class="tbl-wrap"><table><tr><th>Order</th><th>Customer</th><th>Part</th><th class="num">Open qty</th><th>Ship by</th><th class="num">Unit price</th><th class="num">Open value</th><th>Traveler</th></tr>' +
-      SO.map((l) => { const t = open.filter((o) => up(o.pn) === up(l.pn)).map((o) => o.t); return '<tr><td class="mono">' + esc(l.so) + '</td><td>' + esc(l.cust) + '</td><td class="mono">' + esc(l.pn) + '<br><span class="small">' + esc(l.d || '') + '</span></td><td class="num">' + (Number(l.qty) - Number(l.shipped || 0)) + '</td><td>' + esc(l.ship || '') + '</td><td class="num">' + money(Number(l.price)) + '</td><td class="num">' + money(Number(l.amt)) + '</td><td class="mono small">' + (t.length ? esc(t.join(', ')) : '<span class="muted">—</span>') + '</td></tr>'; }).join('') + '</table></div></div>';
+    h += '<div class="panel"><h2>Open Sage sales order lines (' + SO.length + ') · ' + money(tot) + ' open</h2><div class="tbl-wrap"><table><tr><th>Order · customer</th><th>Part</th><th class="num">Open qty</th><th>Ship by</th><th class="num">Price</th><th class="num">Open value</th><th>Traveler</th></tr>' +
+      SO.map((l) => { const t = open.filter((o) => up(o.pn) === up(l.pn)).map((o) => o.t).concat(rows.filter((r) => r.via && up(r.via) === up(l.pn)).map((r) => r.o.t + ' (' + r.o.pn + ')')); return '<tr><td><b class="mono">' + esc(l.so) + '</b><br><span class="small">' + esc(l.cust) + '</span></td><td><span class="mono">' + esc(l.pn) + '</span><br><span class="small">' + esc(l.d || '') + '</span></td><td class="num">' + (Number(l.qty) - Number(l.shipped || 0)) + '</td><td>' + shipD(l.ship) + '</td><td class="num">' + money(Number(l.price)) + '</td><td class="num">' + money(Number(l.amt)) + '</td><td class="mono small">' + (t.length ? esc(t.join(', ')) : '<span class="muted">—</span>') + '</td></tr>'; }).join('') + '</table></div></div>';
     return h;
   }
   function renderImprove() {
@@ -1474,23 +1520,30 @@ window.WT_ESP = [
     J.forEach((j) => { j.ops.forEach((o, i) => { const b = W.bucket(j, i); if (b === 'approval') sign++; if (b === 'hold') hold++; if (b && inView(o.station)) here++; }); j.lots.forEach((l) => { if (l.st !== 'received' && inView(l.to)) inc++; }); });
     const openPaper = paper().filter((x) => x.r.s === 'O').length, mgr = ui.user && ui.user.role === 'manager';
     const tile = (attrs, title, sub, n, cls) => '<button class="mtile ' + (cls || '') + '" ' + attrs + '><span class="mt-n num">' + (n == null ? '' : n) + '</span><span class="mt-t">' + title + '</span><span class="mt-s">' + sub + '</span></button>';
-    return '<div class="head"><div><h1>Main menu</h1><p class="muted">' + (ui.user ? 'Signed in as ' + esc(ui.user.name) + '.' : 'Not signed in.') + ' This tablet is set to ' + esc(areaName()) + '.</p></div></div><div class="menu">' +
-      tile('data-nav="station"', 'Work at this area', esc(areaName()) + (inc ? ' · ' + inc + ' incoming' : ''), here, 'go') +
-      tile('data-nav="list" data-lf="active"', 'All travelers', 'Search, sort, open any traveler', J.length + openPaper) +
-      (J.some((j) => j.rush) ? tile('data-nav="list" data-lf="active"', 'ASAP', 'Run these first', J.filter((j) => j.rush).length, 'bad') : '') +
-      tile('data-nav="list" data-lf="sign"', 'Needs a signature', 'Supervisors start here', sign, sign ? 'warn' : '') +
-      tile('data-nav="list" data-lf="hold"', 'On hold', 'Waiting on a disposition', hold, hold ? 'bad' : '') +
-      tile('data-m="rlList"', 'Red-lines', 'Step changes to approve', rlPending().length, rlPending().length ? 'warn' : '') +
-      (SRV() && ui.user && ui.user.fin ? tile('data-nav="finance"', 'Prices and costs', 'Sage orders, BOM cost, margin · supervisors and admins', ui.fin && ui.fin.recon && ui.fin.recon.flags ? ui.fin.recon.flags.filter((f) => f.lvl === 'bad').length : null, 'warn') : '') +
-      tile('data-nav="train"', 'Training', 'How to use this, for every role', null) +
-      tile('data-nav="improve"', 'Improve · analytics', 'Charts: time, people, areas, suppliers, cost, late jobs', prompts().length, prompts().length ? 'warn' : '') +
-      tile('data-nav="manage" data-mtab="release"', 'Issue a traveler', ui.user && W.canDispose(ui.user) ? 'Start a new job: part, quantity, go' : 'Manager or QA signs in first', null) +
-      tile('data-nav="list" data-lf="active" data-lfl="final"', 'Final assembly / packing', 'Final travelers, PO and Sales Order for shipping', paper().filter((x) => x.f === 'final' && x.r.s === 'O').length + jobs().filter((j) => j.st !== 'complete' && (j.final || j.floor === 'final')).length) +
-      tile('data-nav="library"', 'Traveler library', 'Look at any traveler before issuing · fix wording, material, steps', null) +
-      tile('data-nav="floor"', 'Where is everything', 'Parts in each of the nine areas', null) +
-      tile('id="t-area"', 'Change area', 'Pick which area this tablet is at', null) +
-      (ui.user ? tile('id="t-out"', 'Sign out', esc(ui.user.name), null) : tile('data-m="login"', 'Sign in', 'Tap your name, enter your PIN', null)) +
-      tile('data-nav="manage" data-mtab="' + (mgr ? 'release' : 'holds') + '"', 'Manage', mgr ? 'Issue travelers, people, rules, numbers' : 'Holds, numbers, people', null) + '</div>';
+    const lead = ui.user && W.canDispose(ui.user), A = [];
+    const T = {
+      work: () => tile('data-nav="station"', 'Work at this area', esc(areaName()) + (inc ? ' · ' + inc + ' incoming' : ''), here, 'go'),
+      all: () => tile('data-nav="list" data-lf="active"', 'All travelers', 'Search, sort, open any traveler', J.length + openPaper),
+      asap: () => (J.some((j) => j.rush) ? tile('data-nav="list" data-lf="active"', 'ASAP', 'Run these first', J.filter((j) => j.rush).length, 'bad') : ''),
+      sign: () => tile('data-nav="list" data-lf="sign"', 'Needs a signature', 'First articles and closing signatures', sign, sign ? 'warn' : ''),
+      hold: () => tile('data-nav="list" data-lf="hold"', 'On hold', 'Waiting on a disposition', hold, hold ? 'bad' : ''),
+      rl: () => tile('data-m="rlList"', 'Red-lines', 'Step changes to approve', rlPending().length, rlPending().length ? 'warn' : ''),
+      fin: () => (SRV() && ui.user && ui.user.fin ? tile('data-nav="finance"', 'Prices and costs', 'Sage orders, cost, margin', ui.fin && ui.fin.recon && ui.fin.recon.flags ? ui.fin.recon.flags.filter((f) => f.lvl === 'bad').length : null, 'warn') : ''),
+      issue: () => tile('data-nav="manage" data-mtab="release"', 'Issue a traveler', 'Part, quantity, go', null),
+      final: () => tile('data-nav="list" data-lf="active" data-lfl="final"', 'Final assembly / packing', 'PO and Sales Order for shipping', paper().filter((x) => x.f === 'final' && x.r.s === 'O').length + jobs().filter((j) => j.st !== 'complete' && (j.final || j.floor === 'final')).length),
+      lib: () => tile('data-nav="library"', 'Traveler library', 'Read or fix any master traveler', null),
+      imp: () => tile('data-nav="improve"', 'Improve · analytics', 'Late jobs, time, people, suppliers', prompts().length, prompts().length ? 'warn' : ''),
+      where: () => tile('data-nav="floor"', 'Where is everything', 'Parts in each area right now', null),
+      manage: () => tile('data-nav="manage" data-mtab="' + (mgr ? 'release' : 'holds') + '"', 'Manage', mgr ? 'Holds, numbers, people, rules' : 'Holds and numbers', null),
+      train: () => tile('data-nav="train"', 'Training', 'How to use this', null),
+      area: () => tile('id="t-area"', 'Change area', 'Which area this tablet is at', null),
+      inout: () => (ui.user ? tile('id="t-out"', 'Sign out', esc(ui.user.name), null) : tile('data-m="login"', 'Sign in', 'Tap your name, enter your PIN', null, 'go'))
+    };
+    // Each person sees only what they use. Operators: their work. Supervisors, quality and managers: everything.
+    const order = !ui.user ? ['inout', 'work', 'all', 'asap', 'where', 'train', 'area']
+      : !lead ? ['work', 'all', 'asap', 'hold', 'where', 'train', 'area', 'inout']
+      : ['work', 'sign', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
+    return '<div class="head"><div><h1>Main menu</h1><p class="muted">' + (ui.user ? 'Signed in as ' + esc(ui.user.name.replace(/\.$/, '')) + '.' : 'Not signed in.') + ' This tablet is set to ' + esc(areaName()) + '.</p></div></div><div class="menu">' + order.map((k) => T[k]()).join('') + '</div>';
   }
 
   /* ---------- traveler library: look at, check and correct master travelers before issuing ---------- */
@@ -1624,16 +1677,16 @@ window.WT_ESP = [
   function renderList() {
     const mgr = ui.user && ui.user.role === 'manager', now = Date.now();
     let items = jobs().map((j) => ({ k: 'j', j, pn: j.pn, iss: j.rel.at, due: ts(j.due), open: j.st !== 'complete', floor: j.floor || W.sideOf(j.ops[j.ops.length - 1].station), qty: j.qty }))
-      .concat(paper().map((x) => ({ k: 'p', r: x.r, pn: x.r.pn, iss: ts(x.r.i), due: ts(x.r.u), open: x.r.s === 'O', floor: x.f, qty: x.r.q || 0 })));
-    const vol = {}; items.forEach((x) => { vol[x.pn] = (vol[x.pn] || 0) + x.qty; });
+      .concat(paper().map((x) => ({ k: 'p', r: x.r, pn: x.r.pn, iss: ts(x.r.i), due: ts(x.r.u), open: x.r.s === 'O', floor: x.f, qty: Number(x.r.q) || 0 })));
+    const vol = {}, y0 = new Date(new Date().getFullYear(), 0, 1).getTime(); items.forEach((x) => { vol[x.pn] = (vol[x.pn] || 0) + (x.iss >= y0 ? Number(x.qty) || 0 : 0); });
     if (ui.lfloor !== 'both') items = items.filter((x) => x.floor === ui.lfloor);
-    const F = { active: (x) => x.open, late: (x) => x.open && x.due && x.due < now, sign: (x) => x.k === 'j' && x.open && jobStatus(x.j)[2] === 'Needs signature', hold: (x) => x.k === 'j' && W.openHolds(x.j).length > 0, done: (x) => !x.open, all: () => true };
+    const F = { active: (x) => x.open, late: (x) => x.open && x.due && x.due < now && !(x.k === 'p' && x.floor === 'final'), sign: (x) => x.k === 'j' && x.open && jobStatus(x.j)[2] === 'Needs signature', hold: (x) => x.k === 'j' && W.openHolds(x.j).length > 0, done: (x) => !x.open, all: () => true };
     let L = items.filter(F[ui.lfilt]);
     const S = { issued: (a, b) => b.iss - a.iss, part: (a, b) => b.iss - a.iss, due: (a, b) => (a.due || 9e15) - (b.due || 9e15), pri: (a, b) => (b.k === 'j' && b.j.rush ? 1 : 0) - (a.k === 'j' && a.j.rush ? 1 : 0) || (a.due || 9e15) - (b.due || 9e15) };
     L.sort(S[ui.lsort]);
     const chip = (grp, v, label) => '<button class="btn sm ' + (ui[grp] === v ? 'sel' : '') + '" data-' + grp + '="' + v + '">' + label + '</button>';
     const n = (f) => items.filter(F[f]).length;
-    let h = '<div class="head"><div><h1>Travelers</h1><p class="muted">Every traveler on the floor, from your metal and filter logs. Tap one to open it.</p></div>' + '<span class="row">' + (ui.user && W.canDispose(ui.user) ? '<button class="btn" data-nav="manage" data-mtab="release">+ Issue a traveler</button>' : '') + (store.downloads ? '<button class="btn sm" data-a="csv">Save list as spreadsheet</button>' : '') + '</span>' + '</div>' +
+    let h = '<div class="head"><div><h1>Travelers</h1><p class="muted">Every traveler on the floor, from your metal and filter logs. Tap one to open it.</p>' + (ui.lfloor === 'final' ? '<p class="muted small">The final assembly log has no finish dates, so Open here means issued in the last 45 days.</p>' : '') + '</div>' + '<span class="row">' + (ui.user && W.canDispose(ui.user) ? '<button class="btn" data-nav="manage" data-mtab="release">+ Issue a traveler</button>' : '') + (store.downloads ? '<button class="btn sm" data-a="csv">Save list as spreadsheet</button>' : '') + '</span>' + '</div>' +
       '<div class="row"><span class="small muted" style="min-width:52px">Floor</span>' + chip('lfloor', 'both', 'Both') + chip('lfloor', 'metal', 'Metal') + chip('lfloor', 'filter', 'Filter') + chip('lfloor', 'final', 'Final assembly / packing') + '</div>' +
       '<div class="row"><span class="small muted" style="min-width:52px">Show</span>' + chip('lfilt', 'active', 'Open ' + n('active')) + chip('lfilt', 'late', 'Past due ' + n('late')) + chip('lfilt', 'sign', 'Needs signature ' + n('sign')) + chip('lfilt', 'hold', 'On hold ' + n('hold')) + chip('lfilt', 'done', 'Closed ' + n('done')) + chip('lfilt', 'all', 'All ' + items.length) + '</div>' +
       '<div class="row"><span class="small muted" style="min-width:52px">Sort</span>' + chip('lsort', 'part', 'Part · most volume first') + chip('lsort', 'issued', 'Date issued') + chip('lsort', 'due', 'Due date') + chip('lsort', 'pri', 'Run order') + '</div>';
@@ -1645,11 +1698,11 @@ window.WT_ESP = [
         '<span class="tcol tpart"><span class="pn mono">' + esc(j.pn) + (j.rush ? ' <span class="pill bad">ASAP</span>' : '') + ' <span class="pill info">ON TABLET</span></span><span class="small">' + esc(j.name) + '</span><span class="small muted">Qty ' + j.qty + ' · good ' + W.goodDone(j) + ' · rev ' + esc(j.rel.travRev) + (j.sample ? ' · SAMPLE' : '') + '</span>' + dueBadge(j) + '</span>' +
         '<span class="tcol tstat"><span class="pill ' + s[0] + '">' + s[1] + ' ' + s[2] + '</span><span class="small"><b>' + esc(nowAt(j)) + '</b></span>' + (onIt(j) ? '<span class="small">👤 ' + esc(onIt(j)) + '</span>' : '') + '</span></button>' +
         (mgr ? '<button class="btn sm" data-m="priority" data-job="' + esc(j.id) + '">' + (j.rush ? 'ASAP ✓' : 'Rush') + '</button>' : '') + '</div>'; };
-    const rowP = (x) => { const r = x.r, open = r.s === 'O', pd = open && x.due && x.due < now, c = pd ? 'bad' : open ? 'navy' : 'ok';
+    const rowP = (x) => { const r = x.r, open = r.s === 'O', fl = x.floor === 'final', pd = !fl && open && x.due && x.due < now, c = pd ? 'bad' : open ? 'navy' : 'ok';
       return '<div class="card trow" style="border-left-color:var(--' + c + ')"><button class="tmain" data-paper="' + esc(r.t) + '" data-floor="' + x.floor + '">' +
         '<span class="tcol tdate"><small>ISSUED</small><b class="num">' + esc(sDate(x.iss)) + '</b><small>#' + esc(r.t) + '</small></span>' +
         '<span class="tcol tpart"><span class="pn mono">' + esc(r.pn) + '</span><span class="small">' + esc(r.d) + '</span><span class="small muted">Qty ' + (r.q == null ? '—' : r.q) + (r.m ? ' · made ' + esc(r.m) : '') + ' · due ' + esc(sDate(x.due)) + (r.o ? ' · ' + esc(r.o) : '') + (r.po ? ' · PO ' + esc(r.po) : '') + (r.so ? ' · SO ' + esc(r.so) : '') + (routingsFor(r.pn).length ? ' · master on file' : '') + '</span></span>' +
-        '<span class="tcol tstat"><span class="pill ' + (pd ? 'bad' : open ? 'info' : 'ok') + '">' + (pd ? '! Past due' : open ? '▶ Open' : '✔ Closed') + '</span><span class="small"><b>' + (x.floor === 'metal' ? 'Metal floor' : x.floor === 'final' ? 'Final assembly' : 'Filter floor') + ' · paper</b></span></span></button></div>'; };
+        '<span class="tcol tstat"><span class="pill ' + (pd ? 'bad' : open ? 'info' : 'ok') + '">' + (pd ? '! Past due' : fl ? (open ? '▶ Recent' : 'Older') : open ? '▶ Open' : '✔ Closed') + '</span><span class="small"><b>' + (x.floor === 'metal' ? 'Metal floor' : x.floor === 'final' ? 'Final assembly' : 'Filter floor') + ' · paper</b></span></span></button></div>'; };
     const row = (x) => (x.k === 'j' ? rowJ(x.j) : rowP(x));
     const asap = L.filter((x) => x.k === 'j' && x.j.rush && x.open);
     if (asap.length) { h += '<section class="sec"><div class="ghead" style="border-color:var(--bad)"><h2>ASAP — run these first</h2><span class="small muted">' + asap.length + ' traveler' + (asap.length > 1 ? 's' : '') + '</span></div>' + asap.map(row).join('') + '</section>'; L = L.filter((x) => asap.indexOf(x) < 0); }
@@ -1809,8 +1862,8 @@ window.WT_ESP = [
   }
   function sig(op, type) { const c = op.checks.filter((x) => x.type === type && x.result === 'pass').pop(); if (type === 'mid' && op.midWaived) return 'n/a'; return c ? esc(nm(c.by)) + '<br><span class="small muted">' + esc(fTime(c.at)) + '</span>' : '—'; }
   function recordTab(j, r) {
-    let h = '<div class="panel"><div class="row" style="justify-content:space-between"><h2>Traveler record · ' + esc(r.form) + '</h2>' + (store.downloads ? '<button class="btn sm" data-a="export" data-job="' + esc(j.id) + '">Save a copy to print</button>' : '') + '</div>' +
-      '<div class="label"><span class="qr" id="qr"></span><div><div class="mono" style="font-size:1.4rem">' + esc(j.id) + '</div><div>' + esc(j.pn) + ' · ' + j.qty + ' pcs</div><p class="small muted">Container label. A scanner typed into the search box opens this traveler.</p></div></div>' +
+    let h = '<div class="panel"><div class="row" style="justify-content:space-between"><h2>Traveler record · ' + esc(r.form) + '</h2>' + (store.downloads ? '<button class="btn sm" data-a="export" data-job="' + esc(j.id) + '">Print this record</button>' : '') + '</div>' +
+      '<div class="label"><span class="qr" id="qr"></span><div><div class="mono" style="font-size:1.4rem">Shop Order ' + esc(j.so) + '</div><div>' + esc(j.pn) + ' · ' + j.qty + ' pcs</div><p class="small muted">Container label. A scanner typed into the search box opens this traveler.</p></div></div>' +
       '<div class="tbl-wrap"><table><tr><th>Op</th><th>Machine / fixture</th><th>Setup</th><th>Operator</th><th>Closed</th><th>Accept</th><th>Reject</th><th>First article</th><th>Closing signature</th></tr>' +
       j.ops.map((op, i) => '<tr><td class="mono">' + op.n + '</td><td>' + esc(r.ops[i].mach.join(', ')) + '</td><td>' + (op.setup ? esc(nm(op.setup.by)) : '—') + '</td><td>' + (op.who.map(nm).map(esc).join(', ') || '—') + '</td><td>' + esc(fTime(op.closedAt)) + '</td><td class="num">' + (op.good != null ? op.good : '—') + '</td><td class="num">' + op.scrap + '</td><td>' + sig(op, 'first') + '</td><td>' + sig(op, 'final') + '</td></tr>').join('') + '</table></div></div>';
     if (j.holds.length) h += '<div class="panel"><h2>Discrepant parts</h2><div class="tbl-wrap"><table><tr><th>Hold</th><th>Op</th><th>Qty</th><th>Defect</th><th>Opened</th><th>Disposition</th></tr>' + j.holds.map((x) => '<tr><td>' + x.id + '</td><td>' + x.n + '</td><td>' + x.qty + '</td><td>' + esc(x.reason) + (x.note ? ' · ' + esc(x.note) : '') + '</td><td>' + esc(nm(x.by)) + ' ' + esc(fTime(x.at)) + '</td><td>' + (x.open ? '<b>OPEN</b>' : esc((W.DISPOSITIONS.find((d) => d[0] === x.disp.action) || [0, x.disp.action])[1]) + ' · ' + esc(nm(x.disp.by)) + ' ' + esc(fTime(x.disp.at)) + (x.disp.note ? ' · ' + esc(x.disp.note) : '')) + '</td></tr>').join('') + '</table></div></div>';
@@ -1825,12 +1878,12 @@ window.WT_ESP = [
     ensureDocs(r); const i = Math.min(ui.opI, j.ops.length - 1), blk = W.blocking(j);
     let h = '<div class="jobhead"><span class="row" style="flex-direction:column;gap:8px;align-items:stretch"><button class="btn sm" data-back>‹ Back</button><button class="btn sm" data-a="printJob" data-job="' + esc(j.id) + '">🖨 Print</button></span><div class="t"><h1><span class="mono">' + esc(j.pn) + '</span> ' + esc(liveStep(r.id, '@name', j.name, null).text) + '</h1>' +
       '<div class="facts"><span>Shop Order <b>' + esc(j.so) + '</b></span><span>Qty <b>' + j.qty + '</b></span><span>Due <b>' + esc(fDue(j.due)) + '</b></span><span>Type <b>' + esc(kindOf(r)) + '</b></span><span>Trav rev <b>' + esc(j.rel.travRev) + '</b></span><span>Dwg rev <b>' + esc(j.rel.dwgRev) + '</b></span>' + (hdr(r, 'material') ? '<span>Material <b class="notr">' + esc(hdr(r, 'material')) + '</b></span>' : '') + (j.rush ? '<span class="pill bad">ASAP</span>' : '') + (j.sample ? '<span class="pill plain">Sample data</span>' : '') + (ui.user && ui.user.role === 'manager' ? '<button class="btn sm" data-m="priority" data-job="' + esc(j.id) + '">' + (j.rush ? 'Change priority' : (j.rush ? 'Remove ASAP' : 'Mark ASAP')) + '</button>' : '') + '</div>' +
-      '<p class="small muted">' + esc(W.where(j)) + (blk ? ' · Blocking: ' + esc(blk) : '') + '</p>' +
+      '<p class="small muted">' + esc(W.where(j)) + (blk && !/^Paused/.test(blk) ? ' · Waiting on: ' + esc(blk) : blk ? ' (' + esc(blk.replace(/^Paused:\s*/, '').toLowerCase()) + ')' : '') + '</p>' +
       ((j.final || W.isFinal(r)) ? (W.shipOk(j) ? '<div class="banner ok"><div><b>Shipping release ✔</b> · PO <b class="mono">' + esc(j.ship.po) + '</b> · Sales Order <b class="mono">' + esc(j.ship.sales) + '</b> · ' + esc(nm(j.ship.by)) + ' ' + esc(fTime(j.ship.at)) + '</div>' + (ui.user && (W.canDispose(ui.user) || W.isApprover(ui.user)) ? '<button class="btn sm" data-m="ship" data-job="' + esc(j.id) + '">Change</button>' : '') + '</div>'
         : '<div class="banner warn"><div><b>Shipping release needed.</b> Marty or QA enters the customer PO # and Sales Order #. Required before the closing signature.</div><button class="btn sm primary" data-m="ship" data-job="' + esc(j.id) + '">Enter PO / Sales Order</button></div>') : '') +
       (j.parent && store.jobs[j.parent] ? '<p class="small">Component for <button class="btn sm" data-open="' + esc(j.parent) + '">Shop Order ' + esc(store.jobs[j.parent].so) + ' · ' + esc(store.jobs[j.parent].pn) + '</button></p>' : '') +
       (j.needs || []).map((n) => { const k = store.jobs[n.id]; return '<p class="small"><b>Needs ' + esc(n.label) + ' before op ' + j.ops[n.i].n + ':</b> ' + (k ? (k.st === 'complete' ? '✔ received' : esc(W.where(k))) : 'job not found') + (n.waived ? ' · started without receipt by ' + esc(nm(n.waived.by)) : '') + ' <button class="btn sm" data-open="' + esc(n.id) + '">Shop Order ' + esc(n.so) + '</button></p>'; }).join('') + '</div></div>';
-    h += '<div class="oprail">' + j.ops.map((op, k) => '<button class="opchip ' + (k === i ? 'cur ' : '') + (op.st === 'done' ? 's-done ' : '') + (W.openHolds(j, op.n).length ? 's-hold ' : '') + (r.ops[k] && rk(r, r.ops[k]) ? 'rk-' + rk(r, r.ops[k]) : '') + '" data-op="' + k + '"><b>' + op.n + '</b><span>' + esc(W.station(op.station).name) + '</span><span>' + esc(W.openHolds(j, op.n).length ? '■ Hold' : op.st === 'done' ? '✔ Done' : W.ST_LABEL[op.st]) + '</span></button>').join('') + '</div>';
+    h += '<div class="oprail">' + j.ops.map((op, k) => '<button class="opchip ' + (k === i ? 'cur ' : '') + (op.st === 'done' ? 's-done ' : '') + (W.openHolds(j, op.n).length ? 's-hold ' : '') + (r.ops[k] && rk(r, r.ops[k]) ? 'rk-' + rk(r, r.ops[k]) : '') + '" data-op="' + k + '"><b>' + op.n + '</b><span>' + esc(W.station(op.station).name) + '</span><span>' + esc(W.openHolds(j, op.n).length ? '■ Hold' : op.st === 'done' ? '✔ Done' : op.paused ? 'Paused' : W.ST_LABEL[op.st]) + '</span></button>').join('') + '</div>';
     h += '<div class="tabs" role="tablist">' + [['work', 'Operation'], ['docs', 'Prints (' + dwN(r) + ')'], ['record', 'Record']].map((t) => '<button role="tab" class="' + (ui.tab === t[0] ? 'on' : '') + '" data-tab="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>';
     return h + (ui.tab === 'docs' ? docsTab(j, r) : ui.tab === 'record' ? recordTab(j, r) : workTab(j, r, i));
   }
@@ -1923,7 +1976,7 @@ window.WT_ESP = [
     }
     if (ui.mtab === 'numbers') {
       const t = W.totals(J, now), kv = (v, l) => '<div><b class="num">' + v + '</b><span>' + l + '</span></div>';
-      h += '<div class="panel"><h2>Since first release</h2><div class="kv">' + kv(t.good + ' / ' + t.planned, 'Good complete / planned') + kv(t.planned ? Math.round(100 * t.good / t.planned) + '%' : '—', 'Attainment') + kv(t.made ? (100 * t.scrap / t.made).toFixed(1) + '%' : '—', 'Scrap rate') + kv(t.late, 'Open jobs past due') + kv(t.holds, 'Open holds') + kv(fDur(t.setup), 'Setup / changeover') + kv(fDur(t.run), 'First piece + run') + kv(fDur(t.wait), 'Waiting on signatures') + kv(fDur(t.paused), 'Paused') + '</div>' +
+      h += '<div class="panel"><h2>Since first release</h2><div class="kv">' + kv(t.good + ' / ' + t.planned, 'Good complete / planned') + kv(t.planned ? Math.round(100 * t.good / t.planned) + '%' : '—', 'Attainment') + kv(t.made ? (100 * t.scrap / t.made).toFixed(1) + '%' : '—', 'Scrap rate') + kv(t.late, 'Tablet jobs past due') + kv(t.holds, 'Open holds') + kv(fDur(t.setup), 'Setup / changeover') + kv(fDur(t.run), 'First piece + run') + kv(fDur(t.wait), 'Waiting on signatures') + kv(fDur(t.paused), 'Paused') + '</div>' +
         '<ul class="clean small muted"><li>Attainment = good pieces approved at the last operation ÷ planned pieces, all released jobs.</li><li>Scrap rate = scrap ÷ (good + scrap), summed over closed operations.</li><li>Setup, run and paused are clock time between button presses, per operation. They are not labor hours: one person on two jobs is counted on both.</li><li>Waiting on signatures = time from each approval request to its signature.</li><li>Run time versus standard is not shown. None of the uploaded travelers carries an approved standard time.</li></ul></div>';
       h += '<div class="panel"><h2>Work in process by area</h2><div class="tbl-wrap"><table><tr><th>Area</th><th>Operations here</th><th>Pieces</th><th>On hold</th><th>To sign</th><th>Oldest arrival</th></tr>' + W.STATIONS.filter((s) => s.kind === 'work').map((s) => {
         let n = 0, p = 0, hd = 0, ap = 0, old = 0;
@@ -1950,7 +2003,7 @@ window.WT_ESP = [
       h += '<div class="panel"><h2>Work schedule</h2><p class="small muted">Now: <b>' + esc(W.shiftText()) + '</b>. Job and operator time only counts inside these hours. At the end of each work day every running job is clocked out and every tablet signs out, so people sign in with their PIN to start again the next day.</p>' +
         (ui.user && ui.user.role === 'manager' ? '<div class="row">' + DN.map((n, k) => '<label class="check" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" class="sh-day" data-d="' + k + '"' + (SH.days.indexOf(k) >= 0 ? ' checked' : '') + ' style="width:24px;height:24px;min-height:24px">' + n + '</label>').join('') + '</div><div class="grid2"><label>Start<input id="sh-start" class="field" type="time" value="' + esc(SH.start.padStart(5, '0')) + '"></label><label>End<input id="sh-end" class="field" type="time" value="' + esc(SH.end.padStart(5, '0')) + '"></label></div><button class="btn primary" data-a="saveShift" style="align-self:flex-start">Save schedule</button>' : '<p class="small muted">A manager changes the schedule.</p>') + '</div>';
       h += '<div class="banner info"><div><b>PINs.</b> Each person creates their own 4-digit PIN the first time they tap their name. Suggested: birth month and year, so March 1985 is 0385. A manager can reset anyone’s PIN here.</div></div>' +
-        '<div class="panel"><h2>People</h2><div class="tbl-wrap"><table><tr><th>Name</th><th>Area</th><th>Role</th><th>PIN</th><th></th></tr>' + store.cfg.roster.slice().sort((a, b) => a.name.localeCompare(b.name)).map((p) => '<tr><td>' + esc(p.name) + '</td><td>' + esc(p.area) + '</td><td>' + ({ operator: 'Operator', approver: p.side ? 'Supervisor, ' + p.side + ' side — signs checks' : 'Approved signer — both sides', qa: 'Quality — dispositions holds', manager: 'Manager — releases, priorities, can sign' }[p.role]) + '</td><td>' + (hasPin(p) ? 'Set' : '<b>Not set yet</b>') + (SRV() ? '<br><span class="small">' + (p.fin ? 'Sees prices and costs' : 'No prices or costs') + '</span>' : '') + '</td><td>' + (mgr ? '<span class="row">' + (hasPin(p) ? '<button class="btn sm" data-a="resetPin" data-id="' + esc(p.id) + '">Reset PIN</button>' : '') + (SRV() && p.role !== 'operator' && p.id !== ui.user.id ? '<button class="btn sm" data-a="finFlag" data-id="' + esc(p.id) + '">' + (p.fin ? 'Remove price access' : 'Allow price access') + '</button>' : '') + (p.id !== ui.user.id ? '<button class="btn sm" data-a="rmPerson" data-id="' + esc(p.id) + '">Remove</button>' : '') + '</span>' : '') + '</td></tr>').join('') + '</table></div>' +
+        '<div class="panel"><h2>People</h2><div class="tbl-wrap"><table><tr><th>Name</th><th>Area</th><th>Role</th><th>' + (SRV() ? 'PIN · prices' : 'PIN') + '</th><th></th></tr>' + store.cfg.roster.slice().sort((a, b) => a.name.localeCompare(b.name)).map((p) => '<tr><td>' + esc(p.name) + '</td><td>' + esc(p.area) + '</td><td>' + ({ operator: 'Operator', approver: p.side ? 'Supervisor, ' + p.side + ' side — signs checks' : 'Approved signer — both sides', qa: 'Quality — dispositions holds', manager: 'Manager — releases, priorities, can sign' }[p.role]) + '</td><td>' + (hasPin(p) ? 'Set' : '<b>Not set yet</b>') + (SRV() ? '<br><span class="small">' + (p.fin ? 'Sees prices and costs' : 'No prices or costs') + '</span>' : '') + '</td><td>' + (mgr ? '<span class="row">' + (hasPin(p) ? '<button class="btn sm" data-a="resetPin" data-id="' + esc(p.id) + '">Reset PIN</button>' : '') + (SRV() && p.role !== 'operator' && p.id !== ui.user.id ? '<button class="btn sm" data-a="finFlag" data-id="' + esc(p.id) + '">' + (p.fin ? 'Remove price access' : 'Allow price access') + '</button>' : '') + (p.id !== ui.user.id ? '<button class="btn sm" data-a="rmPerson" data-id="' + esc(p.id) + '">Remove</button>' : '') + '</span>' : '') + '</td></tr>').join('') + '</table></div>' +
         (sup ? '<h3>Add a person</h3><div class="grid2"><label>Name<input id="pp-name" class="field" autocomplete="off"></label><label>Area<select id="pp-area" class="field">' + W.STATIONS.map((s) => '<option>' + esc(s.name) + '</option>').join('') + '<option>Quality</option><option>Office</option></select></label><label>Role<select id="pp-role" class="field"><option value="operator">Operator</option>' + (mgr ? '<option value="approver:metal">Supervisor — metal side</option><option value="approver:filter">Supervisor — filter side</option><option value="approver:">Approved signer — both sides</option><option value="qa">Quality</option><option value="manager">Manager</option>' : '') + '</select></label></div><p class="small muted">They create their own PIN the first time they sign in.</p><button class="btn" data-a="addPerson" style="align-self:flex-start">Add person</button>' : '<p class="muted">Supervisors and managers can add people here.</p>') + '</div>' +
         '<div class="panel"><h2>Rules</h2><p>Every operation needs two supervisor signatures: the first article, and the closing signature. There is no midpoint check.</p><div class="grid2"><label>Sign a tablet out after this many idle seconds<input id="ru-idle" class="field" type="number" min="30" value="' + R.idleLock + '"' + (mgr ? '' : ' disabled') + '></label></div><label class="check" style="display:flex;gap:12px;align-items:center"><input id="ru-self" type="checkbox" style="width:28px;height:28px"' + (R.selfApprove ? ' checked' : '') + (mgr ? '' : ' disabled') + '> An approver may sign a check on an operation they ran themselves</label>' + (mgr ? '<button class="btn" data-a="saveRules" style="align-self:flex-start">Save rules</button>' : '') + '<p class="small muted"></p></div>';
     }
@@ -2300,6 +2353,9 @@ window.WT_ESP = [
   }
 
   /* ---------- render + events ---------- */
+  // Long words (mostly Spanish) shrink to fit their tile instead of breaking mid-word.
+  function fitTiles() { document.querySelectorAll('.mtile .mt-t').forEach((e) => { e.style.fontSize = ''; let f = 1.6; while (e.scrollWidth > e.clientWidth + 1 && f > 1.05) { f -= 0.1; e.style.fontSize = f.toFixed(2) + 'rem'; } }); }
+  window.addEventListener('resize', () => fitTiles());
   function render() {
     const main = $('#main'); if (!main) return;
     const y = window.scrollY;
@@ -2313,7 +2369,7 @@ window.WT_ESP = [
     $('#b-list').className = ui.view === 'list' ? 'on' : '';
     $('#b-home').className = 'brandbtn' + (ui.view === 'home' ? ' on' : '');
     $('#b-station').className = ui.view === 'station' ? 'on' : '';
-    renderSync(); trDom(main); trDom($('header.top')); window.scrollTo(0, y);
+    renderSync(); trDom(main); trDom($('header.top')); fitTiles(); window.scrollTo(0, y);
     const qr = $('#qr'); if (qr && window.QRCode) { try { new window.QRCode(qr, { text: ui.jobId, width: 96, height: 96 }); } catch (e) { /* label still shows the id */ } }
   }
   function setZoom(z) { ui.scale = Math.max(70, Math.min(160, z)); document.body.style.zoom = ui.scale / 100; ls.set('wt-zoom', String(ui.scale)); const b = $('#b-zpct'); if (b) b.textContent = ui.scale + '%'; }
@@ -2500,7 +2556,7 @@ window.WT_ESP = [
       if (d.a === 'adopt') {
         const r = (store.logs[d.floor] || []).find((x) => x.t === d.t), rt = r && W.routing(d.rid);
         if (!rt) return toast('That master traveler is not loaded yet.', 'bad');
-        try { const j = W.newJob({ rid: rt.id, so: r.t, qty: r.q, due: r.u, pri: jobs().filter((x) => x.st !== 'complete').length + 1 }, { u: ui.user, at: Date.now() });
+        try { const j = W.newJob({ rid: rt.id, so: r.t, qty: Number(r.q) || 0, due: r.u, pri: jobs().filter((x) => x.st !== 'complete').length + 1 }, { u: ui.user, at: Date.now() });
           if (rt.master) j.ops.forEach((o, i) => { o.station = mapStation(rt.ops[i].mach[0], rt.ops[i].text, d.floor, rt.kind); });
           if (!j.name || j.name === rt.kind) j.name = r.d || j.name;
           if (r.pn && (!j.pn || j.pn === 'N/A' || key(j.pn) !== key(r.pn))) j.pn = r.pn;
