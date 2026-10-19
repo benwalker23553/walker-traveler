@@ -275,6 +275,9 @@ th { font-size: .82rem; }
 button small, .tiles small { font-size: .85rem; }
 #b-zout, #b-zin { min-width: 44px; }
 .pl-done .pn, .pl-done .c-main > .small.muted { text-decoration: line-through; opacity: .7; }
+.plfloor { border: 2px solid var(--line); border-radius: var(--r); padding: 10px 12px; background: var(--panel2); }
+.plfloor summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.plfloor .card { margin-top: 8px; }
 
 </style>
 <header class="top">
@@ -581,6 +584,8 @@ window.WT_ES = {
 "Step changed for this job":"Paso cambiado para este trabajo","Sent for review":"Mandado a revisión","Saved":"Guardado","Changed for this job":"Cambiado para este trabajo"
 };
 window.WT_ESP = [
+[/^On the floor here now · (\d+) travelers$/, 'En el piso aquí ahora · $1 viajeros'],
+[/^floor count (.+) · oldest first$/, 'conteo del piso $1 · los más viejos primero'],
 [/^(.+) — run in this order$/, '$1 — correr en este orden'],
 [/^Today's priorities · (.+)$/, 'Prioridades de hoy · $1'],
 [/^Last set by (.+)$/, 'Fijado por $1'],
@@ -1227,6 +1232,7 @@ window.WT_ESP = [
     db.collection('sage').onSnapshot((s) => { s.docs.forEach((d) => { if (d.id === 'bom') { const x = d.data(); store.sageBom = (x && x.bom) || {}; store.sageAt = x && x.at; } }); render(); }, () => {});
     db.collection('prints').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.pn) m[d.id] = x; }); store.prints = m; render(); if (ui.modal) renderModal(); }, () => {});
     db.collection('redlines').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.redlines = m; applyAreas(); render(); if (ui.modal) renderModal(); }, () => {});
+    db.collection('wip').onSnapshot((sn) => { sn.docs.forEach((d) => { if (d.id === 'count') { const x = d.data(), lnOf = (l) => (/^paint/i.test(l) ? 'powder' : /^wel/i.test(l) ? 'weld' : /^wash/i.test(l) ? 'wash' : /^metal/i.test(l) ? 'metal' : /^lui[sz]/i.test(l) ? 'glue' : ''); store.wip = Object.assign({}, x, { rows: (x.rows || []).map((r) => (Array.isArray(r) ? { t: String(r[0]), pn: String(r[1] || ''), loc: r[2], ln: lnOf(r[2]) } : r)) }); } }); render(); }, () => {});
     db.collection('plan').onSnapshot((sn) => { const m = {}; sn.docs.forEach((d) => { const x = d.data(); if (x && x.items) m[d.id] = x; }); store.plan = m; render(); }, () => {});
     db.doc('config/main').onSnapshot((s) => { if (s.exists) { mergeCfg(s.data()); render(); } }, () => {});
     loadStaff(); setInterval(loadStaff, 60000);
@@ -1670,6 +1676,11 @@ window.WT_ESP = [
   const ymd = (t) => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
   const canPlan = () => !!ui.user && (ui.user.role === 'manager' || (W.isApprover(ui.user) && /supervisor|manage/i.test(ui.user.area || '')));
   const planOf = (id) => (store.plan && store.plan[id]) || { items: [] };
+  const wipRows = (ln) => ((store.wip && store.wip.rows) || []).filter((r) => r.ln === ln);
+  const wipDate = () => (store.wip && store.wip.date ? fDue(store.wip.date) : '');
+  let LOGIX = null, LOGIXk = null;
+  const logRow = (t) => { const k = [store.logs.metal, store.logs.filter, store.logs.final]; if (!LOGIX || LOGIXk[0] !== k[0] || LOGIXk[1] !== k[1] || LOGIXk[2] !== k[2]) { LOGIX = {}; LOGIXk = k; ['metal', 'filter', 'final'].forEach((f) => (store.logs[f] || []).forEach((r) => { if (!LOGIX[r.t]) LOGIX[r.t] = { r, f }; })); } return LOGIX[String(t)] || null; };
+  const wDesc = (w) => { const lr = logRow(w.t); return lr && String(lr.r.pn).toLowerCase() === String(w.pn).toLowerCase() ? lr.r.d || '' : ''; };
   const openItems = (id) => planOf(id).items.filter((x) => !x.done);
   const liveItems = (id) => { const it = planOf(id).items.filter((x) => !x.done || ymd(x.done.at) === ymd(Date.now())); return it.filter((x) => !x.done).concat(it.filter((x) => x.done)); };
   const planStale = (id) => openItems(id).length > 0 && ymd(planOf(id).at || 0) !== ymd(Date.now());
@@ -1677,15 +1688,18 @@ window.WT_ESP = [
     const j = x.k === 'j' ? store.jobs[x.ref] : x.k === 'p' ? store.jobs['so-' + x.ref] : null;
     if (j) return { title: j.pn + ' · ' + j.name, sub: 'Shop Order ' + j.so + ' · ' + j.qty + ' pcs' + (j.due ? ' · due ' + fDue(j.due) : ''), job: j.id };
     if (x.k === 'p') { const pr = paper().find((y) => y.f === x.fl && String(y.r.t) === String(x.ref)), r = pr ? pr.r : (x.snap || {}); return { title: (r.pn || '') + ' · ' + (r.d || ''), sub: 'Traveler #' + x.ref + (r.q ? ' · ' + Number(r.q) + ' pcs' : '') + ' · paper traveler' }; }
+    if (x.k === 'w') { const w = ((store.wip && store.wip.rows) || []).find((y) => y.t === x.ref && (!x.snap || !x.snap.loc || (y.loc === x.snap.loc && y.pn === x.snap.pn))) || x.snap || {}, lr = logRow(x.ref), r = lr && (!w.pn || String(lr.r.pn).toLowerCase() === String(w.pn).toLowerCase()) ? lr.r : {}; return { title: (w.pn || r.pn || '') + (r.d ? ' · ' + r.d : ''), sub: 'Traveler #' + x.ref + (r.q ? ' · ' + Number(r.q) + ' pcs' : '') + (w.loc ? ' · on the floor at ' + w.loc : '') }; }
     return { title: x.text || '', sub: '' };
   }
   function planHits(q, ln) {
     q = (q || '').trim().toLowerCase(); if (q.length < 2) return '<p class="small muted">Type at least 2 characters.</p>';
     const L = lane(ln), have = {}, out = []; openItems(ln).forEach((x) => { have[x.k + ':' + x.ref] = 1; });
     jobs().filter((j) => j.st !== 'complete').forEach((j) => { if ((j.so + ' ' + j.pn + ' ' + j.name).toLowerCase().indexOf(q) >= 0) out.push({ k: 'j', ref: j.id, fl: '', t: j.pn + ' · ' + j.name, s: 'Shop Order ' + j.so + ' · ' + j.qty + ' pcs · on tablet', side: W.sideOf(j.ops[0].station) }); });
-    paper().filter((x) => x.r.s === 'O').forEach((x) => { const r = x.r; if ((r.t + ' ' + r.pn + ' ' + (r.d || '')).toLowerCase().indexOf(q) >= 0) out.push({ k: 'p', ref: String(r.t), fl: x.f, t: r.pn + ' · ' + (r.d || ''), s: 'Traveler #' + r.t + ' · ' + Number(r.q || 0) + ' pcs · ' + (x.f === 'metal' ? 'metal log' : x.f === 'filter' ? 'filter log' : 'final log'), side: x.f }); });
+    const W0 = (store.wip && store.wip.rows) || [], wt = {}; W0.forEach((w) => { wt[w.t] = 1; });
+    W0.forEach((w) => { const d = wDesc(w); if ((w.t + ' ' + w.pn + ' ' + d + ' ' + w.loc).toLowerCase().indexOf(q) >= 0) out.push({ k: 'w', ref: w.t, loc: w.loc, fl: '', t: w.pn + (d ? ' · ' + d : ''), s: 'Traveler #' + w.t + ' · on the floor at ' + w.loc, side: w.ln ? lane(w.ln).floor : '' }); });
+    paper().filter((x) => x.r.s === 'O' && !wt[x.r.t]).forEach((x) => { const r = x.r; if ((r.t + ' ' + r.pn + ' ' + (r.d || '')).toLowerCase().indexOf(q) >= 0) out.push({ k: 'p', ref: String(r.t), fl: x.f, t: r.pn + ' · ' + (r.d || ''), s: 'Traveler #' + r.t + ' · ' + Number(r.q || 0) + ' pcs · ' + (x.f === 'metal' ? 'metal log' : x.f === 'filter' ? 'filter log' : 'final log'), side: x.f }); });
     const H = out.filter((x) => !have[x.k + ':' + x.ref]).sort((a, b) => (b.side === L.floor ? 1 : 0) - (a.side === L.floor ? 1 : 0)).slice(0, 8);
-    return H.length ? H.map((x) => '<div class="card"><span class="c-main"><span class="pn mono">' + esc(x.t) + '</span><span class="small muted">' + esc(x.s) + '</span></span><span class="c-act"><button class="btn sm go" data-a="plAdd" data-k="' + x.k + '" data-ref="' + esc(x.ref) + '" data-fl="' + x.fl + '">+ Add</button></span></div>').join('') : '<p class="small muted">No open traveler matches. Add it as a task below.</p>';
+    return H.length ? H.map((x) => '<div class="card"><span class="c-main"><span class="pn mono">' + esc(x.t) + '</span><span class="small muted">' + esc(x.s) + '</span></span><span class="c-act"><button class="btn sm go" data-a="plAdd" data-k="' + x.k + '" data-ref="' + esc(x.ref) + '"' + (x.loc ? ' data-loc="' + esc(x.loc) + '"' : '') + ' data-fl="' + x.fl + '">+ Add</button></span></div>').join('') : '<p class="small muted">No open traveler matches. Add it as a task below.</p>';
   }
   function planRow(x, k, edit, ln, n) {
     const I = itemInfo(x), done = !!x.done, d = ' data-ln="' + ln + '" data-id="' + esc(x.id) + '"';
@@ -1705,6 +1719,7 @@ window.WT_ESP = [
       (it.length ? planList(ln, edit) : '<div class="empty">Nothing set for this area yet.</div>');
     if (edit) h += '<h3>Add a traveler</h3><input id="pl-q" class="field" placeholder="Traveler #, part # or description" autocomplete="off" value="' + esc(ui.plq || '') + '"><div id="pl-hits">' + (ui.plq ? planHits(ui.plq, ln) : '') + '</div>' +
       '<h3>Or add a task in your own words</h3><div class="row" style="flex-wrap:nowrap"><input id="pl-task" class="field" style="flex:1" placeholder="Example: wash the base plates before lunch" autocomplete="off"><button class="btn" data-a="plTask" data-ln="' + ln + '">Add</button></div>' +
+      (() => { const have = {}; openItems(ln).forEach((x) => { have[x.ref] = 1; }); const F = wipRows(ln).filter((w) => !have[w.t]).sort((a, b) => Number(a.t) - Number(b.t)); if (!F.length) return ''; return '<details class="plfloor"' + (it.length ? '' : ' open') + '><summary><b>On the floor here now · ' + F.length + ' travelers</b> <span class="small muted">floor count ' + esc(wipDate()) + ' · oldest first</span></summary>' + F.map((w) => { const lr = logRow(w.t), d = wDesc(w); return '<div class="card"><span class="c-main"><span class="pn mono">' + esc(w.pn + (d ? ' · ' + d : '')) + '</span><span class="small muted">Traveler #' + esc(w.t) + ' · ' + esc(w.loc) + (lr && lr.r.s !== 'O' ? ' · closed in the ' + lr.f + ' log' : lr ? '' : ' · not in this year\'s logs') + '</span></span><span class="c-act"><button class="btn sm go" data-a="plAdd" data-k="w" data-ref="' + esc(w.t) + '" data-loc="' + esc(w.loc) + '" data-fl="">+ Add</button></span></div>'; }).join('') + '</details>'; })() +
       (it.some((x) => x.done) ? '<button class="btn sm" data-a="plClear" data-ln="' + ln + '" style="align-self:flex-start">Clear finished</button>' : '');
     else h += '<p class="small muted">A manager or supervisor sets this list.</p>';
     return h + '</div>';
@@ -1733,7 +1748,7 @@ window.WT_ESP = [
     const ln = d.ln || ui.plane, idx = (p) => p.items.findIndex((x) => x.id === d.id);
     const move = (dir) => (p) => { const open = p.items.filter((x) => !x.done), k = open.findIndex((x) => x.id === d.id), o = open[k + dir]; if (k < 0 || !o) return; const a = p.items.indexOf(open[k]), b = p.items.indexOf(o); const t = p.items[a]; p.items[a] = p.items[b]; p.items[b] = t; };
     const nid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    if (d.a === 'plAdd') { if (!canPlan()) return toast('A manager or supervisor sets priorities.', 'bad'); const pr = d.k === 'p' ? paper().find((y) => y.f === d.fl && String(y.r.t) === d.ref) : null; return savePlan(ln, (p) => { if (p.items.some((x) => !x.done && x.k === d.k && x.ref === d.ref)) return; p.items.push({ id: nid(), k: d.k, ref: d.ref, fl: d.fl || '', snap: pr ? { pn: pr.r.pn, d: pr.r.d, q: pr.r.q, u: pr.r.u } : null, add: { by: ui.user.id, at: Date.now() }, done: null }); }, true).then(() => toast('Added to ' + lane(ln).name)); }
+    if (d.a === 'plAdd') { if (!canPlan()) return toast('A manager or supervisor sets priorities.', 'bad'); const pr = d.k === 'p' ? paper().find((y) => y.f === d.fl && String(y.r.t) === d.ref) : null, wr = d.k === 'w' ? ((store.wip && store.wip.rows) || []).find((y) => y.t === d.ref && (!d.loc || y.loc === d.loc)) : null; return savePlan(ln, (p) => { if (p.items.some((x) => !x.done && x.k === d.k && x.ref === d.ref)) return; p.items.push({ id: nid(), k: d.k, ref: d.ref, fl: d.fl || '', snap: pr ? { pn: pr.r.pn, d: pr.r.d, q: pr.r.q, u: pr.r.u } : wr ? { pn: wr.pn, loc: wr.loc } : null, add: { by: ui.user.id, at: Date.now() }, done: null }); }, true).then(() => toast('Added to ' + lane(ln).name)); }
     if (d.a === 'plTask') { if (!canPlan()) return; const v = ($('#pl-task').value || '').trim(); if (v.length < 3) return toast('Type the task first.', 'bad'); return savePlan(ln, (p) => { p.items.push({ id: nid(), k: 't', ref: '', text: v, add: { by: ui.user.id, at: Date.now() }, done: null }); }, true); }
     if (d.a === 'plUp' || d.a === 'plDn') { if (!canPlan()) return; return savePlan(ln, move(d.a === 'plUp' ? -1 : 1), true); }
     if (d.a === 'plRm') { if (!canPlan()) return; return savePlan(ln, (p) => { const k = idx(p); if (k >= 0) p.items.splice(k, 1); }, true); }
