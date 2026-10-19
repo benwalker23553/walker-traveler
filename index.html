@@ -274,6 +274,7 @@ th { font-size: .82rem; }
 .opchip span, .tdate small, .pri small { font-size: .85rem; }
 button small, .tiles small { font-size: .85rem; }
 #b-zout, #b-zin { min-width: 44px; }
+.pl-done .pn, .pl-done .c-main > .small.muted { text-decoration: line-through; opacity: .7; }
 
 </style>
 <header class="top">
@@ -297,6 +298,41 @@ button small, .tiles small { font-size: .85rem; }
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 window.WT_ES = {
+"Daily priorities":"Prioridades del día",
+"What each area runs first":"Qué corre primero cada área",
+"Run first today":"Correr primero hoy",
+"Set by your supervisor":"Lo fija tu supervisor",
+"Pick an area, then add travelers in the order to run them. The list shows at the top of that area's tablet. Operators tap Done. Finished items drop off the next day.":"Elige un área y agrega viajeros en el orden en que se deben correr. La lista sale arriba en la tableta de esa área. Los operadores tocan Hecho. Lo terminado se quita al día siguiente.",
+"Metal":"Metal",
+"Filter":"Filtro",
+"⚠ = list not updated today.":"⚠ = lista no actualizada hoy.",
+"Nothing set for this area yet.":"Aún no hay nada fijado para esta área.",
+"Add a traveler":"Agregar un viajero",
+"Or add a task in your own words":"O agrega una tarea con tus palabras",
+"Clear finished":"Quitar terminados",
+"A manager or supervisor sets this list.":"Un gerente o supervisor fija esta lista.",
+"Set today's priorities":"Fijar prioridades de hoy",
+"✓ Done":"✓ Hecho",
+"Not done":"No terminado",
+"Note":"Nota",
+"Note:":"Nota:",
+"Done":"Hecho",
+"DONE":"HECHO",
+"RUN":"CORRER",
+"+ Add":"+ Agregar",
+"Add":"Agregar",
+"Type at least 2 characters.":"Escribe al menos 2 caracteres.",
+"No open traveler matches. Add it as a task below.":"Ningún viajero abierto coincide. Agrégalo como tarea abajo.",
+"Not set yet":"Aún no fijado",
+"Note for this item":"Nota para este punto",
+"Shows under the item on the area tablet. Example: needs to ship Thursday.":"Sale debajo del punto en la tableta del área. Ejemplo: se embarca el jueves.",
+"Save note":"Guardar nota",
+"Type the task first.":"Escribe la tarea primero.",
+"A manager or supervisor sets priorities.":"Un gerente o supervisor fija las prioridades.",
+"Could not save the priority list. Check the connection and try again.":"No se pudo guardar la lista de prioridades. Revisa la conexión e intenta de nuevo.",
+"Wash":"Lavado",
+"Traveler #, part # or description":"Viajero #, parte # o descripción",
+"Example: wash the base plates before lunch":"Ejemplo: lavar las placas base antes de comer",
 "Recent":"Reciente",
 "Older":"Anterior",
 "The final assembly log has no finish dates, so Open here means issued in the last 45 days.":"El registro de ensamble final no tiene fechas de terminado; Abierto aquí significa emitido en los últimos 45 días.",
@@ -545,6 +581,12 @@ window.WT_ES = {
 "Step changed for this job":"Paso cambiado para este trabajo","Sent for review":"Mandado a revisión","Saved":"Guardado","Changed for this job":"Cambiado para este trabajo"
 };
 window.WT_ESP = [
+[/^(.+) — run in this order$/, '$1 — correr en este orden'],
+[/^Today's priorities · (.+)$/, 'Prioridades de hoy · $1'],
+[/^Last set by (.+)$/, 'Fijado por $1'],
+[/^Set by (.+)$/, 'Fijado por $1'],
+[/^Added to (.+)$/, 'Agregado a $1'],
+[/^Marked done · (.+)$/, 'Marcado hecho · $1'],
 [/^Risk saved for every (.+) traveler$/, 'Riesgo guardado en todos los viajeros $1'],
 [/^Op (\S+) now goes to (.+)$/, 'La op $1 ahora va a $2'],
 [/^Prints (\d+)$/, 'Planos $1'],
@@ -1167,7 +1209,7 @@ window.WT_ESP = [
   function toast(msg, kind) { const t = $('#toast'); t.innerHTML = '<div class="' + (kind || '') + '" role="status">' + esc(msg) + '</div>'; trDom(t); clearTimeout(toast.t); toast.t = setTimeout(() => { t.innerHTML = ''; }, kind === 'bad' ? 6000 : 3200); }
 
   /* ---------- data ---------- */
-  function loadLocal() { try { store.jobs = JSON.parse(ls.get('wt-jobs') || '{}'); const c = JSON.parse(ls.get('wt-cfg') || 'null'); if (c) store.cfg = c; } catch (e) { store.jobs = {}; } }
+  function loadLocal() { try { store.plan = JSON.parse(ls.get('wt-plan') || '{}'); } catch (e) { store.plan = {}; } try { store.jobs = JSON.parse(ls.get('wt-jobs') || '{}'); const c = JSON.parse(ls.get('wt-cfg') || 'null'); if (c) store.cfg = c; } catch (e) { store.jobs = {}; } }
   function mergeCfg(c) { c = W.clone(c); store.cfg = { rules: Object.assign({}, W.DEFAULT_CFG.rules, c.rules || {}), roster: c.roster && c.roster.length ? c.roster : W.clone(W.DEFAULT_CFG.roster), shift: c.shift || null }; if (!window.WT_SB) store.cfg.costs = c.costs || {}; W.setShift(store.cfg.shift); if (store.staff) applyStaff(); else if (ui.user) { const u = store.cfg.roster.find((r) => r.id === ui.user.id); if (!u) signOutUser(); else ui.user = u; } }
   async function init() {
     render();
@@ -1185,6 +1227,7 @@ window.WT_ESP = [
     db.collection('sage').onSnapshot((s) => { s.docs.forEach((d) => { if (d.id === 'bom') { const x = d.data(); store.sageBom = (x && x.bom) || {}; store.sageAt = x && x.at; } }); render(); }, () => {});
     db.collection('prints').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.pn) m[d.id] = x; }); store.prints = m; render(); if (ui.modal) renderModal(); }, () => {});
     db.collection('redlines').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.redlines = m; applyAreas(); render(); if (ui.modal) renderModal(); }, () => {});
+    db.collection('plan').onSnapshot((sn) => { const m = {}; sn.docs.forEach((d) => { const x = d.data(); if (x && x.items) m[d.id] = x; }); store.plan = m; render(); }, () => {});
     db.doc('config/main').onSnapshot((s) => { if (s.exists) { mergeCfg(s.data()); render(); } }, () => {});
     loadStaff(); setInterval(loadStaff, 60000);
   }
@@ -1306,6 +1349,7 @@ window.WT_ESP = [
     let h = '<div class="head"><div><h1>' + esc(st.name) + '</h1><p class="muted">' + esc(st.note || '') + '</p></div><div class="counts">' + cnt(B.ready.length, 'Ready') + cnt(B.progress.length, 'In progress') + cnt(B.approval.length, 'To sign') + cnt(B.hold.length, 'On hold') + cnt(inc.length, 'Incoming') + '</div></div>';
     if (!store.loaded) h += '<div class="empty">Connecting to the shop record. Jobs released by the office will list here in priority order.</div>';
     else if (!Object.keys(store.jobs).length) h += '<div class="banner info"><div><b>No jobs released yet.</b> Released jobs appear here sorted by priority. A manager releases the first one from Manage → Release job.</div><button class="btn sm" data-nav="manage" data-mtab="release">Release a job</button></div>';
+    h += prioBox();
     h += '<div class="cols"><div class="col">' +
       section('Waiting for supervisor', B.approval, 'Nothing is waiting on a signature.') +
       section('Ready to work · run in this order', B.ready, 'No jobs are ready here.') +
@@ -1464,6 +1508,7 @@ window.WT_ESP = [
   const TRAIN = {
     operator: { en: 'Operator', es: 'Operador', video: 'training/operator.mp4', steps: [
       ['Sign in', 'Tap Sign in, tap your name, enter your 4-digit PIN. First time: make your PIN from your birth month and year (March 1985 = 0385).', 'Entrar', 'Toca Entrar, toca tu nombre y escribe tu PIN de 4 números. La primera vez haz tu PIN con tu mes y año de nacimiento (marzo 1985 = 0385).'],
+      ['Run first today', 'Your supervisor sets Today\'s priorities at the top of your area. Run them in order: 1, then 2. When one is finished, tap ✓ Done so the supervisor sees it.', 'Correr primero hoy', 'Tu supervisor fija Prioridades de hoy arriba en tu área. Córrelas en orden: 1, luego 2. Cuando termines una, toca ✓ Hecho para que el supervisor lo vea.'],
       ['Pick the job', 'Your area shows jobs in order. Do RUN 1 first. Red LATE and ASAP go first.', 'Escoge el trabajo', 'Tu área muestra los trabajos en orden. Haz primero el RUN 1. ATRASADO y URGENTE van primero.'],
       ['Read the step, risk and prints', 'Read the step. The colored label is the risk: green low, yellow medium, red high. Tap Prints: the current released print from drafting shows first. A yellow warning means the drawing rev changed.', 'Lee el paso, el riesgo y los planos', 'Lee el paso. La etiqueta de color es el riesgo: verde bajo, amarillo medio, rojo alto. Toca Planos: el plano liberado más reciente sale primero. Un aviso amarillo significa que cambió la revisión.'],
       ['Start and first article', 'Tap the big green button. Make your first piece, then tap Request first-article approval and call your supervisor.', 'Empieza y primera pieza', 'Toca el botón verde grande. Haz tu primera pieza, toca Pedir aprobación de primera pieza y llama a tu supervisor.'],
@@ -1478,6 +1523,7 @@ window.WT_ESP = [
       ['Sign out', 'Tap your name at the top when you leave. The tablet also signs you out after 3 minutes without use.', 'Salir', 'Toca tu nombre arriba al irte. La tableta también te saca después de 3 minutos sin uso.']] },
     supervisor: { en: 'Supervisor', es: 'Supervisor', video: 'training/supervisor.mp4', steps: [
       ['Start here', 'Main menu shows what needs you: Needs a signature, On hold, Red-lines, Improve.', 'Empieza aquí', 'El menú muestra lo que te necesita: Necesita firma, Retenido, Correcciones, Mejorar.'],
+      ['Daily priorities', 'Each morning: Main menu → Daily priorities. Tap an area (Wash, Welding, Metal Floor…), search the traveler #, part # or description, tap + Add. Use ↑ ↓ to set the order, Note for a reason (ships Thursday), or add a task in your own words. ⚠ means that area was not updated today. Operators tap Done; you see who and when.', 'Prioridades del día', 'Cada mañana: Menú → Prioridades del día. Toca un área (Lavado, Soldadura, Piso de Metal…), busca el viajero #, parte # o descripción y toca + Agregar. Usa ↑ ↓ para el orden, Nota para una razón (se embarca el jueves) o agrega una tarea con tus palabras. ⚠ quiere decir que esa área no se actualizó hoy. Los operadores tocan Hecho; ves quién y cuándo.'],
       ['First article', 'Check the part. Tap Pass or Fail, enter your PIN, tap Sign. Fail opens a hold for the bad pieces.', 'Primera pieza', 'Revisa la pieza. Toca Pasa o No pasa, tu PIN y Firmar. No pasa abre una retención.'],
       ['Closing signature', 'Check the counts add up, then sign. Parts can move only after this.', 'Firma de cierre', 'Revisa que las cantidades cuadren y firma. Las piezas se mueven solo después.'],
       ['Holds', 'Record a disposition: rework, use as is, scrap, or return. Nothing moves until you do.', 'Retenciones', 'Registra la disposición: retrabajo, usar como está, scrap o regresar. Nada se mueve hasta que lo hagas.'],
@@ -1525,6 +1571,8 @@ window.WT_ESP = [
       work: () => tile('data-nav="station"', 'Work at this area', esc(areaName()) + (inc ? ' · ' + inc + ' incoming' : ''), here, 'go'),
       all: () => tile('data-nav="list" data-lf="active"', 'All travelers', 'Search, sort, open any traveler', J.length + openPaper),
       asap: () => (J.some((j) => j.rush) ? tile('data-nav="list" data-lf="active"', 'ASAP', 'Run these first', J.filter((j) => j.rush).length, 'bad') : ''),
+      today: () => { const n = LANES.filter((l) => inView(l.st)).reduce((a, l) => a + openItems(l.id).length, 0); return n ? tile('data-nav="station"', 'Run first today', 'Set by your supervisor', n, 'go') : ''; },
+      prio: () => (canPlan() ? tile('data-nav="prio"', 'Daily priorities', 'What each area runs first', LANES.reduce((a, l) => a + openItems(l.id).length, 0), LANES.some((l) => planStale(l.id)) ? 'warn' : '') : T.today()),
       sign: () => tile('data-nav="list" data-lf="sign"', 'Needs a signature', 'First articles and closing signatures', sign, sign ? 'warn' : ''),
       hold: () => tile('data-nav="list" data-lf="hold"', 'On hold', 'Waiting on a disposition', hold, hold ? 'bad' : ''),
       rl: () => tile('data-m="rlList"', 'Red-lines', 'Step changes to approve', rlPending().length, rlPending().length ? 'warn' : ''),
@@ -1540,9 +1588,9 @@ window.WT_ESP = [
       inout: () => (ui.user ? tile('id="t-out"', 'Sign out', esc(ui.user.name), null) : tile('data-m="login"', 'Sign in', 'Tap your name, enter your PIN', null, 'go'))
     };
     // Each person sees only what they use. Operators: their work. Supervisors, quality and managers: everything.
-    const order = !ui.user ? ['inout', 'work', 'all', 'asap', 'where', 'train', 'area']
-      : !lead ? ['work', 'all', 'asap', 'hold', 'where', 'train', 'area', 'inout']
-      : ['work', 'sign', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
+    const order = !ui.user ? ['inout', 'work', 'today', 'all', 'asap', 'where', 'train', 'area']
+      : !lead ? ['work', 'today', 'all', 'asap', 'hold', 'where', 'train', 'area', 'inout']
+      : ['work', 'prio', 'sign', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
     return '<div class="head"><div><h1>Main menu</h1><p class="muted">' + (ui.user ? 'Signed in as ' + esc(ui.user.name.replace(/\.$/, '')) + '.' : 'Not signed in.') + ' This tablet is set to ' + esc(areaName()) + '.</p></div></div><div class="menu">' + order.map((k) => T[k]()).join('') + '</div>';
   }
 
@@ -1615,6 +1663,85 @@ window.WT_ESP = [
   const ts = (iso) => (iso ? Date.parse(iso + 'T12:00:00') : 0);
   const sDate = (t) => (t ? new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—');
   const finS = (r) => { if (r.s) return r; const iss = r.i ? Date.parse(r.i + 'T12:00:00') : 0; r.s = !r.c && iss && Date.now() - iss < 45 * 864e5 ? 'O' : 'C'; r.d = r.d || ''; return r; };
+
+  /* ---------- daily priorities: a manager or supervisor sets what each area runs first ---------- */
+  const LANES = (() => { const L = []; W.STATIONS.filter((x) => x.kind === 'work').forEach((x) => { L.push({ id: x.id, st: x.id, floor: x.floor, name: x.name }); if (x.id === 'metal') L.push({ id: 'wash', st: 'metal', floor: 'metal', name: 'Wash' }); }); return L; })();
+  const lane = (id) => LANES.find((l) => l.id === id) || LANES[0];
+  const ymd = (t) => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  const canPlan = () => !!ui.user && (ui.user.role === 'manager' || (W.isApprover(ui.user) && /supervisor|manage/i.test(ui.user.area || '')));
+  const planOf = (id) => (store.plan && store.plan[id]) || { items: [] };
+  const openItems = (id) => planOf(id).items.filter((x) => !x.done);
+  const liveItems = (id) => { const it = planOf(id).items.filter((x) => !x.done || ymd(x.done.at) === ymd(Date.now())); return it.filter((x) => !x.done).concat(it.filter((x) => x.done)); };
+  const planStale = (id) => openItems(id).length > 0 && ymd(planOf(id).at || 0) !== ymd(Date.now());
+  function itemInfo(x) {
+    const j = x.k === 'j' ? store.jobs[x.ref] : x.k === 'p' ? store.jobs['so-' + x.ref] : null;
+    if (j) return { title: j.pn + ' · ' + j.name, sub: 'Shop Order ' + j.so + ' · ' + j.qty + ' pcs' + (j.due ? ' · due ' + fDue(j.due) : ''), job: j.id };
+    if (x.k === 'p') { const pr = paper().find((y) => y.f === x.fl && String(y.r.t) === String(x.ref)), r = pr ? pr.r : (x.snap || {}); return { title: (r.pn || '') + ' · ' + (r.d || ''), sub: 'Traveler #' + x.ref + (r.q ? ' · ' + Number(r.q) + ' pcs' : '') + ' · paper traveler' }; }
+    return { title: x.text || '', sub: '' };
+  }
+  function planHits(q, ln) {
+    q = (q || '').trim().toLowerCase(); if (q.length < 2) return '<p class="small muted">Type at least 2 characters.</p>';
+    const L = lane(ln), have = {}, out = []; openItems(ln).forEach((x) => { have[x.k + ':' + x.ref] = 1; });
+    jobs().filter((j) => j.st !== 'complete').forEach((j) => { if ((j.so + ' ' + j.pn + ' ' + j.name).toLowerCase().indexOf(q) >= 0) out.push({ k: 'j', ref: j.id, fl: '', t: j.pn + ' · ' + j.name, s: 'Shop Order ' + j.so + ' · ' + j.qty + ' pcs · on tablet', side: W.sideOf(j.ops[0].station) }); });
+    paper().filter((x) => x.r.s === 'O').forEach((x) => { const r = x.r; if ((r.t + ' ' + r.pn + ' ' + (r.d || '')).toLowerCase().indexOf(q) >= 0) out.push({ k: 'p', ref: String(r.t), fl: x.f, t: r.pn + ' · ' + (r.d || ''), s: 'Traveler #' + r.t + ' · ' + Number(r.q || 0) + ' pcs · ' + (x.f === 'metal' ? 'metal log' : x.f === 'filter' ? 'filter log' : 'final log'), side: x.f }); });
+    const H = out.filter((x) => !have[x.k + ':' + x.ref]).sort((a, b) => (b.side === L.floor ? 1 : 0) - (a.side === L.floor ? 1 : 0)).slice(0, 8);
+    return H.length ? H.map((x) => '<div class="card"><span class="c-main"><span class="pn mono">' + esc(x.t) + '</span><span class="small muted">' + esc(x.s) + '</span></span><span class="c-act"><button class="btn sm go" data-a="plAdd" data-k="' + x.k + '" data-ref="' + esc(x.ref) + '" data-fl="' + x.fl + '">+ Add</button></span></div>').join('') : '<p class="small muted">No open traveler matches. Add it as a task below.</p>';
+  }
+  function planRow(x, k, edit, ln, n) {
+    const I = itemInfo(x), done = !!x.done, d = ' data-ln="' + ln + '" data-id="' + esc(x.id) + '"';
+    return '<div class="card ' + (done ? 'b-progress pl-done' : 'b-ready') + '"><span class="pri"><small>' + (done ? 'DONE' : 'RUN') + '</small>' + (done ? '✓' : k + 1) + '</span>' +
+      '<span class="c-main"><span class="pn mono">' + esc(I.title) + '</span>' + (I.sub ? '<span class="small muted">' + esc(I.sub) + '</span>' : '') + (x.note ? '<span class="small"><b>Note:</b> <span class="notr">' + esc(x.note) + '</span></span>' : '') + (done ? '<span class="small"><b>Done</b> · ' + esc(nm(x.done.by)) + ' · ' + esc(fTime(x.done.at)) + '</span>' : '') + '</span>' +
+      '<span class="c-act"><span class="row">' + (I.job ? '<button class="btn sm" data-open="' + esc(I.job) + '">Open</button>' : '') + (done ? '<button class="btn sm" data-a="plUndo"' + d + '>Not done</button>' : '<button class="btn sm go" data-a="plDone"' + d + '>✓ Done</button>') +
+      (edit && !done ? '<button class="btn sm" data-a="plUp"' + d + (k === 0 ? ' disabled' : '') + ' aria-label="Move up">↑</button><button class="btn sm" data-a="plDn"' + d + (k >= n - 1 ? ' disabled' : '') + ' aria-label="Move down">↓</button><button class="btn sm" data-a="plNote"' + d + '>Note</button>' : '') + (edit ? '<button class="btn sm" data-a="plRm"' + d + ' aria-label="Remove">✕</button>' : '') + '</span></span></div>';
+  }
+  function planList(ln, edit) { const it = liveItems(ln), n = it.filter((x) => !x.done).length; return it.map((x, k) => planRow(x, k, edit, ln, n)).join(''); }
+  function renderPrio() {
+    if (!ui.plane) { const own = LANES.find((l) => !multi() && ui.station !== 'all' && l.st === ui.station); ui.plane = own ? own.id : LANES[0].id; }
+    const ln = ui.plane, L = lane(ln), P = planOf(ln), edit = canPlan(), it = liveItems(ln);
+    const chip = (l) => { const n = openItems(l.id).length; return '<button class="btn sm' + (l.id === ln ? ' sel' : '') + '" data-plane="' + l.id + '">' + esc(l.name) + (n ? ' · ' + n : '') + (planStale(l.id) ? ' ⚠' : '') + '</button>'; };
+    let h = '<div class="head"><div><h1>Daily priorities</h1><p class="muted">Pick an area, then add travelers in the order to run them. The list shows at the top of that area\'s tablet. Operators tap Done. Finished items drop off the next day.</p></div></div>';
+    h += '<div class="panel"><div class="row"><span class="small muted" style="min-width:52px">Metal</span>' + LANES.filter((l) => l.floor === 'metal').map(chip).join('') + '</div><div class="row"><span class="small muted" style="min-width:52px">Filter</span>' + LANES.filter((l) => l.floor === 'filter').map(chip).join('') + '</div><p class="small muted">⚠ = list not updated today.</p></div>';
+    h += '<div class="panel"><div class="row" style="justify-content:space-between"><h2>' + esc(L.name) + ' — run in this order</h2><span class="small muted">' + (P.at ? 'Last set by ' + esc(nm(P.by)) + ' · ' + esc(fTime(P.at)) : 'Not set yet') + '</span></div>' +
+      (it.length ? planList(ln, edit) : '<div class="empty">Nothing set for this area yet.</div>');
+    if (edit) h += '<h3>Add a traveler</h3><input id="pl-q" class="field" placeholder="Traveler #, part # or description" autocomplete="off" value="' + esc(ui.plq || '') + '"><div id="pl-hits">' + (ui.plq ? planHits(ui.plq, ln) : '') + '</div>' +
+      '<h3>Or add a task in your own words</h3><div class="row" style="flex-wrap:nowrap"><input id="pl-task" class="field" style="flex:1" placeholder="Example: wash the base plates before lunch" autocomplete="off"><button class="btn" data-a="plTask" data-ln="' + ln + '">Add</button></div>' +
+      (it.some((x) => x.done) ? '<button class="btn sm" data-a="plClear" data-ln="' + ln + '" style="align-self:flex-start">Clear finished</button>' : '');
+    else h += '<p class="small muted">A manager or supervisor sets this list.</p>';
+    return h + '</div>';
+  }
+  function prioBox() {
+    if (!store.plan) return '';
+    const L = LANES.filter((l) => inView(l.st) && liveItems(l.id).length);
+    if (!L.length) return canPlan() ? '<div class="row" style="margin-bottom:10px"><button class="btn sm" data-nav="prio">Set today\'s priorities</button></div>' : '';
+    return L.map((l) => '<section class="sec"><div class="ghead" style="border-color:var(--ok)"><h2>Today\'s priorities · ' + esc(l.name) + '</h2><span class="small muted">Set by ' + esc(nm(planOf(l.id).by)) + ' · ' + esc(fTime(planOf(l.id).at)) + (canPlan() ? ' <button class="btn sm" data-nav="prio" data-pl="' + l.id + '">Change</button>' : '') + '</span></div>' + planList(l.id, false) + '</section>').join('');
+  }
+  async function savePlan(id, fn, edit) {
+    if (!need()) return;
+    const by = ui.user.id, at = Date.now();
+    const apply = (p) => { p = p && p.items ? p : { items: [] }; fn(p); p.items = p.items.filter((x) => !x.done || ymd(x.done.at) === ymd(at)); p.lane = id; if (edit) { p.by = by; p.at = at; } return p; };
+    store.plan = store.plan || {}; store.plan[id] = apply(W.clone(planOf(id))); render();
+    if (store.mode !== 'shared') { ls.set('wt-plan', JSON.stringify(store.plan)); return; }
+    try {
+      const ref = store.db.doc('plan/' + id);
+      if (ref.acquire) { for (let k = 0; k < 12; k++) { const l = await ref.acquire({ holder: DEV, ttlMs: 8000 }); if (l && l.acquired) break; await sleep(250); } }
+      let out = store.plan[id];
+      if (ref.get) { const sn = await ref.get(); out = apply(sn && sn.exists ? W.clone(sn.data()) : { items: [] }); }
+      await ref.set(out); store.plan[id] = out; render();
+    } catch (e) { toast('Could not save the priority list. Check the connection and try again.', 'bad'); }
+  }
+  function planAct(d) {
+    const ln = d.ln || ui.plane, idx = (p) => p.items.findIndex((x) => x.id === d.id);
+    const move = (dir) => (p) => { const open = p.items.filter((x) => !x.done), k = open.findIndex((x) => x.id === d.id), o = open[k + dir]; if (k < 0 || !o) return; const a = p.items.indexOf(open[k]), b = p.items.indexOf(o); const t = p.items[a]; p.items[a] = p.items[b]; p.items[b] = t; };
+    const nid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    if (d.a === 'plAdd') { if (!canPlan()) return toast('A manager or supervisor sets priorities.', 'bad'); const pr = d.k === 'p' ? paper().find((y) => y.f === d.fl && String(y.r.t) === d.ref) : null; return savePlan(ln, (p) => { if (p.items.some((x) => !x.done && x.k === d.k && x.ref === d.ref)) return; p.items.push({ id: nid(), k: d.k, ref: d.ref, fl: d.fl || '', snap: pr ? { pn: pr.r.pn, d: pr.r.d, q: pr.r.q, u: pr.r.u } : null, add: { by: ui.user.id, at: Date.now() }, done: null }); }, true).then(() => toast('Added to ' + lane(ln).name)); }
+    if (d.a === 'plTask') { if (!canPlan()) return; const v = ($('#pl-task').value || '').trim(); if (v.length < 3) return toast('Type the task first.', 'bad'); return savePlan(ln, (p) => { p.items.push({ id: nid(), k: 't', ref: '', text: v, add: { by: ui.user.id, at: Date.now() }, done: null }); }, true); }
+    if (d.a === 'plUp' || d.a === 'plDn') { if (!canPlan()) return; return savePlan(ln, move(d.a === 'plUp' ? -1 : 1), true); }
+    if (d.a === 'plRm') { if (!canPlan()) return; return savePlan(ln, (p) => { const k = idx(p); if (k >= 0) p.items.splice(k, 1); }, true); }
+    if (d.a === 'plClear') { if (!canPlan()) return; return savePlan(ln, (p) => { p.items = p.items.filter((x) => !x.done); }, true); }
+    if (d.a === 'plDone') return savePlan(ln, (p) => { const k = idx(p); if (k >= 0 && !p.items[k].done) p.items[k].done = { by: ui.user.id, at: Date.now() }; }).then(() => ui.user && toast('Marked done · ' + ui.user.name));
+    if (d.a === 'plUndo') return savePlan(ln, (p) => { const k = idx(p); if (k >= 0) p.items[k].done = null; });
+    if (d.a === 'plNote') { if (!canPlan()) return; const x = planOf(ln).items.find((y) => y.id === d.id); return openModal({ type: 'plNote', ln, id: d.id, note: (x && x.note) || '' }); }
+  }
   function paper() { const out = []; ['metal', 'filter', 'final'].forEach((f) => (store.logs[f] || []).forEach((r) => { if (!store.jobs['so-' + r.t]) out.push({ r: f === 'final' ? finS(r) : r, f }); })); return out; }
   const BASE = W.ROUTINGS.slice(), midx = {};
   const HAND = { '40-1022 TRV MASTER': 1, '207-7469 TRV KEY risk': 1, '270-7257 TRV KEY risk': 1, '1001050 TRV MASTER': 1, '1001249 PLEAT TRV': 1, '207-7469 PACKAGING TRAVELER': 1, '270-7257 PACKAGING TRAVELER': 1 };
@@ -2103,6 +2230,7 @@ window.WT_ESP = [
       }
       case 'receive': { const l = j.lots.find((x) => x.id === m.lot); h = '<h2>Receive container ' + l.id + '</h2><p><span class="mono">' + esc(j.pn) + '</span> · Shop Order ' + esc(j.so) + ' · sent as <b>' + l.qty + ' pcs</b> by ' + esc(nm(l.by)) + '.</p>' + inp('count', 'Count received', m, 'type="number" inputmode="numeric" min="0"') + '<p class="small muted">A different count is recorded and opens a hold for a supervisor to settle.</p>' + foot('Receive', 'go'); break; }
       case 'reroute': { const l = j.lots.find((x) => x.id === m.lot); h = '<h2>Send container ' + l.id + ' where?</h2><p>' + l.qty + ' pcs of <span class="mono">' + esc(j.pn) + '</span>. The next step is at <b>' + esc(W.station(l.expect).name) + '</b>.</p><div class="tiles">' + W.STATIONS.map((s) => '<button class="btn ' + (m.dest === s.id ? 'sel' : '') + '" data-set="dest" data-v="' + s.id + '"><span>' + esc(s.name) + '</span><small>' + (s.id === l.expect ? 'Next step' : '') + '</small></button>').join('') + '</div>' + foot('Redirect'); break; }
+      case 'plNote': h = '<h2>Note for this item</h2><p class="muted">Shows under the item on the area tablet. Example: needs to ship Thursday.</p>' + inp('note', 'Note', m, 'autocomplete="off"') + foot('Save note'); break;
       case 'priority': h = '<h2>Rush · Shop Order ' + esc(j.so) + '</h2><p class="muted">Jobs run in due-date order. ASAP jumps the line.</p><label class="check"><input type="checkbox" data-f="rush"' + (m.rush ? ' checked' : '') + '> ASAP — goes to the top of every list on every tablet</label>' + inp('reason', 'Reason for the change', m) + foot('Save'); break;
       case 'paper': { const r = (store.logs[m.floor] || []).find((x) => x.t === m.t) || {}, rts = routingsFor(r.pn), open = r.s === 'O';
         const f = (l, v) => '<div><b>' + (v === '' || v == null ? '—' : esc(v)) + '</b><span>' + l + '</span></div>';
@@ -2218,6 +2346,7 @@ window.WT_ESP = [
         return openModal({ type: 'labels', job: m.job, lots: ids }); }
       case 'receive': ok = run(m.job, 'receive', { lot: m.lot, count: m.count === '' ? NaN : m.count }); break;
       case 'reroute': ok = run(m.job, 'reroute', { lot: m.lot, dest: m.dest, reason: 'Redirected at ' + areaName() }); break;
+      case 'plNote': savePlan(m.ln, (p) => { const x = p.items.find((y) => y.id === m.id); if (x) x.note = (m.note || '').trim(); }, true); ok = true; break;
       case 'priority': ok = run(m.job, 'priority', { pri: m.pri, rush: m.rush, reason: m.reason }); break;
       case 'join': { const n = (m.name || '').trim(); if (n.length < 2) return toast('Type your name.', 'bad'); if (store.cfg.roster.some((x) => x.name.toLowerCase() === n.toLowerCase())) return toast(n + ' is already on the list. Go back and tap your name.', 'bad');
         const id = n.toLowerCase().replace(/[^a-z0-9]/g, '') + Date.now().toString(36).slice(-3);
@@ -2359,7 +2488,7 @@ window.WT_ESP = [
   function render() {
     const main = $('#main'); if (!main) return;
     const y = window.scrollY;
-    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
+    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'prio' ? renderPrio() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
     $('#b-home').textContent = '⌂ Main menu'; $('#b-list').textContent = '☰ Travelers'; $('#q').setAttribute('placeholder', 'Search or scan'); $('#b-lang').textContent = LANG === 'es' ? 'English' : 'Español';
     if (!document.fullscreenElement) $('#b-full').textContent = '⛶ Full';
     $('#b-station').textContent = 'Area: ' + areaName();
@@ -2482,7 +2611,9 @@ window.WT_ESP = [
     if (d.station) return setStation(d.station);
     if (d.open) return openJob(d.open, d.i);
     if (d.trole) { ui.trole = d.trole; return render(); }
-    if (d.nav) { ui.view = d.nav; if (d.mtab) ui.mtab = d.mtab; if (d.lf) ui.lfilt = d.lf; if (d.nav === 'list') ui.lfloor = d.lfl || 'both'; $('#results').hidden = true; return render(); }
+    if (d.plane) { ui.plane = d.plane; ui.plq = ''; return render(); }
+    if (/^pl(Add|Task|Up|Dn|Rm|Clear|Done|Undo|Note)$/.test(d.a || '')) return void planAct(d);
+    if (d.nav) { if (d.pl) { ui.plane = d.pl; ui.plq = ''; } ui.view = d.nav; if (d.mtab) ui.mtab = d.mtab; if (d.lf) ui.lfilt = d.lf; if (d.nav === 'list') ui.lfloor = d.lfl || 'both'; $('#results').hidden = true; return render(); }
     if (d.mtab) { ui.mtab = d.mtab; return render(); }
     if (d.tab) { ui.tab = d.tab; return render(); }
     if (d.op) { ui.opI = Number(d.op); ui.tab = 'work'; return render(); }
@@ -2604,6 +2735,7 @@ window.WT_ESP = [
     ui.touched = Date.now(); const t = e.target, m = ui.modal;
     if (t.id === 'q') return search(t.value);
     if (t.id === 'lib-q') { ui.libQ = t.value; const hb = $('#lib-hits'); if (hb) { hb.innerHTML = libHits(t.value); trDom(hb); } return; }
+    if (t.id === 'pl-q') { ui.plq = t.value; const hb = $('#pl-hits'); if (hb) { hb.innerHTML = planHits(t.value, ui.plane); trDom(hb); } return; }
     if (t.id === 'rel-find') { ui.relQ = t.value; const hb = $('#rel-hits'); if (hb) hb.innerHTML = relHits(t.value); return; }
     if (!m) return;
     if (t.dataset.f) { m[t.dataset.f] = t.type === 'checkbox' ? t.checked : t.value; if (m.type === 'finish' && (t.dataset.f === 'good' || t.dataset.f === 'scrap')) { const id = t.id, pos = t.value.length; renderModal(); const n = document.getElementById(id); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (er) { /* number inputs */ } } } }
