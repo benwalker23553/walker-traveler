@@ -1662,7 +1662,7 @@ window.WT_ESP = [
   }
   const ts = (iso) => (iso ? Date.parse(iso + 'T12:00:00') : 0);
   const sDate = (t) => (t ? new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—');
-  const finS = (r) => { if (r.s) return r; const iss = r.i ? Date.parse(r.i + 'T12:00:00') : 0; r.s = !r.c && iss && Date.now() - iss < 45 * 864e5 ? 'O' : 'C'; r.d = r.d || ''; return r; };
+  const finS = (r) => { if (r.s) return r; const iss = r.i ? Date.parse(r.i + 'T12:00:00') : 0; return Object.assign({}, r, { s: !r.c && iss && Date.now() - iss < 45 * 864e5 ? 'O' : 'C', d: r.d || '' }); };
 
   /* ---------- daily priorities: a manager or supervisor sets what each area runs first ---------- */
   const LANES = (() => { const L = []; W.STATIONS.filter((x) => x.kind === 'work').forEach((x) => { L.push({ id: x.id, st: x.id, floor: x.floor, name: x.name }); if (x.id === 'metal') L.push({ id: 'wash', st: 'metal', floor: 'metal', name: 'Wash' }); }); return L; })();
