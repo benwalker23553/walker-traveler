@@ -302,6 +302,18 @@ button small, .tiles small { font-size: .85rem; }
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 window.WT_ES = {
+"Wire welding":"Soldadura de alambre",
+"Clipping":"Engrapado",
+"Racing":"Carreras",
+"Potting line 1":"Línea de vaciado 1",
+"Paint / Powder Coat":"Pintura / Pintura en polvo",
+"Wash station":"Estación de lavado",
+"Paint and powder coat":"Pintura y pintura en polvo",
+"Racing filters":"Filtros de carreras",
+"Glue and foam":"Pegamento y espuma",
+"Assembly, packing":"Ensamble, empaque",
+"Cold saw, lathe, mill":"Sierra en frío, torno, fresadora",
+"Shear, punch, roll · sand blasting":"Cizalla, troquel, rolado · sandblast",
 "On the floor at":"En el piso en","On the floor":"En el piso",
 "Daily priorities":"Prioridades del día",
 "What each area runs first":"Qué corre primero cada área",
@@ -678,14 +690,18 @@ window.WT_ESP = [
 
   /* ---------- Work areas (proposed from the LOCATION / MACHINE columns on the travelers) ---------- */
   const STATIONS = [
-    { id: 'metal', floor: 'metal', name: 'Metal Floor', kind: 'work', note: 'Shear, punch, roll · wash station · sand blasting' },
-    { id: 'machine', floor: 'metal', name: 'Machine Shop', kind: 'work', note: 'No operations on the 12" CCE travelers yet' },
+    { id: 'metal', floor: 'metal', name: 'Metal Floor', kind: 'work', note: 'Shear, punch, roll · sand blasting' },
+    { id: 'wash', floor: 'metal', name: 'Wash', kind: 'work', note: 'Wash station' },
+    { id: 'machine', floor: 'metal', name: 'Machine Shop', kind: 'work', note: 'Cold saw, lathe, mill' },
     { id: 'weld', floor: 'metal', name: 'Welding', kind: 'work', note: 'Spot welder #383 · fixture FX685' },
-    { id: 'glue', floor: 'metal', name: 'Glue', kind: 'work', note: 'No operations on the 12" CCE travelers yet' },
-    { id: 'powder', floor: 'metal', name: 'Powder Coat', kind: 'work', note: 'No operations on the 12" CCE travelers yet' },
-    { id: 'pack', floor: 'metal', name: 'Packing and Assembly', kind: 'work', note: 'No operations on the 12" CCE travelers yet' },
+    { id: 'wire', floor: 'metal', name: 'Wire welding', kind: 'work', note: 'Wire welding' },
+    { id: 'glue', floor: 'metal', name: 'Glue', kind: 'work', note: 'Glue and foam' },
+    { id: 'powder', floor: 'metal', name: 'Paint / Powder Coat', kind: 'work', note: 'Paint and powder coat' },
+    { id: 'pack', floor: 'metal', name: 'Packing and Assembly', kind: 'work', note: 'Assembly, packing' },
     { id: 'pleat', floor: 'filter', name: 'Pleating', kind: 'work', note: 'Pleater #336 · sonic welder #453' },
-    { id: 'pot', floor: 'filter', name: 'Pouring', kind: 'work', note: 'Foam machine #308 · turntable #321 · oven' },
+    { id: 'pot', floor: 'filter', name: 'Potting line 1', kind: 'work', note: 'Foam machine #308 · turntable #321 · oven' },
+    { id: 'clip', floor: 'filter', name: 'Clipping', kind: 'work', note: 'Clipping' },
+    { id: 'race', floor: 'filter', name: 'Racing', kind: 'work', note: 'Racing filters' },
     { id: 'qc', floor: 'filter', name: 'QC and Packaging', kind: 'work', note: 'Height gage · ink marker #317 · handle · bag · box · palletize' },
   ];
 
@@ -1580,7 +1596,7 @@ window.WT_ESP = [
       work: () => tile('data-nav="station"', 'Work at this area', esc(areaName()) + (inc ? ' · ' + inc + ' incoming' : ''), here, 'go'),
       all: () => tile('data-nav="list" data-lf="active"', 'All travelers', 'Search, sort, open any traveler', J.length + openPaper),
       asap: () => (J.some((j) => j.rush) ? tile('data-nav="list" data-lf="active"', 'ASAP', 'Run these first', J.filter((j) => j.rush).length, 'bad') : ''),
-      today: () => { const n = LANES.filter((l) => inView(l.st)).reduce((a, l) => a + openItems(l.id).length, 0); return n ? tile('data-nav="station"', 'Run first today', 'Set by your supervisor', n, 'go') : ''; },
+      today: () => { const n = LANES.filter((l) => laneSeen(l)).reduce((a, l) => a + openItems(l.id).length, 0); return n ? tile('data-nav="station"', 'Run first today', 'Set by your supervisor', n, 'go') : ''; },
       prio: () => (canPlan() ? tile('data-nav="prio"', 'Daily priorities', 'What each area runs first', LANES.reduce((a, l) => a + openItems(l.id).length, 0), LANES.some((l) => planStale(l.id)) ? 'warn' : '') : T.today()),
       sign: () => tile('data-nav="list" data-lf="sign"', 'Needs a signature', 'First articles and closing signatures', sign, sign ? 'warn' : ''),
       hold: () => tile('data-nav="list" data-lf="hold"', 'On hold', 'Waiting on a disposition', hold, hold ? 'bad' : ''),
@@ -1674,7 +1690,8 @@ window.WT_ESP = [
   const finS = (r) => { if (r.s) return r; const iss = r.i ? Date.parse(r.i + 'T12:00:00') : 0; return Object.assign({}, r, { s: !r.c && iss && Date.now() - iss < 45 * 864e5 ? 'O' : 'C', d: r.d || '' }); };
 
   /* ---------- daily priorities: a manager or supervisor sets what each area runs first ---------- */
-  const LANES = (() => { const L = []; W.STATIONS.filter((x) => x.kind === 'work').forEach((x) => { L.push({ id: x.id, st: x.id, floor: x.floor, name: x.name }); if (x.id === 'metal') L.push({ id: 'wash', st: 'metal', floor: 'metal', name: 'Wash' }); }); return L; })();
+  const laneSeen = (l) => inView(l.st) || (l.id === 'wash' && inView('metal'));
+  const LANES = (() => { const L = []; W.STATIONS.filter((x) => x.kind === 'work').forEach((x) => { L.push({ id: x.id, st: x.id, floor: x.floor, name: x.name }); }); return L; })();
   const lane = (id) => LANES.find((l) => l.id === id) || LANES[0];
   const ymd = (t) => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
   const canPlan = () => !!ui.user && (ui.user.role === 'manager' || (W.isApprover(ui.user) && /supervisor|manage/i.test(ui.user.area || '')));
@@ -1732,7 +1749,7 @@ window.WT_ESP = [
   }
   function prioBox() {
     if (!store.plan) return '';
-    const L = LANES.filter((l) => inView(l.st) && liveItems(l.id).length);
+    const L = LANES.filter((l) => laneSeen(l) && liveItems(l.id).length);
     if (!L.length) return canPlan() ? '<div class="row" style="margin-bottom:10px"><button class="btn sm" data-nav="prio">Set today\'s priorities</button></div>' : '';
     return L.map((l) => '<section class="sec"><div class="ghead" style="border-color:var(--ok)"><h2>Today\'s priorities · ' + esc(l.name) + '</h2><span class="small muted">Set by ' + esc(nm(planOf(l.id).by)) + ' · ' + esc(fTime(planOf(l.id).at)) + (canPlan() ? ' <button class="btn sm" data-nav="prio" data-pl="' + l.id + '">Change</button>' : '') + '</span></div>' + planList(l.id, false) + '</section>').join('');
   }
@@ -1770,7 +1787,10 @@ window.WT_ESP = [
   BASE.forEach((r) => { (midx[key(r.pn)] = midx[key(r.pn)] || []).push(r); });
   function mapStation(loc, text, floor, kind) {
     const L = key(loc);
+    if (/WIRE ?WELD/.test(L)) return 'wire';
     if (/WELD/.test(L)) return 'weld';
+    if (/WASH/.test(L)) return 'wash';
+    if (/CLIP/.test(L)) return 'clip';
     if (/POWDER|PAINT/.test(L)) return 'powder';
     if (/MACHINE SHOP|COLD SAW|LATHE|MILL/.test(L)) return 'machine';
     if (/GLUE/.test(L)) return 'glue';
@@ -2157,7 +2177,7 @@ window.WT_ESP = [
     }
     if (ui.mtab === 'plan') {
       h += '<div class="panel"><h2>From this prototype to the floor</h2><div class="tbl-wrap"><table><tr><th>Phase</th><th>What happens</th><th>Done when</th></tr>' + [
-        ['1 · This week', 'Walk these screens at Pouring and QC and Packaging with one job. Answer the open questions. Confirm areas and approvers.', 'You and the quality lead agree the screens match how the 12" CCE line really runs.'],
+        ['1 · This week', 'Walk these screens at Potting line 1 and QC and Packaging with one job. Answer the open questions. Confirm areas and approvers.', 'You and the quality lead agree the screens match how the 12" CCE line really runs.'],
         ['2 · Build', 'Same engine moved onto its own app and database: real logins and PINs, photo capture, QR scan by tablet camera, offline queue, nightly backup, CSV export.', 'A tablet at each of the nine areas opens straight to its board.'],
         ['3 · Pilot', '40-1022, 207-7469, 270-7257 and their baffle, pleat pack and final assembly travelers. Digital is the record; paper for these parts is withdrawn the same day so there are never two.', 'Two weeks with no job on these parts run on paper.'],
         ['4 · Expand', 'Rank remaining parts by annual volume from your sales data, add routings in that order, reusing the potting, metal and final assembly templates.', 'Each added part runs its first job digitally.']
