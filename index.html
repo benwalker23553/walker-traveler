@@ -1246,10 +1246,15 @@ window.WT_ESP = [
     if (!store.staff || !store.staff.length) return;
     store.cfg.roster = store.staff.map((x) => ({ id: x.id, name: x.name, area: x.area, role: x.role, side: x.side || '', hasPin: !!x.hasPin, fin: !!x.fin }));
     if (ui.user) { const u = person(ui.user.id); if (!u) signOutUser(); else ui.user = Object.assign({}, u); }
+    else restoreMine();
   }
+  function restoreMine() { if (ui.user) return; const mp = myPhone(), u = mp && person(mp.id); if (u) { ui.user = Object.assign({}, u); ui.touched = Date.now(); ui.signedAt = Date.now(); } }
   async function loadStaff() { if (!SRV()) return; try { const r = await rpc('staff_roster'); if (Array.isArray(r) && r.length) { store.staff = r; applyStaff(); render(); if (ui.modal) renderModal(); } } catch (e) { /* offline: keep the last list */ } }
   function finEnd() { const t = ui.finTok; ui.finTok = null; ui.fin = null; ui.finErr = ''; if (t && SRV()) rpc('fin_lock', { p_token: t }).catch(() => {}); }
-  function signOutUser() { finEnd(); ui.user = null; ui.signedAt = 0; if (ui.view === 'finance') ui.view = 'home'; }
+  /* A supervisor's own phone (alerts turned on there) stays signed in for 12 hours after their PIN, so tapping an alert never asks again. Shared tablets still lock when idle. */
+  const myPhone = () => { try { const x = JSON.parse(ls.get('wt-mine') || 'null'); return x && x.id && x.until > Date.now() ? x : null; } catch (e) { return null; } };
+  const markMine = (id) => { if (id && ls.get('wt-alerts') === id) ls.set('wt-mine', JSON.stringify({ id, until: Date.now() + 12 * 36e5 })); };
+  function signOutUser() { ls.set('wt-mine', ''); finEnd(); ui.user = null; ui.signedAt = 0; if (ui.view === 'finance') ui.view = 'home'; }
   async function finLoad() {
     if (!ui.finTok || !SRV()) return;
     try { ui.fin = await rpc('fin_get', { p_token: ui.finTok }); ui.finErr = ''; }
@@ -1258,7 +1263,7 @@ window.WT_ESP = [
   }
   function signedIn(p, r) {
     ui.user = Object.assign({}, p, r ? { role: r.role, side: r.side || '', fin: !!r.fin } : {});
-    ui.touched = Date.now(); ui.signedAt = Date.now(); ui.finTok = (r && r.finToken) || null; ui.fin = null; ui.finErr = '';
+    ui.touched = Date.now(); ui.signedAt = Date.now(); markMine(p.id); ui.finTok = (r && r.finToken) || null; ui.fin = null; ui.finErr = '';
     if (ui.finTok) finLoad();
   }
   const pinWhy = (r) => r.reason === 'locked' ? 'Too many wrong PINs. Locked for a few minutes' + (r.until ? ' (until ' + r.until + ')' : '') + '.' : r.reason === 'no pin' ? 'No PIN yet. Tap Sign in at the top once to create it.' : 'Wrong PIN.';
@@ -1420,7 +1425,7 @@ window.WT_ESP = [
     const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }));
     const r = await rpc('push_subscribe', { p_id: id, p_pin: pin, p_sub: sub.toJSON(), p_ua: navigator.userAgent.slice(0, 200) });
     if (!r || !r.ok) throw new Error(r && r.reason === 'wrong' ? 'Wrong PIN.' : pinWhy(r || {}));
-    try { localStorage.setItem('wt-alerts', id); } catch (e) { /* private mode */ }
+    try { localStorage.setItem('wt-alerts', id); } catch (e) { /* private mode */ } markMine(id);
     return 'Alerts are on for ' + nm(id) + ' on this phone.';
   }
   function run(jobId, action, p, u) {
@@ -2526,9 +2531,9 @@ window.WT_ESP = [
           if ((m.pin || '').length !== 4) return toast('Enter 4 digits.', 'bad');
           if (!m.first) { m.first = m.pin; m.pin = ''; return renderModal(); }
           if (m.first !== m.pin) { m.first = ''; m.pin = ''; renderModal(); return toast('Those did not match. Start again.', 'bad'); }
-          lp.pin = m.pin; delete lp.tempPin; { const pid = lp.id, pin = m.pin; saveCfg((c) => { const x = c.roster.find((y) => y.id === pid); if (x) { x.pin = pin; delete x.tempPin; } }); } ui.user = lp; ui.touched = Date.now(); ui.signedAt = Date.now(); closeModal(); if (ui.view === 'home') ui.view = 'station'; render(); return toast('PIN saved. Signed in as ' + lp.name);
+          lp.pin = m.pin; delete lp.tempPin; { const pid = lp.id, pin = m.pin; saveCfg((c) => { const x = c.roster.find((y) => y.id === pid); if (x) { x.pin = pin; delete x.tempPin; } }); } ui.user = lp; markMine(lp.id); ui.touched = Date.now(); ui.signedAt = Date.now(); closeModal(); if (ui.view === 'home') ui.view = 'station'; render(); return toast('PIN saved. Signed in as ' + lp.name);
         } }
-      case 'login-go': p = verify(m); if (!p) return; ui.user = p; ui.touched = Date.now(); ui.signedAt = Date.now(); closeModal(); if (ui.view === 'home') ui.view = 'station'; render(); toast('Signed in as ' + p.name); return;
+      case 'login-go': p = verify(m); if (!p) return; ui.user = p; markMine(p.id); ui.touched = Date.now(); ui.signedAt = Date.now(); closeModal(); if (ui.view === 'home') ui.view = 'station'; render(); toast('Signed in as ' + p.name); return;
       case 'sign': if (!m.result) return toast('Choose pass or fail.', 'bad'); if (SRV() && m.pinOk !== m.who + ':' + m.pin && person(m.who)) return pinGate(m); p = verify(m, true); if (!p) return;
         ok = run(m.job, 'sign', { i: m.i, type: m.ctype, result: m.result, checked: m.checked, meas: m.meas, note: m.note, reason: m.reason, qty: m.qty }, p);
         if (ok) toast(m.result === 'pass' ? 'Signed by ' + p.name : 'Hold opened by ' + p.name, m.result === 'pass' ? '' : 'bad'); break;
@@ -2730,6 +2735,7 @@ window.WT_ESP = [
   function fitTiles() { document.querySelectorAll('.mtile .mt-t').forEach((e) => { e.style.fontSize = ''; let f = 1.6; while (e.scrollWidth > e.clientWidth + 1 && f > 1.05) { f -= 0.1; e.style.fontSize = f.toFixed(2) + 'rem'; } }); }
   window.addEventListener('resize', () => fitTiles());
   function render() {
+    if (!ui.user && store.loaded) restoreMine();
     const main = $('#main'); if (!main) return;
     if (ui.tv) { ui.view = 'board'; ui.modal = null; }
     const y = window.scrollY;
@@ -3011,10 +3017,11 @@ window.WT_ESP = [
       const j = jobs().find((x) => x.id.toLowerCase() === q || x.so.toLowerCase() === q); if (j) openJob(j.id); }
     if (e.key === 'Enter' && ui.modal && e.target.tagName === 'INPUT') { e.preventDefault(); submit(); }
   });
+  if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message', (e) => { const d = e.data || {}; if (d.type !== 'openJob' || !d.id) return; if (store.jobs[d.id]) { closeModal(); openJob(d.id); render(); } else ui.openJobOnLoad = d.id; });
   window.addEventListener('online', () => { store.offline = false; Object.keys(store.queue).forEach(pump); renderSync(); });
   window.addEventListener('offline', renderSync);
   setInterval(() => {
-    if (ui.user && !ui.modal && Date.now() - ui.touched > store.cfg.rules.idleLock * 1000) { signOutUser(); render(); toast('Signed out after ' + store.cfg.rules.idleLock + ' s idle'); return; }
+    if (ui.user && !ui.modal && !(myPhone() && myPhone().id === ui.user.id) && Date.now() - ui.touched > store.cfg.rules.idleLock * 1000) { signOutUser(); render(); toast('Signed out after ' + store.cfg.rules.idleLock + ' s idle'); return; }
     const a = document.activeElement; if (!ui.modal && !(a && /INPUT|SELECT|TEXTAREA/.test(a.tagName))) render();
   }, 30000);
 
