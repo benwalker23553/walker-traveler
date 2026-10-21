@@ -475,7 +475,7 @@ window.WT_ES = {
 "Steps, in order":"Pasos, en orden",
 "+ Add step":"+ Agregar paso",
 "Issue work order to the floor":"Emitir orden de trabajo al piso",
-"Cancel":"Cancelar","Not me":"No soy yo","Enter your PIN — tap the numbers or type them on the keyboard.":"Escribe tu PIN — toca los números o usa el teclado.","Create your PIN.":"Crea tu PIN.","Enter the same PIN again to confirm.":"Escribe el mismo PIN otra vez para confirmar.",
+"Cancel":"Cancelar","🔔 Call supervisor":"🔔 Llamar supervisor","🔔 Call a supervisor":"🔔 Llamar a un supervisor","Come check this part":"Ven a revisar esta pieza","First piece ready":"Primera pieza lista","Question on the print":"Pregunta sobre el plano","Machine problem":"Problema con la máquina","Need material":"Falta material","Quality problem":"Problema de calidad","Send alert":"Enviar alerta","Note (optional)":"Nota (opcional)","Pick a reason.":"Elige un motivo.","Not me":"No soy yo","Enter your PIN — tap the numbers or type them on the keyboard.":"Escribe tu PIN — toca los números o usa el teclado.","Create your PIN.":"Crea tu PIN.","Enter the same PIN again to confirm.":"Escribe el mismo PIN otra vez para confirmar.",
 "What to do at this step":"Qué hacer en este paso",
 "Work order number":"Número de orden de trabajo",
 "Part number (or prototype name)":"Número de parte (o nombre del prototipo)",
@@ -1323,7 +1323,7 @@ window.WT_ESP = [
     db.collection('jobs').onSnapshot((s) => {
       const m = {}; s.docs.forEach((d) => { const j = d.data(); if (j && j.id) m[j.id] = j; });
       Object.keys(store.queue).forEach((id) => { m[id] = store.queue[id].job || store.queue[id]; });
-      store.jobs = m; store.loaded = true; render(); setTimeout(endOfDay, 1500);
+      store.jobs = m; store.loaded = true; if (ui.openJobOnLoad && m[ui.openJobOnLoad]) { const oj = ui.openJobOnLoad; ui.openJobOnLoad = null; try { history.replaceState(null, '', location.pathname); } catch (e) { /* ok */ } openJob(oj); } render(); setTimeout(endOfDay, 1500);
     }, () => { store.mode = 'local'; loadLocal(); store.loaded = true; render(); });
     db.collection('logs').onSnapshot((s) => { s.docs.forEach((d) => { const x = d.data(); store.logs[d.id] = (x && x.rows) || []; if (d.id === 'final' && x) store.finMeta = { at: x.at, by: x.by, file: x.file }; }); render(); }, () => {});
     db.collection('routings').onSnapshot((s) => { s.docs.forEach((d) => { const r = d.data(); if (r && r.id && !W.routing(r.id)) W.ROUTINGS.push(W.clone(r)); }); render(); }, () => {});
@@ -1403,9 +1403,31 @@ window.WT_ESP = [
       await ref.set(c);
     } catch (e) { toast('Could not save settings. Check the connection and try again.', 'bad'); }
   }
+  /* ---------- phone alerts to supervisors (free web push; no prices ever) ---------- */
+  const ALERT = { reqFirst: 'First article ready to sign', reqMid: 'Midpoint check ready', finish: 'Closing signature needed', hold: 'Part put on hold', block: 'Job stopped — can’t start', scrap: 'Bad parts logged' };
+  function sendAlert(j, i, kind, title, extra) {
+    if (!window.WT_NOTIFY || !j) return Promise.resolve(null);
+    const op = i != null ? j.ops[i] : null, st = op ? op.station : (j.ops.find((o) => o.st !== 'done') || j.ops[0] || {}).station;
+    const who = ui.user ? ui.user.name : 'Someone';
+    const body = j.pn + ' · SO ' + j.so + (op ? ' · op ' + op.n : '') + ' · ' + (st ? W.station(st).name : '') + '\n' + who + (extra ? ': ' + extra : '');
+    return window.WT_NOTIFY({ side: W.sideOf(st), station: st, job: j.id, kind, from: ui.user ? ui.user.id : '', title, body, tag: 'wt-' + j.id + '-' + kind, url: location.origin + location.pathname + '#job=' + encodeURIComponent(j.id) }).catch(() => null);
+  }
+  async function alertsOn(id, pin) {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !window.WT_PUSH_KEY) throw new Error(/iPhone|iPad/.test(navigator.userAgent) ? 'Add this app to your Home Screen first, open it from the icon, then try again.' : 'This browser cannot get alerts. Use Chrome on Android, or the Home Screen app on iPhone.');
+    const perm = await Notification.requestPermission(); if (perm !== 'granted') throw new Error('Notifications are blocked. Allow them for this app in the phone settings.');
+    const reg = await navigator.serviceWorker.ready;
+    const k = window.WT_PUSH_KEY.replace(/-/g, '+').replace(/_/g, '/'), raw = atob(k + '='.repeat((4 - k.length % 4) % 4)), key = Uint8Array.from(raw, (c) => c.charCodeAt(0));
+    const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }));
+    const r = await rpc('push_subscribe', { p_id: id, p_pin: pin, p_sub: sub.toJSON(), p_ua: navigator.userAgent.slice(0, 200) });
+    if (!r || !r.ok) throw new Error(r && r.reason === 'wrong' ? 'Wrong PIN.' : pinWhy(r || {}));
+    try { localStorage.setItem('wt-alerts', id); } catch (e) { /* private mode */ }
+    return 'Alerts are on for ' + nm(id) + ' on this phone.';
+  }
   function run(jobId, action, p, u) {
     const j = store.jobs[jobId];
-    try { const ctx = { u: u || ui.user, at: Date.now(), cfg: store.cfg }; save(W.act(j, action, p, ctx), [[action, p, ctx]]); return true; }
+    try { const ctx = { u: u || ui.user, at: Date.now(), cfg: store.cfg }; save(W.act(j, action, p, ctx), [[action, p, ctx]]);
+      if (ALERT[action]) sendAlert(store.jobs[jobId] || j, p && p.i, action, ALERT[action], p && (p.reason || p.note) ? String(p.reason || p.note).slice(0, 120) : '');
+      return true; }
     catch (e) { if (e.user) { toast(e.message, 'bad'); return false; } throw e; }
   }
   function renderSync() {
@@ -1682,6 +1704,7 @@ window.WT_ESP = [
       sign: () => tile('data-nav="list" data-lf="sign"', 'Needs a signature', 'First articles and closing signatures', sign, sign ? 'warn' : ''),
       hold: () => tile('data-nav="list" data-lf="hold"', 'On hold', 'Waiting on a disposition', hold, hold ? 'bad' : ''),
       rl: () => tile('data-m="rlList"', 'Red-lines', 'Step changes to approve', rlPending().length, rlPending().length ? 'warn' : ''),
+      alerts: () => (ui.user && (ui.user.role === 'manager' || W.isApprover(ui.user)) && window.WT_PUSH_KEY ? tile('data-m="alertsOn"', '🔔 Alerts on this phone', (ls.get('wt-alerts') === ui.user.id ? 'On — tap to re-check' : 'Get a ping when you’re needed'), null, ls.get('wt-alerts') === ui.user.id ? '' : 'warn') : ''),
       fin: () => (SRV() && ui.user && ui.user.fin ? tile('data-nav="finance"', 'Prices and costs', 'Sage orders, cost, margin', ui.fin && ui.fin.recon && ui.fin.recon.flags ? ui.fin.recon.flags.filter((f) => f.lvl === 'bad').length : null, 'warn') : ''),
       issue: () => tile('data-nav="manage" data-mtab="release"', 'Issue a traveler', 'Part, quantity, go', null),
       final: () => tile('data-nav="list" data-lf="active" data-lfl="final"', 'Final assembly / packing', 'PO and Sales Order for shipping', paper().filter((x) => x.f === 'final' && x.r.s === 'O').length + jobs().filter((j) => j.st !== 'complete' && (j.final || j.floor === 'final')).length),
@@ -1696,7 +1719,7 @@ window.WT_ESP = [
     // Each person sees only what they use. Operators: their work. Supervisors, quality and managers: everything.
     const order = !ui.user ? ['inout', 'work', 'today', 'board', 'all', 'asap', 'where', 'train', 'area']
       : !lead ? ['work', 'mine', 'today', 'board', 'all', 'asap', 'hold', 'where', 'train', 'area', 'inout']
-      : ['work', 'prio', 'board', 'sign', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
+      : ['work', 'prio', 'board', 'sign', 'alerts', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
     return '<div class="head"><div><h1>Main menu</h1><p class="muted">' + (ui.user ? 'Signed in as ' + esc(ui.user.name.replace(/\.$/, '')) + '.' : 'Not signed in.') + ' This tablet is set to ' + esc(areaName()) + '.</p></div></div><div class="menu">' + order.map((k) => T[k]()).join('') + '</div>';
   }
 
@@ -2052,6 +2075,7 @@ window.WT_ESP = [
     if (active && !holds.length && !op.paused && ['setup', 'first_piece', 'running'].indexOf(op.st) >= 0) sec += M('pause', 'Pause', 'sm');
     if (!holds.length && !op.paused && ['first_piece', 'authorized', 'running'].indexOf(op.st) >= 0) sec += M('scrap', 'Log bad parts', 'sm');
     if (active) sec += M('hold', 'Raise hold', 'sm');
+    sec += M('callSup', '🔔 Call supervisor', 'sm');
     sec += M('redline', '✎ Red-line this step', 'sm');
     return '<div class="actionbar"><div class="msg">' + msg + '</div><div class="row">' + main + '</div><div class="row">' + sec + '</div></div>';
   }
@@ -2416,6 +2440,9 @@ window.WT_ESP = [
       case 'scrap': h = '<h2>Log bad parts · op ' + op.n + '</h2><p class="muted">Use this any time during the run. Bad parts from a supplier? Pick Supplier part bad. They are counted as scrap and already included when you finish the operation.' + (op.scrap ? ' Logged so far: ' + op.scrap + '.' : '') + '</p>' + tiles('reason', W.HOLD_REASONS, m) + supF(m) + inp('qty', 'How many are bad?', m, 'type="number" inputmode="numeric" min="1"') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Log bad parts'); break;
       case 'hold': h = '<h2>Raise a hold · op ' + op.n + '</h2><p class="muted">Use this when parts can\'t be used yet, including bad parts from a supplier before or during the job. Tag the parts and set them aside. Quality decides: return to supplier, rework, use as is or scrap.</p>' + tiles('reason', W.HOLD_REASONS, m) + supF(m) + inp('qty', 'Quantity affected', m, 'type="number" inputmode="numeric" min="1"') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Put on hold', 'stop'); break;
       case 'editStep': h = '<h2>Edit step · op ' + op.n + '</h2><p class="muted">Changes this job only. The master traveler stays the same. The change and the old text go in the record.</p><label>Instruction<textarea data-f="text" id="m-text" style="min-height:160px">' + esc(m.text || '') + '</textarea></label>' + inp('reason', 'Reason for the change', m) + foot('Save change'); break;
+      case 'callSup': h = '<h2>🔔 Call a supervisor</h2><p class="muted"><span class="mono">' + esc(j.pn) + '</span> · op ' + esc(op.n) + ' · ' + esc(W.station(op.station).name) + '. Sends an alert to the ' + esc(W.sideOf(op.station)) + ' supervisors’ phones.</p>' + tiles('reason', ['Come check this part', 'First piece ready', 'Question on the print', 'Machine problem', 'Need material', 'Quality problem'], m) +
+        '<label>Note (optional)<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Send alert', 'go'); break;
+      case 'alertsOn': h = '<h2>🔔 Alerts on this phone</h2><p>' + esc(nm(m.who)) + ', get a notification when someone in your area calls you, needs a signature, or puts a part on hold.</p><p class="small muted">iPhone: first add this app to your Home Screen (Share → Add to Home Screen) and open it from the icon. Then turn alerts on here.</p>' + pad(m) + foot('Turn on alerts', 'go'); break;
       case 'redline': { const o2 = W.routing(j.rid).ops[m.i]; h = '<h2>Red-line this step · op ' + op.n + '</h2><p class="muted">Write the step the way it should read. A signer approves it, and then every traveler for this part shows the new step on every tablet.</p>' +
         tiles('reason', RL_REASONS, m) + '<label>New step<textarea data-f="text" id="m-text" style="min-height:150px" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.text || '') + '</textarea></label>' +
         '<label>Note (optional)<input data-f="note" id="m-note" class="field" value="' + esc(m.note || '') + '" placeholder="Why, which tool or fixture"></label><p class="small muted">Now reads: <span class="notr">' + esc(liveStep(j.rid, op.n, o2.text, null).text) + '</span></p>' + foot('Send for approval'); break; }
@@ -2517,6 +2544,12 @@ window.WT_ESP = [
       case 'scrap': ok = run(m.job, 'scrap', { i: m.i, reason: m.reason, qty: m.qty, note: m.note, supName: m.supName, supRef: m.supRef }); if (ok) toast('Bad parts logged'); break;
       case 'hold': ok = run(m.job, 'hold', { i: m.i, reason: m.reason, qty: m.qty, note: m.note, supName: m.supName, supRef: m.supRef }); break;
       case 'flag': ok = run(m.job, 'flag', { i: m.i, text: m.text }); if (ok) toast('Sent for review'); break;
+      case 'callSup': { if (!m.reason) return toast('Pick a reason.', 'bad'); const j = store.jobs[m.job]; if (m.busy) return; m.busy = true;
+        run(m.job, 'logNote', { a: 'Called supervisor', d: m.reason + (m.note ? ' — ' + m.note : '') });
+        if (!window.WT_NOTIFY) { closeModal(); return toast('Alerts work on the live app only.', 'bad'); }
+        sendAlert(j, m.i, 'call', m.reason, m.note).then((r) => { closeModal(); if (r && r.data && r.data.sent) toast('Alert sent to ' + r.data.people.map(nm).join(', ')); else toast('Saved on the traveler. No supervisor has alerts turned on for this area yet — call them.', 'bad'); }); return; }
+      case 'alertsOn': { if ((m.pin || '').length !== 4 || m.busy) return; m.busy = true;
+        alertsOn(m.who, m.pin).then((msg) => { m.busy = false; closeModal(); toast(msg); render(); }).catch((e) => { m.busy = false; m.pin = ''; renderModal(); toast(String(e.message || e), 'bad'); }); return; }
       case 'redline': { const j = store.jobs[m.job], op = j.ops[m.i], o2 = W.routing(j.rid).ops[m.i], tx = String(m.text || '').trim(), was = liveStep(j.rid, op.n, o2.text, null).text;
         if (!m.reason) return toast('Pick what kind of change it is.', 'bad'); if (!tx || tx === was) return toast('Write the step the way it should read.', 'bad');
         const id = 'R' + Date.now().toString(36).toUpperCase().slice(-5);
@@ -2842,6 +2875,7 @@ window.WT_ESP = [
     if (d.q && m) { m.q = d.q; renderModal(); return ask(); }
     if (d.m) {
       if (d.m === 'login') return openModal({ type: 'login', who: null, pin: '' });
+      if (d.m === 'alertsOn') { if (!ui.user) return openModal({ type: 'login', who: null, pin: '' }); return openModal({ type: 'alertsOn', who: ui.user.id, pin: '' }); }
       if (d.m === 'finpin') { if (!ui.user) return openModal({ type: 'login', who: null, pin: '' }); return openModal({ type: 'finpin', who: ui.user.id, pin: '' }); }
       if (d.m === 'rlList') return openModal({ type: 'rlList' });
       if (d.m === 'labels') return openModal({ type: 'labels', job: d.job, lots: null });
@@ -2862,6 +2896,7 @@ window.WT_ESP = [
       if (d.m === 'receive') { const l = j.lots.find((x) => x.id === d.lot); return openModal({ type: 'receive', job, lot: d.lot, count: l.qty }); }
       if (d.m === 'reroute') { const l = j.lots.find((x) => x.id === d.lot); return openModal({ type: 'reroute', job, lot: d.lot, dest: l.expect }); }
       if (d.m === 'editStep') { const ed = (j.edits || {})[op.n]; return openModal({ type: 'editStep', job, i, text: ed ? ed.text : W.routing(j.rid).ops[i].text, reason: '' }); }
+      if (d.m === 'callSup') return openModal({ type: 'callSup', job, i, reason: '', note: '' });
       if (d.m === 'redline') return openModal({ type: 'redline', job, i, reason: '', text: liveStep(j.rid, op.n, W.routing(j.rid).ops[i].text, null).text, note: '' });
       if (d.m === 'jobWho') { if (!canPlan()) return toast('A manager or supervisor assigns jobs.', 'bad'); let w = ''; LANES.forEach((l) => openItems(l.id).forEach((x) => { if (x.k === 'j' && x.ref === j.id && x.who) w = x.who; })); return openModal({ type: 'jobWho', job: j.id, who: w }); }
       if (d.m === 'priority') return openModal({ type: 'priority', job, pri: j.pri, rush: j.rush, reason: '' });
@@ -2987,6 +3022,7 @@ window.WT_ESP = [
   const okSt = (x) => !!x && (/^all(metal|filter)?$/.test(x) || W.STATIONS.some((s) => s.id === x && s.kind === 'work'));
   ui.station = okSt(hs) ? hs : okSt(saved) ? saved : 'all';
   ui.view = 'home';
+  if (/^job=/.test(hs)) { ui.station = okSt(saved) ? saved : 'all'; ui.openJobOnLoad = decodeURIComponent(hs.slice(4)); }
   if (hs === 'tv') { ui.tv = true; ui.view = 'board'; document.body.classList.add('tv'); }
   init(); loadMaster();
 })();

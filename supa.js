@@ -136,5 +136,7 @@
     document.querySelectorAll('script[type="text/wt-deferred"]').forEach((old) => { const n = document.createElement('script'); n.text = old.text; old.replaceWith(n); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  window.WT_PUSH_KEY = 'BNi80xO7NFSp-QcyCLMGt2tyhdhT9FlUU-qCe_cbNTYLOvUdYZ3l5QbjZ1-3fzcddo4ihbANe_VtrZJKZLiQewQ';
+  window.WT_NOTIFY = async (body) => { await authed; return sb.functions.invoke('notify', { body }); };
   window.WT_SIGNOUT_DEVICE = async () => { await sb.auth.signOut(); location.reload(); };
 })();
