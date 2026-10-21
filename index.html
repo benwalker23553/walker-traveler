@@ -279,6 +279,35 @@ button small, .tiles small { font-size: .85rem; }
 .plfloor summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .plfloor .card { margin-top: 8px; }
 .floorat { color: var(--navy); }
+/* priorities: next-up, assigned, board, TV */
+.card.pl-next { border-width: 3px; border-color: var(--ok); box-shadow: 0 0 0 2px rgba(0,102,0,.12); }
+.card.pl-mine { background: #EEF7EE; }
+.plwho { color: var(--navy); }
+.ptop .ptgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.ptcell { display: flex; flex-direction: column; gap: 2px; text-align: left; background: var(--panel); border: 2px solid var(--ok); border-radius: var(--r); padding: 10px 12px; min-height: 64px; }
+.ptcell small { font-size: .82rem; color: var(--ink2); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.board { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.bcol { background: var(--panel); border: 2px solid var(--line); border-radius: var(--r); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.bhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; border-bottom: 3px solid var(--navy); padding-bottom: 6px; }
+.bhead h2 { margin: 0; }
+.bitem { display: flex; gap: 10px; align-items: flex-start; padding: 8px; border-radius: var(--r); background: var(--panel2); }
+.bitem.next { background: #E6F2E6; border: 2px solid var(--ok); }
+.bitem .bn { font-size: 1.6rem; min-width: 30px; text-align: center; color: var(--navy); line-height: 1.1; }
+.bitem.next .bn { color: var(--ok); }
+.bt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bt .mono { font-weight: 700; overflow-wrap: anywhere; }
+.bdone { color: var(--ok); font-weight: 700; }
+.tvclock { font-size: 1.6rem; font-weight: 700; color: var(--navy); }
+body.tv .top, body.tv #toast, body.tv #results { display: none !important; }
+body.tv .wrap { max-width: none; padding: 14px 18px; }
+body.tv .head h1 { font-size: 2.4rem; }
+body.tv .bhead h2 { font-size: 1.7rem; }
+body.tv .bitem { font-size: 1.25rem; }
+body.tv .bitem .small { font-size: 1.05rem; }
+body.tv .bitem .bn { font-size: 2.2rem; min-width: 44px; }
+body.tv .tvclock { font-size: 2.4rem; }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+body.tv .board { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
 
 </style>
 <header class="top">
@@ -302,6 +331,43 @@ button small, .tiles small { font-size: .85rem; }
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 window.WT_ES = {
+"Assembly number":"Número de ensamble",
+"Does it need an assembly number?":"¿Necesita número de ensamble?",
+"Yes":"Sí",
+"No":"No",
+"Assembly #":"Ensamble #",
+"Assign to a person":"Asignar a una persona",
+"Nobody":"Nadie",
+"Nobody yet — anyone in the area":"Nadie aún — cualquiera en el área",
+"Assign to a person (optional — shows as YOU on their tablet)":"Asignar a una persona (opcional — sale como TÚ en su tableta)",
+"Assigned to you · other areas":"Asignado a ti · otras áreas",
+"Run these in order, top first. Tap ✓ Done when each is finished.":"Córrelos en orden, el de arriba primero. Toca ✓ Hecho al terminar cada uno.",
+"Nothing assigned to you right now. Check your area's list.":"Nada asignado a ti ahora. Revisa la lista de tu área.",
+"Done today":"Terminado hoy",
+"Sign in to see the jobs assigned to you.":"Entra para ver los trabajos asignados a ti.",
+"Pick who runs it. It goes on the priority list for the area it is in now and shows as YOU on their tablet.":"Escoge quién lo corre. Va en la lista de prioridades del área donde está y sale como TÚ en su tableta.",
+"Assign":"Asignar",
+"Reassign":"Reasignar",
+"Assign to a person":"Asignar a una persona",
+"Anyone in the area":"Cualquiera en el área",
+"Not assigned":"Sin asignar",
+"Assigned to":"Asignado a",
+"YOU":"TÚ",
+"NEXT":"SIGUE",
+"Priorities board":"Tablero de prioridades",
+"Next up in every area":"Lo que sigue en cada área",
+"Assigned to me":"Asignado a mí",
+"Your supervisor picked these for you":"Tu supervisor te los asignó",
+"Priorities · all areas":"Prioridades · todas las áreas",
+"Live. Each area runs #1 first. Managers and supervisors set these in Daily priorities.":"En vivo. Cada área corre primero el #1. Gerentes y supervisores las fijan en Prioridades del día.",
+"Change priorities":"Cambiar prioridades",
+"Open TV view":"Abrir vista de TV",
+"Next up in each area":"Lo que sigue en cada área",
+"All priorities":"Todas las prioridades",
+"All done":"Todo terminado",
+"Nothing set":"Nada fijado",
+"No priorities set yet. A manager or supervisor sets them in Daily priorities.":"Aún no hay prioridades. Un gerente o supervisor las fija en Prioridades del día.",
+"⚠ not updated today":"⚠ no actualizado hoy",
 "Wire welding":"Soldadura de alambre",
 "Clipping":"Engrapado",
 "Racing":"Carreras",
@@ -598,6 +664,13 @@ window.WT_ES = {
 "Step changed for this job":"Paso cambiado para este trabajo","Sent for review":"Mandado a revisión","Saved":"Guardado","Changed for this job":"Cambiado para este trabajo"
 };
 window.WT_ESP = [
+[/^Assigned to (.+)$/, 'Asignado a $1'],
+[/^Assign Shop Order (.+)$/, 'Asignar Orden de Taller $1'],
+[/^(.+) · #(\d+) on that area's list$/, "$1 · #$2 en la lista de esa área"],
+[/^(.+) · people in this area are first\. They see it marked YOU on the tablet\.$/, '$1 · las personas de esta área salen primero. Lo ven marcado TÚ en la tableta.'],
+[/^(.+) · (\d+) on the list$/, '$1 · $2 en la lista'],
+[/^✓ (\d+) done today$/, '✓ $1 terminados hoy'],
+[/^\+ (\d+) more$/, '+ $1 más'],
 [/^On the floor · count (.+)$/, 'En el piso · conteo $1'],
 [/^On the floor here now · (\d+) travelers$/, 'En el piso aquí ahora · $1 viajeros'],
 [/^floor count (.+) · oldest first$/, 'conteo del piso $1 · los más viejos primero'],
@@ -1374,7 +1447,7 @@ window.WT_ESP = [
     let h = '<div class="head"><div><h1>' + esc(st.name) + '</h1><p class="muted">' + esc(st.note || '') + '</p></div><div class="counts">' + cnt(B.ready.length, 'Ready') + cnt(B.progress.length, 'In progress') + cnt(B.approval.length, 'To sign') + cnt(B.hold.length, 'On hold') + cnt(inc.length, 'Incoming') + '</div></div>';
     if (!store.loaded) h += '<div class="empty">Connecting to the shop record. Jobs released by the office will list here in priority order.</div>';
     else if (!Object.keys(store.jobs).length) h += '<div class="banner info"><div><b>No jobs released yet.</b> Released jobs appear here sorted by priority. A manager releases the first one from Manage → Release job.</div><button class="btn sm" data-nav="manage" data-mtab="release">Release a job</button></div>';
-    h += prioBox();
+    h += mineBox() + prioBox();
     h += '<div class="cols"><div class="col">' +
       section('Waiting for supervisor', B.approval, 'Nothing is waiting on a signature.') +
       section('Ready to work · run in this order', B.ready, 'No jobs are ready here.') +
@@ -1533,7 +1606,7 @@ window.WT_ESP = [
   const TRAIN = {
     operator: { en: 'Operator', es: 'Operador', video: 'training/operator.mp4', steps: [
       ['Sign in', 'Tap Sign in, tap your name, enter your 4-digit PIN. First time: make your PIN from your birth month and year (March 1985 = 0385).', 'Entrar', 'Toca Entrar, toca tu nombre y escribe tu PIN de 4 números. La primera vez haz tu PIN con tu mes y año de nacimiento (marzo 1985 = 0385).'],
-      ['Run first today', 'Your supervisor sets Today\'s priorities at the top of your area. Run them in order: 1, then 2. When one is finished, tap ✓ Done so the supervisor sees it.', 'Correr primero hoy', 'Tu supervisor fija Prioridades de hoy arriba en tu área. Córrelas en orden: 1, luego 2. Cuando termines una, toca ✓ Hecho para que el supervisor lo vea.'],
+      ['Run first today', 'Your supervisor sets Today\'s priorities at the top of your area. Always run NEXT (#1) first. Jobs marked YOU are assigned to you. When one is finished, tap ✓ Done so the supervisor sees it.', 'Correr primero hoy', 'Tu supervisor fija Prioridades de hoy arriba en tu área. Córrelas en orden: 1, luego 2. Cuando termines una, toca ✓ Hecho para que el supervisor lo vea.'],
       ['Pick the job', 'Your area shows jobs in order. Do RUN 1 first. Red LATE and ASAP go first.', 'Escoge el trabajo', 'Tu área muestra los trabajos en orden. Haz primero el RUN 1. ATRASADO y URGENTE van primero.'],
       ['Read the step, risk and prints', 'Read the step. The colored label is the risk: green low, yellow medium, red high. Tap Prints: the current released print from drafting shows first. A yellow warning means the drawing rev changed.', 'Lee el paso, el riesgo y los planos', 'Lee el paso. La etiqueta de color es el riesgo: verde bajo, amarillo medio, rojo alto. Toca Planos: el plano liberado más reciente sale primero. Un aviso amarillo significa que cambió la revisión.'],
       ['Start and first article', 'Tap the big green button. Make your first piece, then tap Request first-article approval and call your supervisor.', 'Empieza y primera pieza', 'Toca el botón verde grande. Haz tu primera pieza, toca Pedir aprobación de primera pieza y llama a tu supervisor.'],
@@ -1548,7 +1621,7 @@ window.WT_ESP = [
       ['Sign out', 'Tap your name at the top when you leave. The tablet also signs you out after 3 minutes without use.', 'Salir', 'Toca tu nombre arriba al irte. La tableta también te saca después de 3 minutos sin uso.']] },
     supervisor: { en: 'Supervisor', es: 'Supervisor', video: 'training/supervisor.mp4', steps: [
       ['Start here', 'Main menu shows what needs you: Needs a signature, On hold, Red-lines, Improve.', 'Empieza aquí', 'El menú muestra lo que te necesita: Necesita firma, Retenido, Correcciones, Mejorar.'],
-      ['Daily priorities', 'Each morning: Main menu → Daily priorities. Tap an area (Wash, Welding, Metal Floor…), search the traveler #, part # or description, tap + Add. Use ↑ ↓ to set the order, Note for a reason (ships Thursday), or add a task in your own words. ⚠ means that area was not updated today. Operators tap Done; you see who and when.', 'Prioridades del día', 'Cada mañana: Menú → Prioridades del día. Toca un área (Lavado, Soldadura, Piso de Metal…), busca el viajero #, parte # o descripción y toca + Agregar. Usa ↑ ↓ para el orden, Nota para una razón (se embarca el jueves) o agrega una tarea con tus palabras. ⚠ quiere decir que esa área no se actualizó hoy. Los operadores tocan Hecho; ves quién y cuándo.'],
+      ['Daily priorities', 'Each morning: Main menu → Daily priorities. Tap an area (Wash, Welding, Metal Floor…), search the traveler #, part # or description, tap + Add. Use ↑ ↓ to set the order, Note for a reason (ships Thursday), or add a task in your own words. ⚠ means that area was not updated today. Tap Assign to give a job to one person; they see it marked YOU. Operators tap Done; you see who and when. Priorities board (and the top of Travelers) shows what is next in every area; open it on a TV with the Open TV view button.', 'Prioridades del día', 'Cada mañana: Menú → Prioridades del día. Toca un área (Lavado, Soldadura, Piso de Metal…), busca el viajero #, parte # o descripción y toca + Agregar. Usa ↑ ↓ para el orden, Nota para una razón (se embarca el jueves) o agrega una tarea con tus palabras. ⚠ quiere decir que esa área no se actualizó hoy. Los operadores tocan Hecho; ves quién y cuándo.'],
       ['First article', 'Check the part. Tap Pass or Fail, enter your PIN, tap Sign. Fail opens a hold for the bad pieces.', 'Primera pieza', 'Revisa la pieza. Toca Pasa o No pasa, tu PIN y Firmar. No pasa abre una retención.'],
       ['Closing signature', 'Check the counts add up, then sign. Parts can move only after this.', 'Firma de cierre', 'Revisa que las cantidades cuadren y firma. Las piezas se mueven solo después.'],
       ['Holds', 'Record a disposition: rework, use as is, scrap, or return. Nothing moves until you do.', 'Retenciones', 'Registra la disposición: retrabajo, usar como está, scrap o regresar. Nada se mueve hasta que lo hagas.'],
@@ -1596,6 +1669,8 @@ window.WT_ESP = [
       work: () => tile('data-nav="station"', 'Work at this area', esc(areaName()) + (inc ? ' · ' + inc + ' incoming' : ''), here, 'go'),
       all: () => tile('data-nav="list" data-lf="active"', 'All travelers', 'Search, sort, open any traveler', J.length + openPaper),
       asap: () => (J.some((j) => j.rush) ? tile('data-nav="list" data-lf="active"', 'ASAP', 'Run these first', J.filter((j) => j.rush).length, 'bad') : ''),
+      board: () => { const n = LANES.filter((l) => openItems(l.id).length).length; return n ? tile('data-nav="board"', 'Priorities board', 'Next up in every area', n, '') : ''; },
+      mine: () => { if (!ui.user) return ''; const M = []; LANES.forEach((l) => openItems(l.id).forEach((x) => { if (x.who === ui.user.id) M.push(x); })); return M.length ? tile('data-nav="mine"', 'Assigned to me', 'Your supervisor picked these for you', M.length, 'go') : ''; },
       today: () => { const n = LANES.filter((l) => laneSeen(l)).reduce((a, l) => a + openItems(l.id).length, 0); return n ? tile('data-nav="station"', 'Run first today', 'Set by your supervisor', n, 'go') : ''; },
       prio: () => (canPlan() ? tile('data-nav="prio"', 'Daily priorities', 'What each area runs first', LANES.reduce((a, l) => a + openItems(l.id).length, 0), LANES.some((l) => planStale(l.id)) ? 'warn' : '') : T.today()),
       sign: () => tile('data-nav="list" data-lf="sign"', 'Needs a signature', 'First articles and closing signatures', sign, sign ? 'warn' : ''),
@@ -1613,9 +1688,9 @@ window.WT_ESP = [
       inout: () => (ui.user ? tile('id="t-out"', 'Sign out', esc(ui.user.name), null) : tile('data-m="login"', 'Sign in', 'Tap your name, enter your PIN', null, 'go'))
     };
     // Each person sees only what they use. Operators: their work. Supervisors, quality and managers: everything.
-    const order = !ui.user ? ['inout', 'work', 'today', 'all', 'asap', 'where', 'train', 'area']
-      : !lead ? ['work', 'today', 'all', 'asap', 'hold', 'where', 'train', 'area', 'inout']
-      : ['work', 'prio', 'sign', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
+    const order = !ui.user ? ['inout', 'work', 'today', 'board', 'all', 'asap', 'where', 'train', 'area']
+      : !lead ? ['work', 'mine', 'today', 'board', 'all', 'asap', 'hold', 'where', 'train', 'area', 'inout']
+      : ['work', 'prio', 'board', 'sign', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
     return '<div class="head"><div><h1>Main menu</h1><p class="muted">' + (ui.user ? 'Signed in as ' + esc(ui.user.name.replace(/\.$/, '')) + '.' : 'Not signed in.') + ' This tablet is set to ' + esc(areaName()) + '.</p></div></div><div class="menu">' + order.map((k) => T[k]()).join('') + '</div>';
   }
 
@@ -1694,7 +1769,7 @@ window.WT_ESP = [
   const LANES = (() => { const L = []; W.STATIONS.filter((x) => x.kind === 'work').forEach((x) => { L.push({ id: x.id, st: x.id, floor: x.floor, name: x.name }); }); return L; })();
   const lane = (id) => LANES.find((l) => l.id === id) || LANES[0];
   const ymd = (t) => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
-  const canPlan = () => !!ui.user && (ui.user.role === 'manager' || (W.isApprover(ui.user) && /supervisor|manage/i.test(ui.user.area || '')));
+  const canPlan = () => !!ui.user && (ui.user.role === 'manager' || W.isApprover(ui.user));
   const planOf = (id) => (store.plan && store.plan[id]) || { items: [] };
   const wipRows = (ln) => ((store.wip && store.wip.rows) || []).filter((r) => r.ln === ln);
   const wipDate = () => (store.wip && store.wip.date ? fDue(store.wip.date) : '');
@@ -1726,10 +1801,11 @@ window.WT_ESP = [
   }
   function planRow(x, k, edit, ln, n) {
     const I = itemInfo(x), done = !!x.done, d = ' data-ln="' + ln + '" data-id="' + esc(x.id) + '"';
-    return '<div class="card ' + (done ? 'b-progress pl-done' : 'b-ready') + '"><span class="pri"><small>' + (done ? 'DONE' : 'RUN') + '</small>' + (done ? '✓' : k + 1) + '</span>' +
-      '<span class="c-main"><span class="pn mono">' + esc(I.title) + '</span>' + (I.sub ? '<span class="small muted">' + esc(I.sub) + '</span>' : '') + (x.note ? '<span class="small"><b>Note:</b> <span class="notr">' + esc(x.note) + '</span></span>' : '') + (done ? '<span class="small"><b>Done</b> · ' + esc(nm(x.done.by)) + ' · ' + esc(fTime(x.done.at)) + '</span>' : '') + '</span>' +
+    const mine = ui.user && x.who === ui.user.id && !done;
+    return '<div class="card ' + (done ? 'b-progress pl-done' : 'b-ready') + (!done && k === 0 ? ' pl-next' : '') + (mine ? ' pl-mine' : '') + '"><span class="pri"><small>' + (done ? 'DONE' : k === 0 ? 'NEXT' : 'RUN') + '</small>' + (done ? '✓' : k + 1) + '</span>' +
+      '<span class="c-main"><span class="pn mono">' + esc(I.title) + '</span>' + (I.sub ? '<span class="small muted">' + esc(I.sub) + '</span>' : '') + (x.who ? '<span class="small plwho">👤 Assigned to <b>' + esc(nm(x.who)) + '</b>' + (mine ? ' <span class="pill ok">YOU</span>' : '') + '</span>' : '') + (x.note ? '<span class="small"><b>Note:</b> <span class="notr">' + esc(x.note) + '</span></span>' : '') + (done ? '<span class="small"><b>Done</b> · ' + esc(nm(x.done.by)) + ' · ' + esc(fTime(x.done.at)) + '</span>' : '') + '</span>' +
       '<span class="c-act"><span class="row">' + (I.job ? '<button class="btn sm" data-open="' + esc(I.job) + '">Open</button>' : '') + (done ? '<button class="btn sm" data-a="plUndo"' + d + '>Not done</button>' : '<button class="btn sm go" data-a="plDone"' + d + '>✓ Done</button>') +
-      (edit && !done ? '<button class="btn sm" data-a="plUp"' + d + (k === 0 ? ' disabled' : '') + ' aria-label="Move up">↑</button><button class="btn sm" data-a="plDn"' + d + (k >= n - 1 ? ' disabled' : '') + ' aria-label="Move down">↓</button><button class="btn sm" data-a="plNote"' + d + '>Note</button>' : '') + (edit ? '<button class="btn sm" data-a="plRm"' + d + ' aria-label="Remove">✕</button>' : '') + '</span></span></div>';
+      (edit && !done ? '<button class="btn sm" data-a="plUp"' + d + (k === 0 ? ' disabled' : '') + ' aria-label="Move up">↑</button><button class="btn sm" data-a="plDn"' + d + (k >= n - 1 ? ' disabled' : '') + ' aria-label="Move down">↓</button><button class="btn sm" data-a="plNote"' + d + '>Note</button><button class="btn sm" data-a="plWho"' + d + '>' + (x.who ? 'Reassign' : 'Assign') + '</button>' : '') + (edit ? '<button class="btn sm" data-a="plRm"' + d + ' aria-label="Remove">✕</button>' : '') + '</span></span></div>';
   }
   function planList(ln, edit) { const it = liveItems(ln), n = it.filter((x) => !x.done).length; return it.map((x, k) => planRow(x, k, edit, ln, n)).join(''); }
   function renderPrio() {
@@ -1746,6 +1822,28 @@ window.WT_ESP = [
       (it.some((x) => x.done) ? '<button class="btn sm" data-a="plClear" data-ln="' + ln + '" style="align-self:flex-start">Clear finished</button>' : '');
     else h += '<p class="small muted">A manager or supervisor sets this list.</p>';
     return h + '</div>';
+  }
+  function boardCols(maxItems) {
+    return LANES.filter((l) => liveItems(l.id).length).map((l) => { const it = liveItems(l.id), open = it.filter((x) => !x.done), done = it.filter((x) => x.done), P = planOf(l.id);
+      return '<section class="bcol"><div class="bhead"><h2>' + esc(l.name) + '</h2><span class="small">' + (planStale(l.id) ? '⚠ not updated today' : 'Set ' + esc(fTime(P.at)) + ' · ' + esc(nm(P.by))) + '</span></div>' +
+        (open.length ? open.slice(0, maxItems).map((x, k) => { const I = itemInfo(x); return '<div class="bitem' + (k === 0 ? ' next' : '') + '"><b class="bn">' + (k + 1) + '</b><span class="bt"><span class="mono">' + esc(I.title) + '</span>' + (I.sub ? '<span class="small">' + esc(I.sub) + '</span>' : '') + (x.who ? '<span class="small">👤 ' + esc(nm(x.who)) + '</span>' : '') + (x.note ? '<span class="small"><b>Note:</b> <span class="notr">' + esc(x.note) + '</span></span>' : '') + '</span></div>'; }).join('') + (open.length > maxItems ? '<div class="small muted">+ ' + (open.length - maxItems) + ' more</div>' : '') : '<div class="small muted">All done</div>') +
+        (done.length ? '<div class="small bdone">✓ ' + done.length + ' done today</div>' : '') + '</section>'; }).join('');
+  }
+  function renderBoard() {
+    const cols = boardCols(ui.tv ? 5 : 10);
+    return '<div class="head"><div><h1>Priorities · all areas</h1><p class="muted">Live. Each area runs #1 first. Managers and supervisors set these in Daily priorities.</p></div><div class="row"><span class="tvclock num">' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + '</span>' + (ui.tv ? '' : (canPlan() ? '<button class="btn" data-nav="prio">Change priorities</button>' : '') + '<a class="btn" href="#tv" target="_blank" rel="noopener">Open TV view</a>') + '</div></div>' + (cols ? '<div class="board">' + cols + '</div>' : '<div class="empty">No priorities set yet. A manager or supervisor sets them in Daily priorities.</div>');
+  }
+  function renderMine() {
+    if (!ui.user) return '<div class="empty">Sign in to see the jobs assigned to you.</div>';
+    const M = []; LANES.forEach((l) => liveItems(l.id).forEach((x) => { if (x.who === ui.user.id) M.push([l, x]); }));
+    const open = M.filter((o) => !o[1].done), dn = M.filter((o) => o[1].done);
+    return '<div class="head"><div><h1>Assigned to ' + esc(ui.user.name.replace(/\.$/, '')) + '</h1><p class="muted">Run these in order, top first. Tap ✓ Done when each is finished.</p></div></div>' +
+      (open.length ? open.map((o, k) => '<div class="small muted" style="margin:10px 0 2px"><b>' + esc(o[0].name) + '</b> · #' + (openItems(o[0].id).indexOf(o[1]) + 1) + ' on that area\'s list</div>' + planRow(o[1], k, false, o[0].id, open.length)).join('') : '<div class="empty">Nothing assigned to you right now. Check your area\'s list.</div>') +
+      (dn.length ? '<h2 style="margin-top:18px">Done today</h2>' + dn.map((o) => planRow(o[1], 0, false, o[0].id, 0)).join('') : '');
+  }
+  function mineBox() {
+    if (!ui.user || !store.plan) return ''; const M = []; LANES.forEach((l) => { if (laneSeen(l)) return; openItems(l.id).forEach((x) => { if (x.who === ui.user.id) M.push([l, x]); }); });
+    return M.length ? '<section class="sec"><div class="ghead" style="border-color:var(--ok)"><h2>Assigned to you · other areas</h2></div>' + M.map((o) => '<div class="small muted" style="margin:6px 0 2px">' + esc(o[0].name) + '</div>' + planRow(o[1], 0, false, o[0].id, 1)).join('') + '</section>' : '';
   }
   function prioBox() {
     if (!store.plan) return '';
@@ -1778,8 +1876,18 @@ window.WT_ESP = [
     if (d.a === 'plClear') { if (!canPlan()) return; return savePlan(ln, (p) => { p.items = p.items.filter((x) => !x.done); }, true); }
     if (d.a === 'plDone') return savePlan(ln, (p) => { const k = idx(p); if (k >= 0 && !p.items[k].done) p.items[k].done = { by: ui.user.id, at: Date.now() }; }).then(() => ui.user && toast('Marked done · ' + ui.user.name));
     if (d.a === 'plUndo') return savePlan(ln, (p) => { const k = idx(p); if (k >= 0) p.items[k].done = null; });
+    if (d.a === 'plWho') { if (!canPlan()) return; const x = planOf(ln).items.find((y) => y.id === d.id); return openModal({ type: 'plWho', ln, id: d.id, who: (x && x.who) || '' }); }
     if (d.a === 'plNote') { if (!canPlan()) return; const x = planOf(ln).items.find((y) => y.id === d.id); return openModal({ type: 'plNote', ln, id: d.id, note: (x && x.note) || '' }); }
   }
+  /* ---------- assembly numbers: MMYY + 2-digit sequence that restarts each month (e.g. 102611) ---------- */
+  const assyOf = (r) => { if (r.a) return String(r.a); const m = /S\/N lot (\d{5,8})/.exec(r.n || ''); return m ? m[1] : ''; };
+  function assyHist(pn) { const k = String(pn || '').toLowerCase(); let n = 0, y = 0; (store.logs.metal || []).forEach((r) => { if (String(r.pn).toLowerCase() === k) { n++; if (assyOf(r)) y++; } }); jobs().forEach((j) => { if (String(j.pn).toLowerCase() === k) { n++; if (j.assy) y++; } }); return { n, y }; }
+  function nextAssy() { const d = new Date(), pre = String(d.getMonth() + 1).padStart(2, '0') + String(d.getFullYear() % 100).padStart(2, '0'); let mx = 0; const see = (a) => { a = String(a || ''); if (a.length === 6 && a.slice(0, 4) === pre) mx = Math.max(mx, Number(a.slice(4)) || 0); };
+    (store.logs.metal || []).forEach((r) => see(assyOf(r))); jobs().forEach((j) => see(j.assy)); return pre + String(mx + 1).padStart(2, '0'); }
+  const assyUsed = (a) => !!a && ((store.logs.metal || []).some((r) => assyOf(r) === a) || jobs().some((j) => j.assy === a));
+  const assignList = () => store.cfg.roster.slice().filter((p) => p.role === 'operator' || W.isApprover(p)).sort((a, b) => String(a.area || '').localeCompare(String(b.area || '')) || a.name.localeCompare(b.name));
+  function assignJob(job, who, laneId) { const ln = laneId || (() => { const k = job.ops.findIndex((o, i) => W.bucket(job, i)); return job.ops[k >= 0 ? k : 0].station; })();
+    return savePlan(ln, (p) => { let x = p.items.find((y) => !y.done && y.k === 'j' && y.ref === job.id); if (!x) { x = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), k: 'j', ref: job.id, fl: '', snap: null, add: { by: ui.user.id, at: Date.now() }, done: null }; p.items.push(x); } x.who = who || ''; }, true); }
   function paper() { const out = []; ['metal', 'filter', 'final'].forEach((f) => (store.logs[f] || []).forEach((r) => { if (!store.jobs['so-' + r.t]) out.push({ r: f === 'final' ? finS(r) : r, f }); })); return out; }
   const BASE = W.ROUTINGS.slice(), midx = {};
   const HAND = { '40-1022 TRV MASTER': 1, '207-7469 TRV KEY risk': 1, '270-7257 TRV KEY risk': 1, '1001050 TRV MASTER': 1, '1001249 PLEAT TRV': 1, '207-7469 PACKAGING TRAVELER': 1, '270-7257 PACKAGING TRAVELER': 1 };
@@ -1854,10 +1962,12 @@ window.WT_ESP = [
     L.sort(S[ui.lsort]);
     const chip = (grp, v, label) => '<button class="btn sm ' + (ui[grp] === v ? 'sel' : '') + '" data-' + grp + '="' + v + '">' + label + '</button>';
     const n = (f) => items.filter(F[f]).length;
+    const topP = LANES.map((l) => ({ l, x: openItems(l.id)[0], n: openItems(l.id).length })).filter((o) => o.x);
+    const prioTop = topP.length ? '<div class="panel ptop"><div class="row" style="justify-content:space-between"><h2>Next up in each area</h2><button class="btn sm" data-nav="board">All priorities</button></div><div class="ptgrid">' + topP.map((o) => { const I = itemInfo(o.x); return '<button class="ptcell" data-nav="board"><small>' + esc(o.l.name) + ' · ' + o.n + ' on the list</small><b class="mono">' + esc(I.title) + '</b><span class="small muted">' + esc(I.sub) + (o.x.who ? ' · 👤 ' + esc(nm(o.x.who)) : '') + '</span></button>'; }).join('') + '</div></div>' : '';
     let h = '<div class="head"><div><h1>Travelers</h1><p class="muted">Every traveler on the floor, from your metal and filter logs. Tap one to open it.</p>' + (ui.lfloor === 'final' ? '<p class="muted small">The final assembly log has no finish dates, so Open here means issued in the last 45 days.</p>' : '') + '</div>' + '<span class="row">' + (ui.user && W.canDispose(ui.user) ? '<button class="btn" data-nav="manage" data-mtab="release">+ Issue a traveler</button>' : '') + (store.downloads ? '<button class="btn sm" data-a="csv">Save list as spreadsheet</button>' : '') + '</span>' + '</div>' +
       '<div class="row"><span class="small muted" style="min-width:52px">Floor</span>' + chip('lfloor', 'both', 'Both') + chip('lfloor', 'metal', 'Metal') + chip('lfloor', 'filter', 'Filter') + chip('lfloor', 'final', 'Final assembly / packing') + '</div>' +
       '<div class="row"><span class="small muted" style="min-width:52px">Show</span>' + chip('lfilt', 'active', 'Open ' + n('active')) + chip('lfilt', 'late', 'Past due ' + n('late')) + chip('lfilt', 'sign', 'Needs signature ' + n('sign')) + chip('lfilt', 'hold', 'On hold ' + n('hold')) + chip('lfilt', 'done', 'Closed ' + n('done')) + chip('lfilt', 'all', 'All ' + items.length) + '</div>' +
-      '<div class="row"><span class="small muted" style="min-width:52px">Sort</span>' + chip('lsort', 'part', 'Part · most volume first') + chip('lsort', 'issued', 'Date issued') + chip('lsort', 'due', 'Due date') + chip('lsort', 'pri', 'Run order') + '</div>';
+      '<div class="row"><span class="small muted" style="min-width:52px">Sort</span>' + chip('lsort', 'part', 'Part · most volume first') + chip('lsort', 'issued', 'Date issued') + chip('lsort', 'due', 'Due date') + chip('lsort', 'pri', 'Run order') + '</div>' + prioTop;
     if (!store.loaded) return h + '<div class="empty">Connecting to the shop record.</div>';
     if (!L.length) return h + '<div class="empty">' + (items.length ? 'No travelers match this view.' : 'No travelers issued yet.') + '</div>';
     const rowJ = (j) => { const s = jobStatus(j);
@@ -2045,7 +2155,7 @@ window.WT_ESP = [
     const r = W.routing(j.rid); if (!r) return '<div class="empty">Loading this traveler’s master steps…</div><button class="btn" data-back>‹ Back</button>';
     ensureDocs(r); const i = Math.min(ui.opI, j.ops.length - 1), blk = W.blocking(j);
     let h = '<div class="jobhead"><span class="row" style="flex-direction:column;gap:8px;align-items:stretch"><button class="btn sm" data-back>‹ Back</button><button class="btn sm" data-a="printJob" data-job="' + esc(j.id) + '">🖨 Print</button></span><div class="t"><h1><span class="mono">' + esc(j.pn) + '</span> ' + esc(liveStep(r.id, '@name', j.name, null).text) + '</h1>' +
-      '<div class="facts"><span>Shop Order <b>' + esc(j.so) + '</b></span>' + (floorAt(j.so) ? '<span>On the floor <b>' + esc(floorAt(j.so)) + '</b></span>' : '') + '<span>Qty <b>' + j.qty + '</b></span><span>Due <b>' + esc(fDue(j.due)) + '</b></span><span>Type <b>' + esc(kindOf(r)) + '</b></span><span>Trav rev <b>' + esc(j.rel.travRev) + '</b></span><span>Dwg rev <b>' + esc(j.rel.dwgRev) + '</b></span>' + (hdr(r, 'material') ? '<span>Material <b class="notr">' + esc(hdr(r, 'material')) + '</b></span>' : '') + (j.rush ? '<span class="pill bad">ASAP</span>' : '') + (j.sample ? '<span class="pill plain">Sample data</span>' : '') + (ui.user && ui.user.role === 'manager' ? '<button class="btn sm" data-m="priority" data-job="' + esc(j.id) + '">' + (j.rush ? 'Change priority' : (j.rush ? 'Remove ASAP' : 'Mark ASAP')) + '</button>' : '') + '</div>' +
+      '<div class="facts"><span>Shop Order <b>' + esc(j.so) + '</b></span>' + (j.assy ? '<span>Assembly # <b class="mono">' + esc(j.assy) + '</b></span>' : '') + (() => { let w = ''; LANES.forEach((l) => openItems(l.id).forEach((x) => { if (x.k === 'j' && x.ref === j.id && x.who) w = nm(x.who); })); return (w ? '<span>Assigned to <b>' + esc(w) + '</b></span>' : '') + (canPlan() ? '<button class="btn sm" data-m="jobWho" data-job="' + esc(j.id) + '">' + (w ? 'Reassign' : 'Assign to a person') + '</button>' : ''); })() + (floorAt(j.so) ? '<span>On the floor <b>' + esc(floorAt(j.so)) + '</b></span>' : '') + '<span>Qty <b>' + j.qty + '</b></span><span>Due <b>' + esc(fDue(j.due)) + '</b></span><span>Type <b>' + esc(kindOf(r)) + '</b></span><span>Trav rev <b>' + esc(j.rel.travRev) + '</b></span><span>Dwg rev <b>' + esc(j.rel.dwgRev) + '</b></span>' + (hdr(r, 'material') ? '<span>Material <b class="notr">' + esc(hdr(r, 'material')) + '</b></span>' : '') + (j.rush ? '<span class="pill bad">ASAP</span>' : '') + (j.sample ? '<span class="pill plain">Sample data</span>' : '') + (ui.user && ui.user.role === 'manager' ? '<button class="btn sm" data-m="priority" data-job="' + esc(j.id) + '">' + (j.rush ? 'Change priority' : (j.rush ? 'Remove ASAP' : 'Mark ASAP')) + '</button>' : '') + '</div>' +
       '<p class="small muted">' + esc(W.where(j)) + (blk && !/^Paused/.test(blk) ? ' · Waiting on: ' + esc(blk) : blk ? ' (' + esc(blk.replace(/^Paused:\s*/, '').toLowerCase()) + ')' : '') + '</p>' +
       ((j.final || W.isFinal(r)) ? (W.shipOk(j) ? '<div class="banner ok"><div><b>Shipping release ✔</b> · PO <b class="mono">' + esc(j.ship.po) + '</b> · Sales Order <b class="mono">' + esc(j.ship.sales) + '</b> · ' + esc(nm(j.ship.by)) + ' ' + esc(fTime(j.ship.at)) + '</div>' + (ui.user && (W.canDispose(ui.user) || W.isApprover(ui.user)) ? '<button class="btn sm" data-m="ship" data-job="' + esc(j.id) + '">Change</button>' : '') + '</div>'
         : '<div class="banner warn"><div><b>Shipping release needed.</b> Marty or QA enters the customer PO # and Sales Order #. Required before the closing signature.</div><button class="btn sm primary" data-m="ship" data-job="' + esc(j.id) + '">Enter PO / Sales Order</button></div>') : '') +
@@ -2116,6 +2226,11 @@ window.WT_ESP = [
         (sel ? '<div class="banner info"><div><b class="mono" style="font-size:1.2rem">' + esc(sel.pn) + '</b> ' + esc(sel.name) + '<br><span class="small">' + esc(sel.kind || sel.form) + ' · traveler rev ' + esc(sel.travRev) + ' · ' + sel.ops.length + ' operations · ' + (fin ? 'Final assembly / packing' : fl === 'metal' ? 'Metal floor' : 'Filter floor') + '. This traveler is locked to that revision when you issue it.</span></div></div>' +
           '<div class="grid2"><label>2 · Quantity<input id="rel-qty" class="field" type="number" inputmode="numeric" min="1"></label><label>Due date<input id="rel-due" class="field" type="date" value="' + new Date(now + 90 * 864e5).toISOString().slice(0, 10) + '"></label>' +
           '<label>Traveler number (next in the ' + fl + ' series)<input id="rel-so" class="field" autocomplete="off" inputmode="numeric" value="' + esc(nextNo(fl)) + '"></label><label class="check" style="flex-direction:row;align-items:center;gap:12px"><input id="rel-rush" type="checkbox" style="width:28px;height:28px;min-height:28px;flex:0 0 auto"> RUSH — run this first (ASAP)</label></div>' +
+          (() => { if (fin) return ''; const hh = assyHist(sel.pn), yes = ui.relAssy != null ? ui.relAssy : hh.y > 0, nx = nextAssy();
+            return '<div class="panel assyp"><h3>Assembly number</h3><p class="small muted">' + (hh.n ? esc(sel.pn) + ' had an assembly number on <b>' + hh.y + ' of ' + hh.n + '</b> travelers this year.' : 'No history for ' + esc(sel.pn) + ' this year.') + ' Format: month, year, then the next number this month (next is <b class="mono">' + nx + '</b>).</p>' +
+              '<div class="row"><span>Does it need an assembly number?</span><button class="btn ' + (yes ? 'sel' : '') + '" data-a="assyY">Yes</button><button class="btn ' + (!yes ? 'sel' : '') + '" data-a="assyN">No</button></div>' +
+              '<label id="rel-assy-w"' + (yes ? '' : ' hidden') + '>Assembly number<input id="rel-assy" class="field mono" autocomplete="off" inputmode="numeric" value="' + esc(nx) + '"></label></div>'; })() +
+          '<label>Assign to a person (optional — shows as YOU on their tablet)<select id="rel-who" class="field"><option value="">Nobody yet — anyone in the area</option>' + assignList().map((p) => '<option value="' + esc(p.id) + '">' + esc(p.name) + ' · ' + esc(p.area || '') + '</option>').join('') + '</select></label>' +
           (fin ? '<div class="banner warn"><div><b>Final / packing traveler — shipping release.</b> Enter the customer PO # and Sales Order # now if you have them. If not, Marty or QA adds them on the traveler before the closing signature.</div></div><div class="grid2"><label>PO #<input id="rel-po" class="field" autocomplete="off" value="' + esc((finRow(nextNo('final')) || {}).po || '') + '"></label><label>Sales Order #<input id="rel-sales" class="field" autocomplete="off" placeholder="P88087" value="' + esc((finRow(nextNo('final')) || {}).so || '') + '"></label></div>' : '') +
           '<p class="small muted">Due date is set 90 days out, the same as your ' + fl + ' log. Change it if needed. Jobs run in due-date order unless marked RUSH.</p>' +
           (sel.lots ? '<label class="check" style="flex-direction:row;align-items:center;gap:12px"><input id="rel-set" type="checkbox" checked style="width:28px;height:28px;min-height:28px;flex:0 0 auto"> Also issue the baffle (1001050) and pleat pack (1001249) travelers for this order. Welding waits for the baffles and pouring waits for the pleat packs.</label>' : '') +
@@ -2271,6 +2386,9 @@ window.WT_ESP = [
       }
       case 'receive': { const l = j.lots.find((x) => x.id === m.lot); h = '<h2>Receive container ' + l.id + '</h2><p><span class="mono">' + esc(j.pn) + '</span> · Shop Order ' + esc(j.so) + ' · sent as <b>' + l.qty + ' pcs</b> by ' + esc(nm(l.by)) + '.</p>' + inp('count', 'Count received', m, 'type="number" inputmode="numeric" min="0"') + '<p class="small muted">A different count is recorded and opens a hold for a supervisor to settle.</p>' + foot('Receive', 'go'); break; }
       case 'reroute': { const l = j.lots.find((x) => x.id === m.lot); h = '<h2>Send container ' + l.id + ' where?</h2><p>' + l.qty + ' pcs of <span class="mono">' + esc(j.pn) + '</span>. The next step is at <b>' + esc(W.station(l.expect).name) + '</b>.</p><div class="tiles">' + W.STATIONS.map((s) => '<button class="btn ' + (m.dest === s.id ? 'sel' : '') + '" data-set="dest" data-v="' + s.id + '"><span>' + esc(s.name) + '</span><small>' + (s.id === l.expect ? 'Next step' : '') + '</small></button>').join('') + '</div>' + foot('Redirect'); break; }
+      case 'jobWho': h = '<h2>Assign Shop Order ' + esc(j.so) + '</h2><p class="muted">Pick who runs it. It goes on the priority list for the area it is in now and shows as YOU on their tablet.</p><div class="tiles"><button class="btn ' + (!m.who ? 'sel' : '') + '" data-set="who" data-v=""><span>Nobody</span><small>Anyone in the area</small></button>' + assignList().map((p) => '<button class="btn ' + (m.who === p.id ? 'sel' : '') + '" data-set="who" data-v="' + esc(p.id) + '"><span>' + esc(p.name) + '</span><small>' + esc(p.area || '') + '</small></button>').join('') + '</div>' + foot('Save'); break;
+      case 'plWho': { const L0 = lane(m.ln), st = W.station(L0.st), inA = (p) => (p.area || '').indexOf(st.name) >= 0 || (p.area || '').indexOf(L0.name) >= 0, ppl = store.cfg.roster.slice().filter((p) => p.role === 'operator' || W.isApprover(p)).sort((a, b) => (inA(b) ? 1 : 0) - (inA(a) ? 1 : 0) || (a.role === 'operator' ? 0 : 1) - (b.role === 'operator' ? 0 : 1) || a.name.localeCompare(b.name));
+        h = '<h2>Assign to a person</h2><p class="muted">' + esc(L0.name) + ' · people in this area are first. They see it marked YOU on the tablet.</p><div class="tiles"><button class="btn ' + (!m.who ? 'sel' : '') + '" data-set="who" data-v=""><span>Anyone in the area</span><small>Not assigned</small></button>' + ppl.map((p) => '<button class="btn ' + (m.who === p.id ? 'sel' : '') + '" data-set="who" data-v="' + esc(p.id) + '"><span>' + esc(p.name) + '</span><small>' + esc(p.area || '') + '</small></button>').join('') + '</div>' + foot('Save'); break; }
       case 'plNote': h = '<h2>Note for this item</h2><p class="muted">Shows under the item on the area tablet. Example: needs to ship Thursday.</p>' + inp('note', 'Note', m, 'autocomplete="off"') + foot('Save note'); break;
       case 'priority': h = '<h2>Rush · Shop Order ' + esc(j.so) + '</h2><p class="muted">Jobs run in due-date order. ASAP jumps the line.</p><label class="check"><input type="checkbox" data-f="rush"' + (m.rush ? ' checked' : '') + '> ASAP — goes to the top of every list on every tablet</label>' + inp('reason', 'Reason for the change', m) + foot('Save'); break;
       case 'paper': { const r = (store.logs[m.floor] || []).find((x) => x.t === m.t) || {}, rts = routingsFor(r.pn), open = r.s === 'O';
@@ -2387,6 +2505,8 @@ window.WT_ESP = [
         return openModal({ type: 'labels', job: m.job, lots: ids }); }
       case 'receive': ok = run(m.job, 'receive', { lot: m.lot, count: m.count === '' ? NaN : m.count }); break;
       case 'reroute': ok = run(m.job, 'reroute', { lot: m.lot, dest: m.dest, reason: 'Redirected at ' + areaName() }); break;
+      case 'jobWho': assignJob(store.jobs[m.job], m.who); ok = true; break;
+      case 'plWho': savePlan(m.ln, (p) => { const x = p.items.find((y) => y.id === m.id); if (x) x.who = m.who || ''; }, true); ok = true; break;
       case 'plNote': savePlan(m.ln, (p) => { const x = p.items.find((y) => y.id === m.id); if (x) x.note = (m.note || '').trim(); }, true); ok = true; break;
       case 'priority': ok = run(m.job, 'priority', { pri: m.pri, rush: m.rush, reason: m.reason }); break;
       case 'join': { const n = (m.name || '').trim(); if (n.length < 2) return toast('Type your name.', 'bad'); if (store.cfg.roster.some((x) => x.name.toLowerCase() === n.toLowerCase())) return toast(n + ' is already on the list. Go back and tap your name.', 'bad');
@@ -2500,7 +2620,7 @@ window.WT_ESP = [
     const cell = (l, v) => '<div><span>' + l + '</span><b>' + (v == null || v === '' ? '&nbsp;' : v) + '</b></div>';
     const code = blank ? '' : j.so;
     let h = '<div class="ph"><div><div class="sm">WALKER ENGINEERING · ' + E(r.form) + '</div><h1>' + (blank ? 'Traveler — ' : 'Traveler #' + E(j.so) + ' — ') + '<span class="mono">' + E(blank ? r.pn : j.pn) + '</span></h1><div>' + E(hdr(r, 'name')) + '</div></div><div style="text-align:right">' + (code ? bc(code) + '<div class="mono sm">' + E(code) + '</div>' : '') + '</div></div>';
-    h += '<div class="hg">' + cell('S.O. / Traveler #', blank ? '' : E(j.so)) + cell('Part number', '<span class="mono">' + E(blank ? r.pn : j.pn) + '</span>') + cell('Quantity', blank ? '' : E(j.qty)) + cell('Status', blank ? '' : E(jobStatus(j)[2]) + (j.rush ? ' · ASAP' : '')) +
+    h += '<div class="hg">' + cell('S.O. / Traveler #', blank ? '' : E(j.so)) + cell('Part number', '<span class="mono">' + E(blank ? r.pn : j.pn) + '</span>') + cell('Quantity', blank ? '' : E(j.qty)) + (j && j.assy ? cell('Assembly #', '<span class="mono">' + E(j.assy) + '</span>') : '') + cell('Status', blank ? '' : E(jobStatus(j)[2]) + (j.rush ? ' · ASAP' : '')) +
       cell('Issued', blank ? '' : E(fTime(j.rel && j.rel.at)) + (j.rel && j.rel.by ? ' · ' + E(nm(j.rel.by)) : '')) + cell('Due', blank ? '' : E(fDue(j.due))) + cell('Completed', blank ? '' : (j.st === 'complete' ? E(fTime(j.doneAt)) : '')) + cell('Customer', E(hdr(r, 'customer'))) +
       cell('Traveler rev', E((j ? j.rel.travRev : r.travRev) + ' ' + (r.travDate || ''))) + cell('Drawing rev', E(j ? j.rel.dwgRev : r.dwgRev)) + '<div style="grid-column:span 2"><span>Material</span><b>' + (E(hdr(r, 'material')) || '&nbsp;') + '</b></div>' +
       (W.isFinal(r) ? cell('Customer PO #', j && j.ship ? '<span class="mono">' + E(j.ship.po) + '</span>' : '') + cell('Sales Order #', j && j.ship ? '<span class="mono">' + E(j.ship.sales) + '</span>' : '') + '<div style="grid-column:span 2"><span>Shipping release</span><b>' + (j && W.shipOk(j) ? E(nm(j.ship.by)) + ' · ' + E(fTime(j.ship.at)) : '&nbsp;') + '</b></div>' : '') + '</div>';
@@ -2528,8 +2648,9 @@ window.WT_ESP = [
   window.addEventListener('resize', () => fitTiles());
   function render() {
     const main = $('#main'); if (!main) return;
+    if (ui.tv) { ui.view = 'board'; ui.modal = null; }
     const y = window.scrollY;
-    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'prio' ? renderPrio() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
+    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'prio' ? renderPrio() : ui.view === 'board' ? renderBoard() : ui.view === 'mine' ? renderMine() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
     $('#b-home').textContent = '⌂ Main menu'; $('#b-list').textContent = '☰ Travelers'; $('#q').setAttribute('placeholder', 'Search or scan'); $('#b-lang').textContent = LANG === 'es' ? 'English' : 'Español';
     if (!document.fullscreenElement) $('#b-full').textContent = '⛶ Full';
     $('#b-station').textContent = 'Area: ' + areaName();
@@ -2610,7 +2731,7 @@ window.WT_ESP = [
     if (t.id === 't-out') { signOutUser(); render(); return toast('Signed out'); }
     if ('back' in d) { ui.view = ui.back || 'station'; return render(); }
     if (d.relkind) { ui.relKind = d.relkind; ui.relRid = null; return render(); }
-    if (d.rel) { ui.relRid = d.rel; return render(); }
+    if (d.rel) { ui.relRid = d.rel; ui.relAssy = null; return render(); }
     if (d.a === 'csv') { return void saveCsv(); }
     if (d.lsort) { ui.lsort = d.lsort; return render(); }
     if (d.lfloor) { ui.lfloor = d.lfloor; return render(); }
@@ -2653,7 +2774,7 @@ window.WT_ESP = [
     if (d.open) return openJob(d.open, d.i);
     if (d.trole) { ui.trole = d.trole; return render(); }
     if (d.plane) { ui.plane = d.plane; ui.plq = ''; return render(); }
-    if (/^pl(Add|Task|Up|Dn|Rm|Clear|Done|Undo|Note)$/.test(d.a || '')) return void planAct(d);
+    if (/^pl(Add|Task|Up|Dn|Rm|Clear|Done|Undo|Note|Who)$/.test(d.a || '')) return void planAct(d);
     if (d.nav) { if (d.pl) { ui.plane = d.pl; ui.plq = ''; } ui.view = d.nav; if (d.mtab) ui.mtab = d.mtab; if (d.lf) ui.lfilt = d.lf; if (d.nav === 'list') ui.lfloor = d.lfl || 'both'; $('#results').hidden = true; return render(); }
     if (d.mtab) { ui.mtab = d.mtab; return render(); }
     if (d.tab) { ui.tab = d.tab; return render(); }
@@ -2692,6 +2813,7 @@ window.WT_ESP = [
       if (d.m === 'reroute') { const l = j.lots.find((x) => x.id === d.lot); return openModal({ type: 'reroute', job, lot: d.lot, dest: l.expect }); }
       if (d.m === 'editStep') { const ed = (j.edits || {})[op.n]; return openModal({ type: 'editStep', job, i, text: ed ? ed.text : W.routing(j.rid).ops[i].text, reason: '' }); }
       if (d.m === 'redline') return openModal({ type: 'redline', job, i, reason: '', text: liveStep(j.rid, op.n, W.routing(j.rid).ops[i].text, null).text, note: '' });
+      if (d.m === 'jobWho') { if (!canPlan()) return toast('A manager or supervisor assigns jobs.', 'bad'); let w = ''; LANES.forEach((l) => openItems(l.id).forEach((x) => { if (x.k === 'j' && x.ref === j.id && x.who) w = x.who; })); return openModal({ type: 'jobWho', job: j.id, who: w }); }
       if (d.m === 'priority') return openModal({ type: 'priority', job, pri: j.pri, rush: j.rush, reason: '' });
       return openModal({ type: d.m, job, i, reason: '', qty: '', note: '', text: '' });
     }
@@ -2740,6 +2862,7 @@ window.WT_ESP = [
           save(j); closeModal(); openJob(j.id); toast('Traveler #' + r.t + ' is live'); }
         catch (err) { if (err.user) toast(err.message, 'bad'); else throw err; } return;
       }
+      if (d.a === 'assyY' || d.a === 'assyN') { ui.relAssy = d.a === 'assyY'; const w = $('#rel-assy-w'); if (w) w.hidden = !ui.relAssy; document.querySelectorAll('[data-a="assyY"],[data-a="assyN"]').forEach((b) => b.classList.toggle('sel', (b.dataset.a === 'assyY') === ui.relAssy)); return; }
       if (d.a === 'release') {
         try {
           const c2 = { u: ui.user, at: Date.now() }, base = { so: $('#rel-so').value.trim(), qty: $('#rel-qty').value, due: $('#rel-due').value, pri: 50, rush: $('#rel-rush').checked }, rid = ui.relRid, rt = W.routing(rid);
@@ -2751,7 +2874,11 @@ window.WT_ESP = [
           const setEl = $('#rel-set'), kids = setEl && setEl.checked && rt.lots ? [['1001050', '-B', 'baffles', 0], ['1001249', '-P', 'pleat packs', 1]].map((k) => ({ job: W.newJob(Object.assign({}, base, { rid: k[0], so: base.so + k[1] }), c2), label: k[2], i: k[3] })) : [];
           const j = W.newJob(Object.assign({}, base, { rid, needs: kids.map((k) => ({ id: k.job.id, so: k.job.so, pn: k.job.pn, label: k.label, i: k.i })) }), c2);
           if ([j].concat(kids.map((k) => k.job)).some((x) => store.jobs[x.id])) return toast('Traveler ' + j.so + ' already exists.', 'bad');
-          j.floor = fl; kids.forEach((k) => { k.job.parent = j.id; put(k.job); }); save(j); ui.relRid = null; ui.relQ = ''; openJob(j.id); toast('Traveler ' + j.so + ' issued' + (kids.length ? ' with baffle and pleat pack travelers' : ''));
+          const aw = $('#rel-assy-w'), assy = aw && !aw.hidden ? $('#rel-assy').value.trim() : '', who = $('#rel-who') ? $('#rel-who').value : '';
+          if (assy && !/^\d{6}$/.test(assy)) return toast('Assembly number is 6 digits: month, year, number (example ' + nextAssy() + ').', 'bad');
+          if (assyUsed(assy)) return toast('Assembly number ' + assy + ' is already used. Next free is ' + nextAssy() + '.', 'bad');
+          if (assy) j.assy = assy;
+          j.floor = fl; kids.forEach((k) => { k.job.parent = j.id; put(k.job); }); save(j); ui.relRid = null; ui.relQ = ''; ui.relAssy = null; if (who) assignJob(j, who); openJob(j.id); toast('Traveler ' + j.so + ' issued' + (kids.length ? ' with baffle and pleat pack travelers' : ''));
         }
         catch (err) { if (err.user) toast(err.message, 'bad'); else throw err; } return;
       }
@@ -2803,6 +2930,7 @@ window.WT_ESP = [
   const okSt = (x) => !!x && (/^all(metal|filter)?$/.test(x) || W.STATIONS.some((s) => s.id === x && s.kind === 'work'));
   ui.station = okSt(hs) ? hs : okSt(saved) ? saved : 'all';
   ui.view = 'home';
+  if (hs === 'tv') { ui.tv = true; ui.view = 'board'; document.body.classList.add('tv'); }
   init(); loadMaster();
 })();
 
