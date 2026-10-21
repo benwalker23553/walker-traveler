@@ -309,6 +309,11 @@ body.tv .tvclock { font-size: 2.4rem; }
 a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
 body.tv .board { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
 
+.pinpop { position: fixed; inset: 0; z-index: 60; background: rgba(10,18,28,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.pinbox { background: var(--panel); border-radius: calc(var(--r) * 1.5); padding: 18px; width: min(360px, 100%); display: flex; flex-direction: column; gap: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.35); }
+.pinbox .pad { grid-template-columns: repeat(3, 1fr); }
+.pinbox .pad button { height: 70px; }
+
 </style>
 <header class="top">
   <button id="b-home" class="brandbtn" type="button">⌂ Main menu</button>
@@ -469,7 +474,7 @@ window.WT_ES = {
 "Steps, in order":"Pasos, en orden",
 "+ Add step":"+ Agregar paso",
 "Issue work order to the floor":"Emitir orden de trabajo al piso",
-"Cancel":"Cancelar",
+"Cancel":"Cancelar","Not me":"No soy yo","Enter your PIN — tap the numbers or type them on the keyboard.":"Escribe tu PIN — toca los números o usa el teclado.","Create your PIN.":"Crea tu PIN.","Enter the same PIN again to confirm.":"Escribe el mismo PIN otra vez para confirmar.",
 "What to do at this step":"Qué hacer en este paso",
 "Work order number":"Número de orden de trabajo",
 "Part number (or prototype name)":"Número de parte (o nombre del prototipo)",
@@ -2309,6 +2314,10 @@ window.WT_ESP = [
     const list = store.cfg.roster.filter((p) => !only || (only === 'qa' ? W.canDispose(p) : W.isApprover(p) && (!st || W.covers(p, st)))).slice().sort((a, b) => (a.area === here ? 0 : 1) - (b.area === here ? 0 : 1) || a.name.localeCompare(b.name));
     return '<div class="tiles">' + list.map((p) => '<button class="btn sm ' + (m.who === p.id ? 'sel' : '') + '" data-set="who" data-v="' + esc(p.id) + '"><span>' + esc(p.name) + '</span><small>' + esc(p.area) + '</small></button>').join('') + '</div>';
   }
+  function pinKey(m, k) {
+    if (k === 'clr') m.pin = ''; else if (k === 'del') m.pin = (m.pin || '').slice(0, -1); else if ((m.pin || '').length < 4) m.pin = (m.pin || '') + k;
+    renderModal(); if ((m.type === 'login' || m.type === 'finpin') && (m.pin || '').length === 4) setTimeout(() => { if (ui.modal === m && (m.pin || '').length === 4) submit(); }, 120);
+  }
   function pad(m) {
     return '<div class="dots" aria-label="PIN entered">' + '●'.repeat((m.pin || '').length) + '<span class="muted">' + '○'.repeat(4 - (m.pin || '').length) + '</span></div><div class="pad">' + [1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => '<button data-pin="' + d + '">' + d + '</button>').join('') + '<button data-pin="clr" aria-label="Clear">C</button><button data-pin="0">0</button><button data-pin="del" aria-label="Delete">⌫</button></div>';
   }
@@ -2331,7 +2340,7 @@ window.WT_ESP = [
     switch (m.type) {
       case 'finpin': h = '<h2>Prices and costs are locked</h2><p><b>' + esc(nm(m.who)) + '</b>, enter your PIN to open them. They lock again when you sign out, after ' + store.cfg.rules.idleLock + ' s idle, or at the end of the shift.</p>' + pad(m) + foot('Open'); break;
       case 'login': { const lp = person(m.who), fresh = lp && !hasPin(lp);
-        h = '<h2>Who is working?</h2>' + who(m) + (lp ? (fresh ? '<div class="banner info"><div><b>' + esc(lp.name) + ', ' + (m.first ? 'enter the same PIN again to confirm.' : 'create your PIN.') + '</b> Use your birth month and year so you never forget it. March 1985 is 0385.</div></div>' : '<p><b>' + esc(lp.name) + '</b>, enter your PIN.</p>') + pad(m) : '<p class="muted">Tap your name. First time here, you will create your own PIN.</p><button class="btn sm" data-m="join" style="align-self:flex-start">My name is not here — add me</button>') + foot(fresh ? (m.first ? 'Save my PIN' : 'Next') : 'Sign in'); break; }
+        h = '<h2>Who is working?</h2>' + who(m) + (lp ? '<div class="pinpop" role="dialog" aria-label="Enter PIN"><div class="pinbox"><div class="row" style="justify-content:space-between;align-items:center"><b style="font-size:1.3rem">' + esc(lp.name) + '</b><button class="btn sm" data-set="who" data-v="">Not me</button></div>' + (fresh ? '<div class="banner info"><div><b>' + (m.first ? 'Enter the same PIN again to confirm.' : 'Create your PIN.') + '</b> Use your birth month and year so you never forget it. March 1985 is 0385.</div></div>' : '<p class="muted" style="margin:0">Enter your PIN — tap the numbers or type them on the keyboard.</p>') + pad(m) + '<div class="row" style="justify-content:space-between"><button class="btn" data-close>Cancel</button><button class="btn primary" data-submit>' + (fresh ? (m.first ? 'Save my PIN' : 'Next') : 'Sign in') + '</button></div></div></div>' : '<p class="muted">Tap your name. First time here, you will create your own PIN.</p><button class="btn sm" data-m="join" style="align-self:flex-start">My name is not here — add me</button>') + foot(fresh ? (m.first ? 'Save my PIN' : 'Next') : 'Sign in'); break; }
       case 'station': { const grp = (f) => W.STATIONS.filter((s) => s.kind === 'work' && s.floor === f).map((s) => '<button class="btn" data-station="' + s.id + '"><span>' + esc(s.name) + '</span><small>' + esc(s.note) + '</small></button>').join('');
         h = '<h2>Which work area is this tablet at?</h2><h3>Metal floor</h3><div class="tiles"><button class="btn" data-station="allmetal"><span>Whole metal floor</span><small>One shared tablet · every metal area</small></button>' + grp('metal') + '</div><h3>Filter floor</h3><div class="tiles"><button class="btn" data-station="allfilter"><span>Whole filter floor</span><small>One shared tablet · every filter area</small></button>' + grp('filter') + '</div><div class="tiles"><button class="btn" data-station="all"><span>All work areas</span><small>Supervisor and office view</small></button></div><p class="small muted">Each tablet remembers its area.</p><button class="btn" data-close>Close</button>'; break; }
       case 'sign': {
@@ -2782,9 +2791,9 @@ window.WT_ESP = [
     if (d.doc) { ui.doc = Number(d.doc); return render(); }
     if (d.zoom) { ui.zoom = Number(d.zoom); return render(); }
     if (d.libdoc) { const r = W.routing(d.libdoc), x = r.docs[Number(d.k)]; $('#results').hidden = true; $('#modal').innerHTML = '<div class="sheet wide"><div class="row" style="justify-content:space-between"><h2>' + esc(x.t) + (x.rev ? ' · Rev ' + esc(x.rev) : '') + '</h2><button class="btn sm" data-close>Close</button></div>' + (x.flag ? '<div class="banner warn"><div><b>Check revision.</b> ' + esc(x.flag) + '</div></div>' : '') + '<div class="viewer"><img src="' + esc(x.f) + '" alt="' + esc(x.t) + '" style="width:160%"></div></div>'; $('#modal').hidden = false; ui.modal = { type: 'lib' }; return; }
-    if (d.pin && m) { if (d.pin === 'clr') m.pin = ''; else if (d.pin === 'del') m.pin = (m.pin || '').slice(0, -1); else if ((m.pin || '').length < 4) m.pin = (m.pin || '') + d.pin; renderModal(); if ((m.type === 'login' || m.type === 'finpin') && (m.pin || '').length === 4) setTimeout(() => { if (ui.modal === m && (m.pin || '').length === 4) submit(); }, 120); return; }
+    if (d.pin && m) return pinKey(m, d.pin);
     if (d.set && m) {
-      m[d.set] = d.v; if (d.set === 'who') { m.pin = ''; m.first = ''; }
+      m[d.set] = d.v; if (d.set === 'who') { m.pin = ''; m.first = ''; if (d.v && m.type !== 'login' && m.type !== 'jobWho' && m.type !== 'plWho') setTimeout(() => { const pd = $('#modal .pad'); if (pd) pd.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 30); }
       if ((m.type === 'pause' || m.type === 'block') && d.set === 'reason') { if (run(m.job, m.type, { i: m.i, reason: d.v })) closeModal(); return; }
       return renderModal();
     }
@@ -2911,6 +2920,13 @@ window.WT_ESP = [
   });
   document.addEventListener('keydown', (e) => {
     ui.touched = Date.now();
+    if (ui.modal && $('#modal .pad') && !(e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      const NP = { Numpad0: '0', Numpad1: '1', Numpad2: '2', Numpad3: '3', Numpad4: '4', Numpad5: '5', Numpad6: '6', Numpad7: '7', Numpad8: '8', Numpad9: '9' };
+      const dg = /^[0-9]$/.test(e.key) ? e.key : NP[e.code], m = ui.modal;
+      const k = dg || (e.key === 'Backspace' ? 'del' : e.key === 'Delete' ? 'clr' : '');
+      if (k) { e.preventDefault(); pinKey(m, k); return; }
+      if (e.key === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); if ((m.pin || '').length === 4) submit(); return; }
+    }
     if (e.key === 'Escape') { $('#results').hidden = true; if (ui.modal) closeModal(); }
     if (e.key === 'Enter' && e.target.id === 'q') { const q00 = stripAsk(e.target.value.trim()).toLowerCase(), q0 = jobs().some((x) => x.so.toLowerCase() === q00) || !/\d/.test(q00) || /-c\d+$/.test(q00) ? q00 : (q00.split(/\s+/).filter((w) => /\d/.test(w)).join(' ') || q00), q = (/-c\d+$/.test(q0) ? q0 : (spoken(q0) || q0)).toLowerCase(), bx = q.match(/^(.+)-c(\d+)$/);
       if (bx) { const j = jobs().find((x) => x.so.toLowerCase() === bx[1]), l = j && j.lots.find((x) => x.id.toLowerCase() === 'c' + bx[2]);
