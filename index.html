@@ -313,6 +313,7 @@ body.tv .board { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
 .pinbox { background: var(--panel); border-radius: calc(var(--r) * 1.5); padding: 18px; width: min(360px, 100%); display: flex; flex-direction: column; gap: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.35); }
 .pinbox .pad { grid-template-columns: repeat(3, 1fr); }
 .pinbox .pad button { height: 70px; }
+td.bad { color: var(--bad); font-weight: 700; }
 
 </style>
 <header class="top">
@@ -2207,10 +2208,48 @@ window.WT_ESP = [
     return hits.map((r) => '<button class="btn sm ' + (ui.relRid === r.id ? 'sel' : '') + '" data-rel="' + esc(r.id) + '"><span class="mono">' + esc(r.pn) + '</span><small>' + esc(String(r.name).slice(0, 44)) + ' · ' + esc(r.kind || (r.id.indexOf('PK-') === 0 ? 'FINAL ASSEMBLY' : 'TRV')) + ' · rev ' + esc(r.travRev) + '</small></button>').join('');
   }
 
+  /* ---------- analytics: who makes what, how fast, how clean ---------- */
+  function statsData(J, now, days) {
+    const from = days ? now - days * 864e5 : 0, P = {}, G = {};
+    const pp = (id) => P[id] || (P[id] = { id, ops: new Set(), jobs: new Set(), good: 0, scrap: 0, run: 0, runDone: 0, setup: 0, parts: new Set() });
+    J.forEach((j) => j.ops.forEach((op) => {
+      const segs = (op.seg || []).filter((x) => x.by && (x.e || x.s) >= from);
+      if (!segs.length) return;
+      const runBy = {}, setBy = {};
+      segs.forEach((x) => { const ms = W.workMs(Math.max(x.s, from), x.e || now); if (x.t === 'run' || x.t === 'first_piece') runBy[x.by] = (runBy[x.by] || 0) + ms; else if (x.t === 'setup') setBy[x.by] = (setBy[x.by] || 0) + ms; });
+      const runT = Object.values(runBy).reduce((a, b) => a + b, 0), done = op.good != null;
+      const ids = new Set(Object.keys(runBy).concat(Object.keys(setBy)));
+      ids.forEach((id) => { const x = pp(id), sh = runT ? (runBy[id] || 0) / runT : 1 / ids.size; x.ops.add(j.id + ':' + op.n); x.jobs.add(j.id); x.parts.add(j.pn); x.run += runBy[id] || 0; if (done) x.runDone += runBy[id] || 0; x.setup += setBy[id] || 0;
+        if (done) { x.good += Math.round((op.good || 0) * sh); x.scrap += Math.round((op.scrap || 0) * sh); } });
+      if (done && runT > 0) Object.keys(runBy).forEach((id) => { const k = j.pn + '|' + op.n, g = G[k] || (G[k] = { pn: j.pn, n: op.n, st: op.station, by: {} }), sh = runBy[id] / runT, b = g.by[id] || (g.by[id] = { good: 0, scrap: 0, run: 0, jobs: 0 });
+        b.good += (op.good || 0) * sh; b.scrap += (op.scrap || 0) * sh; b.run += runBy[id]; b.jobs++; });
+    }));
+    return { P: Object.values(P), G: Object.values(G) };
+  }
+  function renderStats(J, now) {
+    if (!(ui.user && (ui.user.role === 'manager' || W.isApprover(ui.user)))) return '<div class="panel"><h2>Analytics</h2><p class="muted">Sign in as a manager or supervisor to see analytics.</p><button class="btn sm" data-m="login">Sign in</button></div>';
+    const days = ui.statDays == null ? 30 : ui.statDays, D = statsData(J, now, days), hrs = (ms) => ms / 36e5;
+    const rate = (g, ms) => ms > 6e4 ? g / hrs(ms) : null, f1 = (x) => x == null ? '—' : x >= 100 ? Math.round(x) : x.toFixed(1);
+    let h = '<div class="panel"><div class="row" style="justify-content:space-between;flex-wrap:wrap"><h2>Analytics · people and parts</h2><div class="row">' + [[7, '7 days'], [30, '30 days'], [90, '90 days'], [0, 'All']].map((x) => '<button class="btn sm ' + (days === x[0] ? 'sel' : '') + '" data-a="statDays" data-v="' + x[0] + '">' + x[1] + '</button>').join('') + '</div></div>' +
+      '<p class="small muted">From the tablet: run time is the clock between Start and Finish pressed by that person (first article + batch run, pauses and holds excluded). When two people share an operation, its good and scrap pieces are split by their run time. Paper travelers are not counted — the paper logs do not record who ran the job.</p>';
+    const P = D.P.filter((p) => p.ops.size).sort((a, b) => (rate(b.good, b.runDone) || 0) - (rate(a.good, a.runDone) || 0));
+    if (!P.length) return h + '<div class="banner info"><div><b>No tablet work in this period yet.</b> Numbers fill in as people sign in, press Start and Finish on the tablets.</div></div></div>';
+    const tg = P.reduce((a, p) => a + p.good, 0), ts = P.reduce((a, p) => a + p.scrap, 0), tr = P.reduce((a, p) => a + p.run, 0);
+    h += '<div class="kv"><div><b class="num">' + P.length + '</b><span>People with tablet work</span></div><div><b class="num">' + tg.toLocaleString() + '</b><span>Good pieces</span></div><div><b class="num">' + (tg + ts ? (100 * ts / (tg + ts)).toFixed(1) + '%' : '—') + '</b><span>Scrap rate</span></div><div><b class="num">' + f1(hrs(tr)) + '</b><span>Run hours</span></div></div></div>';
+    h += '<div class="panel"><h2>By person</h2><p class="small muted">Pieces per run hour mixes very different parts — use the part comparison below to judge speed fairly.</p><div class="tbl-wrap"><table><tr><th>Person</th><th>Area</th><th class="num">Jobs</th><th class="num">Operations</th><th class="num">Parts</th><th class="num">Good</th><th class="num">Scrap</th><th class="num">Scrap %</th><th class="num">Run h</th><th class="num">Setup h</th><th class="num">Good / run h (finished ops)</th></tr>' +
+      P.map((p) => { const pr = person(p.id) || {}, sr = p.good + p.scrap ? 100 * p.scrap / (p.good + p.scrap) : null; return '<tr><td><b>' + esc(nm(p.id)) + '</b></td><td>' + esc(pr.area || '') + '</td><td class="num">' + p.jobs.size + '</td><td class="num">' + p.ops.size + '</td><td class="num">' + p.parts.size + '</td><td class="num">' + p.good.toLocaleString() + '</td><td class="num">' + p.scrap + '</td><td class="num' + (sr != null && sr > 2 ? ' bad' : '') + '">' + (sr == null ? '—' : sr.toFixed(1) + '%') + '</td><td class="num">' + f1(hrs(p.run)) + '</td><td class="num">' + f1(hrs(p.setup)) + '</td><td class="num"><b>' + (p.runDone ? f1(rate(p.good, p.runDone)) : '<span class="muted">in progress</span>') + '</b></td></tr>'; }).join('') + '</table></div></div>';
+    const G = D.G.map((g) => ({ g, rows: Object.keys(g.by).map((id) => ({ id, ...g.by[id], r: rate(g.by[id].good, g.by[id].run) })).filter((x) => x.r != null).sort((a, b) => b.r - a.r) })).filter((x) => x.rows.length >= 2).sort((a, b) => (b.rows[0].r - b.rows[b.rows.length - 1].r) / b.rows[0].r - (a.rows[0].r - a.rows[a.rows.length - 1].r) / a.rows[0].r);
+    h += '<div class="panel"><h2>Same part, same operation — who is faster</h2><p class="small muted">Only where two or more people ran the same operation of the same part. Biggest gaps first. Check the notes before judging: material, machine and batch size change the speed.</p>' +
+      (G.length ? G.slice(0, 40).map((x) => { const best = x.rows[0].r; return '<h3><span class="mono">' + esc(x.g.pn) + '</span> · op ' + esc(x.g.n) + ' · ' + esc(W.station(x.g.st).name) + '</h3><div class="tbl-wrap"><table><tr><th>Person</th><th class="num">Jobs</th><th class="num">Good</th><th class="num">Scrap %</th><th class="num">Run h</th><th class="num">Good / h</th><th class="num">Min / piece</th><th class="num">vs fastest</th></tr>' +
+        x.rows.map((r, k) => { const pct = Math.round(100 * r.r / best), sr = r.good + r.scrap ? 100 * r.scrap / (r.good + r.scrap) : 0; return '<tr><td><b>' + esc(nm(r.id)) + '</b></td><td class="num">' + r.jobs + '</td><td class="num">' + Math.round(r.good) + '</td><td class="num' + (sr > 2 ? ' bad' : '') + '">' + sr.toFixed(1) + '%</td><td class="num">' + f1(hrs(r.run)) + '</td><td class="num"><b>' + f1(r.r) + '</b></td><td class="num">' + f1(60 / r.r) + '</td><td class="num' + (k && pct < 75 ? ' bad' : '') + '">' + (k ? pct + '%' : 'fastest') + '</td></tr>'; }).join('') + '</table></div>'; }).join('')
+        : '<p class="muted">Not enough yet — this fills in once two different people have finished the same operation of the same part on the tablet.</p>') + '</div>';
+    return h;
+  }
+
   /* ---------- manage ---------- */
   function renderManage() {
     const J = jobs(), now = Date.now(), mgr = ui.user && ui.user.role === 'manager';
-    const tabs = [['release', 'Issue a traveler'], ['holds', 'Holds'], ['numbers', 'Numbers'], ['routings', 'Routings + open questions'], ['people', 'People + rules'], ['plan', 'Rollout']];
+    const tabs = [['release', 'Issue a traveler'], ['holds', 'Holds'], ['numbers', 'Numbers'], ['stats', 'Analytics'], ['routings', 'Routings + open questions'], ['people', 'People + rules'], ['plan', 'Rollout']];
     let h = '<div class="head"><div><h1>Manage</h1><p class="muted">Issue travelers, close holds, check the numbers.</p></div></div><div class="tabs">' + tabs.map((t) => '<button class="' + (ui.mtab === t[0] ? 'on' : '') + '" data-mtab="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>';
     const canIssue = ui.user && W.canDispose(ui.user);
     if ((ui.mtab === 'release' && !canIssue) || (ui.mtab === 'people' && !(ui.user && W.isApprover(ui.user)))) h += '<div class="banner warn"><div>Sign in as a manager, supervisor or quality to make changes here.</div><button class="btn sm" data-m="login">Sign in</button></div>';
@@ -2272,6 +2311,7 @@ window.WT_ESP = [
         return '<tr><td>' + esc(s.name) + '</td><td class="num">' + n + '</td><td class="num">' + p + '</td><td class="num">' + hd + '</td><td class="num">' + ap + '</td><td>' + (n ? fDur(old) + ' ago' : '—') + '</td></tr>';
       }).join('') + '</table></div></div>';
     }
+    if (ui.mtab === 'stats') h += renderStats(J, now);
     if (ui.mtab === 'routings') {
       h += '<div class="panel"><h2>Open questions from the paper travelers</h2><p class="muted">Found while transcribing the seven uploads. Each is shown as written on the documents. None was resolved by guessing.</p>' + W.ISSUES.map((x) => '<div class="issue ' + x.sev + '"><b>' + esc(x.t) + '</b> <span class="small muted">· ' + esc(x.parts.join(', ')) + '</span><br><span class="small">' + esc(x.d) + '</span></div>').join('') + '</div>';
       h += '<div class="panel"><h2>How the paper form maps</h2><div class="tbl-wrap"><table><tr><th>On Form 117 / 9-3</th><th>In this system</th></tr>' + [
@@ -2783,6 +2823,7 @@ window.WT_ESP = [
     if (d.open) return openJob(d.open, d.i);
     if (d.trole) { ui.trole = d.trole; return render(); }
     if (d.plane) { ui.plane = d.plane; ui.plq = ''; return render(); }
+    if (d.a === 'statDays') { ui.statDays = Number(d.v); return render(); }
     if (/^pl(Add|Task|Up|Dn|Rm|Clear|Done|Undo|Note|Who)$/.test(d.a || '')) return void planAct(d);
     if (d.nav) { if (d.pl) { ui.plane = d.pl; ui.plq = ''; } ui.view = d.nav; if (d.mtab) ui.mtab = d.mtab; if (d.lf) ui.lfilt = d.lf; if (d.nav === 'list') ui.lfloor = d.lfl || 'both'; $('#results').hidden = true; return render(); }
     if (d.mtab) { ui.mtab = d.mtab; return render(); }
