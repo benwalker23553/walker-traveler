@@ -475,7 +475,7 @@ window.WT_ES = {
 "Steps, in order":"Pasos, en orden",
 "+ Add step":"+ Agregar paso",
 "Issue work order to the floor":"Emitir orden de trabajo al piso",
-"Cancel":"Cancelar","🔔 Call supervisor":"🔔 Llamar supervisor","🔔 Call a supervisor":"🔔 Llamar a un supervisor","Come check this part":"Ven a revisar esta pieza","First piece ready":"Primera pieza lista","Question on the print":"Pregunta sobre el plano","Machine problem":"Problema con la máquina","Need material":"Falta material","Quality problem":"Problema de calidad","Send alert":"Enviar alerta","Note (optional)":"Nota (opcional)","Pick a reason.":"Elige un motivo.","Not me":"No soy yo","Enter your PIN — tap the numbers or type them on the keyboard.":"Escribe tu PIN — toca los números o usa el teclado.","Create your PIN.":"Crea tu PIN.","Enter the same PIN again to confirm.":"Escribe el mismo PIN otra vez para confirmar.",
+"Cancel":"Cancelar","✎ Change this step":"✎ Cambiar este paso","Traveler changes":"Cambios al traveler","✎ Fix wording + sign":"✎ Corregir texto y firmar","✔ Sign — update traveler":"✔ Firmar — actualizar traveler","Reject":"Rechazar","🔔 Call supervisor":"🔔 Llamar supervisor","🔔 Call a supervisor":"🔔 Llamar a un supervisor","Come check this part":"Ven a revisar esta pieza","First piece ready":"Primera pieza lista","Question on the print":"Pregunta sobre el plano","Machine problem":"Problema con la máquina","Need material":"Falta material","Quality problem":"Problema de calidad","Send alert":"Enviar alerta","Note (optional)":"Nota (opcional)","Pick a reason.":"Elige un motivo.","Not me":"No soy yo","Enter your PIN — tap the numbers or type them on the keyboard.":"Escribe tu PIN — toca los números o usa el teclado.","Create your PIN.":"Crea tu PIN.","Enter the same PIN again to confirm.":"Escribe el mismo PIN otra vez para confirmar.",
 "What to do at this step":"Qué hacer en este paso",
 "Work order number":"Número de orden de trabajo",
 "Part number (or prototype name)":"Número de parte (o nombre del prototipo)",
@@ -1328,7 +1328,7 @@ window.WT_ESP = [
     db.collection('jobs').onSnapshot((s) => {
       const m = {}; s.docs.forEach((d) => { const j = d.data(); if (j && j.id) m[j.id] = j; });
       Object.keys(store.queue).forEach((id) => { m[id] = store.queue[id].job || store.queue[id]; });
-      store.jobs = m; store.loaded = true; if (ui.openJobOnLoad && m[ui.openJobOnLoad]) { const oj = ui.openJobOnLoad; ui.openJobOnLoad = null; try { history.replaceState(null, '', location.pathname); } catch (e) { /* ok */ } openJob(oj); } render(); setTimeout(endOfDay, 1500);
+      store.jobs = m; store.loaded = true; if (ui.openRlOnLoad && !ui.modal) { ui.openRlOnLoad = false; setTimeout(() => openModal({ type: 'rlList' }), 600); } if (ui.openJobOnLoad && m[ui.openJobOnLoad]) { const oj = ui.openJobOnLoad; ui.openJobOnLoad = null; try { history.replaceState(null, '', location.pathname); } catch (e) { /* ok */ } openJob(oj); } render(); setTimeout(endOfDay, 1500);
     }, () => { store.mode = 'local'; loadLocal(); store.loaded = true; render(); });
     db.collection('logs').onSnapshot((s) => { s.docs.forEach((d) => { const x = d.data(); store.logs[d.id] = (x && x.rows) || []; if (d.id === 'final' && x) store.finMeta = { at: x.at, by: x.by, file: x.file }; }); render(); }, () => {});
     db.collection('routings').onSnapshot((s) => { s.docs.forEach((d) => { const r = d.data(); if (r && r.id && !W.routing(r.id)) W.ROUTINGS.push(W.clone(r)); }); render(); }, () => {});
@@ -1708,7 +1708,7 @@ window.WT_ESP = [
       prio: () => (canPlan() ? tile('data-nav="prio"', 'Daily priorities', 'What each area runs first', LANES.reduce((a, l) => a + openItems(l.id).length, 0), LANES.some((l) => planStale(l.id)) ? 'warn' : '') : T.today()),
       sign: () => tile('data-nav="list" data-lf="sign"', 'Needs a signature', 'First articles and closing signatures', sign, sign ? 'warn' : ''),
       hold: () => tile('data-nav="list" data-lf="hold"', 'On hold', 'Waiting on a disposition', hold, hold ? 'bad' : ''),
-      rl: () => tile('data-m="rlList"', 'Red-lines', 'Step changes to approve', rlPending().length, rlPending().length ? 'warn' : ''),
+      rl: () => tile('data-m="rlList"', 'Traveler changes', rlMine().length ? rlMine().length + ' waiting on you to sign' : 'Changes waiting: ' + rlPending().length, rlMine().length || rlPending().length, rlMine().length ? 'warn' : ''),
       alerts: () => (ui.user && (ui.user.role === 'manager' || W.isApprover(ui.user)) && window.WT_PUSH_KEY ? tile('data-m="alertsOn"', '🔔 Alerts on this phone', (ls.get('wt-alerts') === ui.user.id ? 'On — tap to re-check' : 'Get a ping when you’re needed'), null, ls.get('wt-alerts') === ui.user.id ? '' : 'warn') : ''),
       fin: () => (SRV() && ui.user && ui.user.fin ? tile('data-nav="finance"', 'Prices and costs', 'Sage orders, cost, margin', ui.fin && ui.fin.recon && ui.fin.recon.flags ? ui.fin.recon.flags.filter((f) => f.lvl === 'bad').length : null, 'warn') : ''),
       issue: () => tile('data-nav="manage" data-mtab="release"', 'Issue a traveler', 'Part, quantity, go', null),
@@ -2082,17 +2082,21 @@ window.WT_ESP = [
     if (!holds.length && !op.paused && ['first_piece', 'authorized', 'running'].indexOf(op.st) >= 0) sec += M('scrap', 'Log bad parts', 'sm');
     if (active) sec += M('hold', 'Raise hold', 'sm');
     sec += M('callSup', '🔔 Call supervisor', 'sm');
-    sec += M('redline', '✎ Red-line this step', 'sm');
+    sec += M('redline', '✎ Change this step', 'sm');
     return '<div class="actionbar"><div class="msg">' + msg + '</div><div class="row">' + main + '</div><div class="row">' + sec + '</div></div>';
   }
   // Supplier details appear when the reason is a bad supplier part
   function supList() { const S = {}; jobs().forEach((j) => { (j.holds || []).forEach((h) => { if (h.sup && h.sup.name) S[h.sup.name] = 1; }); (j.supIssues || []).forEach((x) => { if (x.sup.name) S[x.sup.name] = 1; }); }); return Object.keys(S).sort(); }
   function supF(m) { if (m.reason !== 'Supplier part bad') return ''; return '<div class="grid2"><label>Supplier<input data-f="supName" id="m-supName" class="field" list="sup-list" autocomplete="off" value="' + esc(m.supName || '') + '"></label><datalist id="sup-list">' + supList().map((n) => '<option value="' + esc(n) + '">').join('') + '</datalist>' + inp('supRef', 'Their PO / lot / part # (if you have it)', m, 'autocomplete="off"') + '</div>'; }
   function rlCard(x, withJob) {
-    const can = ui.user && W.isApprover(ui.user) && x.by !== ui.user.id && W.covers(ui.user, x.station);
-    return '<div class="banner warn"><div><b>✎ Red-line ' + esc(x.id) + ' waiting for approval</b> · ' + esc(x.reason) + ' · by ' + esc(nm(x.by)) + ' ' + esc(fTime(x.at)) + (withJob ? ' · <span class="mono">' + esc(x.pn) + '</span> ' + esc(opLabel(x.n)) + (x.so ? ' · Shop Order ' + esc(x.so) : ' · from the library') : '') +
-      '<br><span class="small">Now:</span> <span class="small notr">' + esc(x.was) + '</span><br><span class="small"><b>Change to:</b></span> <span class="notr"><b>' + esc(x.text) + '</b></span>' + (x.note ? '<br><span class="small">Note: ' + esc(x.note) + '</span>' : '') + '</div>' +
-      (can ? '<span class="row"><button class="btn go sm" data-a="rlOk" data-id="' + esc(x.id) + '">✔ Approve — update traveler</button><button class="btn sm" data-a="rlNo" data-id="' + esc(x.id) + '">Reject</button></span>' : '<span class="small muted">' + (ui.user && x.by === ui.user.id ? 'Another signer must approve.' : 'A signer for this area approves.') + '</span>') + '</div>';
+    const st = rlStage(x), me = ui.user && ui.user.id, canQa = st === 'qa' && me === RL_QA(), canMgr = st === 'mgr' && me === RL_MGR();
+    const step = st === 'qa' ? 'Step 1 of 2 · waiting on ' + nm(RL_QA()) + ' to finalize the wording and sign' : 'Step 2 of 2 · ' + nm(RL_QA()) + ' signed ' + fTime(x.qaAt) + ' · waiting on ' + nm(RL_MGR()) + ' to sign';
+    return '<div class="banner warn"><div><b>✎ Change ' + esc(x.id) + '</b> · ' + esc(x.reason) + ' · asked by ' + esc(nm(x.by)) + ' ' + esc(fTime(x.at)) + (withJob ? ' · <span class="mono">' + esc(x.pn) + '</span> ' + esc(opLabel(x.n)) + (x.so ? ' · Shop Order ' + esc(x.so) : ' · from the library') : '') +
+      '<br><span class="pill warn">' + esc(step) + '</span>' +
+      '<br><span class="small">Now:</span> <span class="small notr">' + esc(x.was) + '</span><br><span class="small"><b>' + (st === 'mgr' ? 'Will read:' : 'Asked for:') + '</b></span> <span class="notr"><b>' + esc(x.text) + '</b></span>' + (x.note ? '<br><span class="small">Note: ' + esc(x.note) + '</span>' : '') + (x.ask && x.ask !== x.text ? '<br><span class="small muted">Originally asked: <span class="notr">' + esc(x.ask) + '</span></span>' : '') + '</div>' +
+      (canQa ? '<span class="row"><button class="btn go sm" data-a="rlRev" data-id="' + esc(x.id) + '">✎ Fix wording + sign</button><button class="btn sm" data-a="rlNo" data-id="' + esc(x.id) + '">Reject</button></span>'
+        : canMgr ? '<span class="row"><button class="btn go sm" data-a="rlSign" data-id="' + esc(x.id) + '">✔ Sign — update traveler</button><button class="btn sm" data-a="rlRev" data-id="' + esc(x.id) + '">Send back to ' + esc(nm(RL_QA())) + '</button><button class="btn sm" data-a="rlNo" data-id="' + esc(x.id) + '">Reject</button></span>'
+        : '<span class="small muted">' + esc(st === 'qa' ? nm(RL_QA()) + ' signs first.' : nm(RL_MGR()) + ' signs next.') + '</span>') + '</div>';
   }
   function workTab(j, r, i) {
     const op = j.ops[i], o = r.ops[i], now = Date.now(), holds = W.openHolds(j, op.n), b = W.bucket(j, i);
@@ -2102,7 +2106,7 @@ window.WT_ESP = [
     h += '<div class="chips">' + o.mach.map((m) => '<span class="chip">' + esc(m) + '</span>').join('') + (o.dwg ? '<span class="chip">DWG ' + esc(o.dwg) + '</span>' : '') + '</div>';
     const ls2 = liveStep(j.rid, op.n, o.text, j), ed = ls2.how === 'job' ? ls2.x : null;
     h += '<p class="instr notr">' + esc(ls2.text) + '</p>' + (ed ? '<p class="small"><b>Changed for this job</b> by ' + esc(nm(ed.by)) + ' · ' + esc(fTime(ed.at)) + '. Master traveler: <span class="notr">' + esc(o.text) + '</span></p>' : '') +
-      (ls2.how === 'redline' ? '<p class="small"><b>Updated by red-line ' + esc(ls2.x.id) + '</b> · ' + esc(ls2.x.reason) + ' · approved by ' + esc(nm(ls2.x.okBy)) + ' ' + esc(fTime(ls2.x.okAt)) + '. Was: <span class="notr">' + esc(o.text) + '</span></p>' : '');
+      (ls2.how === 'redline' ? '<p class="small"><b>Changed by ' + esc(ls2.x.id) + (ls2.x.qaBy ? ' · signed ' + esc(nm(ls2.x.qaBy)) + ' + ' + esc(nm(ls2.x.okBy)) : '') + '</b> · ' + esc(ls2.x.reason) + ' · approved by ' + esc(nm(ls2.x.okBy)) + ' ' + esc(fTime(ls2.x.okAt)) + '. Was: <span class="notr">' + esc(o.text) + '</span></p>' : '');
     rlPending().filter((x) => x.rid === j.rid && x.n === op.n).forEach((x) => { h += rlCard(x); });
     if (ui.user && W.isApprover(ui.user)) h += '<button class="btn sm" data-m="editStep" data-job="' + esc(j.id) + '" data-i="' + i + '" style="align-self:flex-start">✎ Edit this step for this job</button>';
     if (o.warn) h += '<div class="banner warn"><div><b>' + esc(o.warn) + '</b></div></div>';
@@ -2449,12 +2453,15 @@ window.WT_ESP = [
       case 'callSup': h = '<h2>🔔 Call a supervisor</h2><p class="muted"><span class="mono">' + esc(j.pn) + '</span> · op ' + esc(op.n) + ' · ' + esc(W.station(op.station).name) + '. Sends an alert to the ' + esc(W.sideOf(op.station)) + ' supervisors’ phones.</p>' + tiles('reason', ['Come check this part', 'First piece ready', 'Question on the print', 'Machine problem', 'Need material', 'Quality problem'], m) +
         '<label>Note (optional)<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Send alert', 'go'); break;
       case 'alertsOn': h = '<h2>🔔 Alerts on this phone</h2><p>' + esc(nm(m.who)) + ', get a notification when someone in your area calls you, needs a signature, or puts a part on hold.</p><p class="small muted">iPhone: first add this app to your Home Screen (Share → Add to Home Screen) and open it from the icon. Then turn alerts on here.</p>' + pad(m) + foot('Turn on alerts', 'go'); break;
-      case 'redline': { const o2 = W.routing(j.rid).ops[m.i]; h = '<h2>Red-line this step · op ' + op.n + '</h2><p class="muted">Write the step the way it should read. A signer approves it, and then every traveler for this part shows the new step on every tablet.</p>' +
-        tiles('reason', RL_REASONS, m) + '<label>New step<textarea data-f="text" id="m-text" style="min-height:150px" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.text || '') + '</textarea></label>' +
-        '<label>Note (optional)<input data-f="note" id="m-note" class="field" value="' + esc(m.note || '') + '" placeholder="Why, which tool or fixture"></label><p class="small muted">Now reads: <span class="notr">' + esc(liveStep(j.rid, op.n, o2.text, null).text) + '</span></p>' + foot('Send for approval'); break; }
+      case 'redline': { const o2 = W.routing(j.rid).ops[m.i]; h = '<h2>✎ Change this step · op ' + op.n + '</h2><p class="muted">Fix the words below, or just say what is wrong. ' + esc(nm(RL_QA())) + ' gets a text, finalizes the wording and signs, then ' + esc(nm(RL_MGR())) + ' signs and every ' + esc(j.pn) + ' traveler updates.</p>' +
+        '<label>The step should read<textarea data-f="text" id="m-text" style="min-height:140px" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.text || '') + '</textarea></label>' +
+        '<label>What is wrong / why (optional)<input data-f="note" id="m-note" class="field" value="' + esc(m.note || '') + '" placeholder="Example: we use fixture #12 now, not #8"></label>' + tiles('reason', RL_REASONS, m) + foot('Send to ' + esc(nm(RL_QA())), 'go'); break; }
+      case 'rlRev': { const x = store.redlines[m.id]; h = '<h2>✎ Change ' + esc(x.id) + ' · <span class="mono">' + esc(x.pn) + '</span> ' + esc(opLabel(x.n)) + '</h2><p class="small">Asked by <b>' + esc(nm(x.by)) + '</b> · ' + esc(x.reason) + (x.note ? ' · “' + esc(x.note) + '”' : '') + '</p><p class="small muted">Now reads: <span class="notr">' + esc(x.was) + '</span></p>' +
+        '<label>Final wording — edit as you intend it to read<textarea data-f="text" id="m-text" style="min-height:150px">' + esc(m.text || '') + '</textarea></label><h3>' + esc(nm(m.who)) + ', sign with your PIN</h3>' + pad(m) + foot('Sign — send to ' + esc(nm(RL_MGR())), 'go'); break; }
+      case 'rlSign': { const x = store.redlines[m.id]; h = '<h2>✔ Sign change ' + esc(x.id) + ' · <span class="mono">' + esc(x.pn) + '</span> ' + esc(opLabel(x.n)) + '</h2><p class="small muted">Now reads: <span class="notr">' + esc(x.was) + '</span></p><div class="banner info"><div><b>Will read:</b> <span class="notr">' + esc(x.text) + '</span><br><span class="small">Finalized and signed by ' + esc(nm(x.qaBy)) + ' ' + esc(fTime(x.qaAt)) + ' · asked by ' + esc(nm(x.by)) + '</span></div></div><h3>' + esc(nm(m.who)) + ', sign with your PIN</h3>' + pad(m) + foot('Sign — update every ' + esc(x.pn) + ' traveler', 'go'); break; }
       case 'rlList': { wide = true; const P = rlPending(), D = rls().filter((x) => x.status !== 'pending').sort((a, b) => (b.okAt || b.at) - (a.okAt || a.at)).slice(0, 30);
-        h = '<div class="row" style="justify-content:space-between"><h2>Red-lines</h2><button class="btn sm" data-close>Close</button></div><h3>Waiting for approval (' + P.length + ')</h3>' + (P.length ? P.map((x) => rlCard(x, true)).join('') : '<p class="muted">Nothing waiting.</p>') +
-          '<h3>Recently decided</h3>' + (D.length ? '<div class="tbl-wrap"><table><tr><th>Red-line</th><th>Part · op</th><th>Status</th><th>Change</th><th>Decided by</th></tr>' + D.map((x) => '<tr><td class="mono">' + esc(x.id) + '</td><td class="mono">' + esc(x.pn) + ' · ' + esc(opLabel(x.n)) + '</td><td>' + (x.status === 'approved' ? '✔ Approved — live' : '✖ Rejected' + (x.noWhy ? ': ' + esc(x.noWhy) : '')) + '</td><td class="notr">' + esc(String(x.n).indexOf('risk:') === 0 ? (RISK_NAME[x.text] || 'No risk color') : String(x.n).indexOf('area:') === 0 ? W.station(x.text).name : x.text) + '</td><td>' + esc(nm(x.okBy)) + ' ' + esc(fTime(x.okAt)) + '</td></tr>').join('') + '</table></div>' : '<p class="muted">None yet.</p>') +
+        h = '<div class="row" style="justify-content:space-between"><h2>Traveler changes</h2><button class="btn sm" data-close>Close</button></div><p class="small muted">Every change gets two signatures: ' + esc(nm(RL_QA())) + ' finalizes the wording and signs, then ' + esc(nm(RL_MGR())) + ' signs and it goes live on every traveler for that part.</p><h3>Waiting (' + P.length + ')</h3>' + (P.length ? P.slice().sort((a, b) => (rlMine().indexOf(b) >= 0) - (rlMine().indexOf(a) >= 0)).map((x) => rlCard(x, true)).join('') : '<p class="muted">Nothing waiting.</p>') +
+          '<h3>Recently decided</h3>' + (D.length ? '<div class="tbl-wrap"><table><tr><th>Red-line</th><th>Part · op</th><th>Status</th><th>Change</th><th>Decided by</th></tr>' + D.map((x) => '<tr><td class="mono">' + esc(x.id) + '</td><td class="mono">' + esc(x.pn) + ' · ' + esc(opLabel(x.n)) + '</td><td>' + (x.status === 'approved' ? '✔ Approved — live' : '✖ Rejected' + (x.noWhy ? ': ' + esc(x.noWhy) : '')) + '</td><td class="notr">' + esc(String(x.n).indexOf('risk:') === 0 ? (RISK_NAME[x.text] || 'No risk color') : String(x.n).indexOf('area:') === 0 ? W.station(x.text).name : x.text) + '</td><td>' + (x.qaBy ? esc(nm(x.qaBy)) + ' + ' : '') + esc(nm(x.okBy)) + ' ' + esc(fTime(x.okAt)) + '</td></tr>').join('') + '</table></div>' : '<p class="muted">None yet.</p>') +
           (store.downloads ? '<button class="btn sm" data-a="rlCsv" style="align-self:flex-start">Save approved red-lines for the master PDFs</button><p class="small muted">Approved red-lines are live on the tablets now. The master PDFs in the folder still show the old step until drafting updates them at the next revision.</p>' : ''); break; }
       case 'rlNo': h = '<h2>Reject red-line ' + esc(m.id) + '</h2>' + inp('why', 'Why not?', m) + foot('Reject', 'stop'); break;
       case 'flag': h = '<h2>Flag this instruction · op ' + op.n + '</h2><p class="muted">Goes to review. The approved instruction does not change until someone releases a new revision.</p><label>What is unclear, or what would you change?<textarea data-f="text" id="m-text" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.text || '') + '</textarea></label>' + foot('Send for review'); break;
@@ -2557,11 +2564,23 @@ window.WT_ESP = [
       case 'alertsOn': { if ((m.pin || '').length !== 4 || m.busy) return; m.busy = true;
         alertsOn(m.who, m.pin).then((msg) => { m.busy = false; closeModal(); toast(msg); render(); }).catch((e) => { m.busy = false; m.pin = ''; renderModal(); toast(String(e.message || e), 'bad'); }); return; }
       case 'redline': { const j = store.jobs[m.job], op = j.ops[m.i], o2 = W.routing(j.rid).ops[m.i], tx = String(m.text || '').trim(), was = liveStep(j.rid, op.n, o2.text, null).text;
-        if (!m.reason) return toast('Pick what kind of change it is.', 'bad'); if (!tx || tx === was) return toast('Write the step the way it should read.', 'bad');
+        const note = String(m.note || '').trim(); if ((!tx || tx === was) && !note) return toast('Change the words, or say what is wrong.', 'bad');
         const id = 'R' + Date.now().toString(36).toUpperCase().slice(-5);
-        saveRl({ id, rid: j.rid, pn: j.pn, n: op.n, station: op.station, so: j.so, job: j.id, was, text: tx, reason: m.reason, note: String(m.note || '').trim(), by: ui.user.id, at: Date.now(), status: 'pending' });
-        run(m.job, 'logNote', { a: 'Red-line sent', d: id + ' · op ' + op.n + ' · ' + m.reason });
-        closeModal(); return toast('Red-line ' + id + ' sent. A signer approves it.'); }
+        const x = { id, rid: j.rid, pn: j.pn, n: op.n, station: op.station, so: j.so, job: j.id, was, text: tx || was, ask: tx || was, reason: m.reason || 'Change', note, by: ui.user.id, at: Date.now(), status: 'pending', stage: 'qa' };
+        saveRl(x); run(m.job, 'logNote', { a: 'Change requested', d: id + ' · op ' + op.n + (note ? ' · ' + note : '') });
+        rlAlert(x, [RL_QA()], 'Traveler change to review', (note ? note + ' — ' : '') + x.text);
+        if (ui.user.id === RL_QA()) return openModal({ type: 'rlRev', id, who: ui.user.id, pin: '', text: x.text });
+        closeModal(); return toast('Change ' + id + ' sent to ' + nm(RL_QA()) + '.'); }
+      case 'rlRev': { if (SRV() && m.pinOk !== m.who + ':' + m.pin && person(m.who)) return pinGate(m); const p2 = verify(m); if (!p2) return; const x = store.redlines[m.id], tx = String(m.text || '').trim();
+        if (!x || x.status !== 'pending') { closeModal(); return toast('Already decided.'); } if (p2.id !== RL_QA()) return toast(nm(RL_QA()) + ' signs this step.', 'bad'); if (!tx) return toast('Write the final wording.', 'bad');
+        const y = Object.assign(W.clone(x), { text: tx, stage: 'mgr', qaBy: p2.id, qaAt: Date.now() }); saveRl(y);
+        if (store.jobs[x.job]) run(x.job, 'logNote', { a: 'Change signed by quality', d: x.id + ' · ' + nm(p2.id) + ' · will read: ' + tx.slice(0, 140) }, p2);
+        rlAlert(y, [RL_MGR()], 'Traveler change ready to sign'); closeModal(); return toast('Signed. Sent to ' + nm(RL_MGR()) + ' to sign.'); }
+      case 'rlSign': { if (SRV() && m.pinOk !== m.who + ':' + m.pin && person(m.who)) return pinGate(m); const p2 = verify(m); if (!p2) return; const x = store.redlines[m.id];
+        if (!x || x.status !== 'pending' || rlStage(x) !== 'mgr') { closeModal(); return toast('Already decided.'); } if (p2.id !== RL_MGR()) return toast(nm(RL_MGR()) + ' signs this step.', 'bad');
+        saveRl(Object.assign(W.clone(x), { status: 'approved', okBy: p2.id, okAt: Date.now() }));
+        if (store.jobs[x.job]) run(x.job, 'logNote', { a: 'Change live', d: x.id + ' · signed ' + nm(x.qaBy) + ' + ' + nm(p2.id) + ' · op ' + x.n + ' now reads: ' + x.text.slice(0, 140) }, p2);
+        rlAlert(x, [x.by, RL_QA()].filter((v, k, a) => v && a.indexOf(v) === k && v !== p2.id), 'Traveler change is live'); closeModal(); return toast('Signed. ' + opLabel(x.n) + ' is updated on every ' + x.pn + ' traveler.'); }
       case 'setRisk': case 'setArea': { const rt = W.routing(m.rid), tag = (m.type === 'setRisk' ? 'risk:' : 'area:') + m.n, o = rt.ops.find((q) => String(q.n) === String(m.n));
         if (!ui.user || !W.isApprover(ui.user)) return toast('A supervisor or manager makes this change.', 'bad'); if (m.type === 'setArea' && !m.v) return toast('Pick the department.', 'bad');
         const was = m.type === 'setRisk' ? rk(rt, o) : o.station, at = Date.now(), id = 'R' + at.toString(36).toUpperCase().slice(-5);
@@ -2580,9 +2599,11 @@ window.WT_ESP = [
         if (!ui.user || !W.isApprover(ui.user)) return toast('A supervisor or manager makes corrections.', 'bad');
         if (!m.reason) return toast('Pick what kind of change it is.', 'bad'); if (!tx || tx === m.was) return toast('Write it the way it should read.', 'bad');
         const id = 'R' + Date.now().toString(36).toUpperCase().slice(-5), at = Date.now(), o = rt.ops.find((x) => String(x.n) === String(m.n));
-        saveRl({ id, rid: rt.id, pn: rt.pn, n: m.n, station: o ? o.station : rt.ops[0].station, so: '', job: '', was: m.was, text: tx, reason: m.reason, note: String(m.note || '').trim(), by: ui.user.id, at, status: 'approved', okBy: ui.user.id, okAt: at, src: 'library' });
-        toast(opLabel(m.n) + ' updated on every ' + rt.pn + ' traveler'); return openModal({ type: 'master', rid: rt.id }); }
-      case 'rlNo': { const x = store.redlines[m.id]; if (!String(m.why || '').trim()) return toast('Say why.', 'bad'); saveRl(Object.assign(W.clone(x), { status: 'rejected', okBy: ui.user.id, okAt: Date.now(), noWhy: m.why.trim() })); closeModal(); return toast('Red-line rejected'); }
+        const x = { id, rid: rt.id, pn: rt.pn, n: m.n, station: o ? o.station : rt.ops[0].station, so: '', job: '', was: m.was, text: tx, ask: tx, reason: m.reason, note: String(m.note || '').trim(), by: ui.user.id, at, status: 'pending', stage: 'qa', src: 'library' };
+        saveRl(x); rlAlert(x, [RL_QA()], 'Traveler change to review');
+        if (ui.user.id === RL_QA()) return openModal({ type: 'rlRev', id, who: ui.user.id, pin: '', text: tx });
+        toast('Change ' + id + ' sent to ' + nm(RL_QA()) + ', then ' + nm(RL_MGR()) + ' signs'); return openModal({ type: 'master', rid: rt.id }); }
+      case 'rlNo': { const x = store.redlines[m.id]; if (!String(m.why || '').trim()) return toast('Say why.', 'bad'); saveRl(Object.assign(W.clone(x), { status: 'rejected', okBy: ui.user.id, okAt: Date.now(), noWhy: m.why.trim() })); rlAlert(x, [x.by].filter((v) => v && v !== ui.user.id), 'Traveler change not approved', m.why.trim()); closeModal(); return toast('Change rejected'); }
       case 'editStep': ok = run(m.job, 'editStep', { i: m.i, text: m.text, reason: m.reason }); if (ok) toast('Step changed for this job'); break;
       case 'move': { const nb = Math.max(1, Math.floor(Number(m.boxes) || 1)), q = Math.floor(Number(m.qty)); let j2 = store.jobs[m.job];
         if (!(q >= 1)) return toast('Enter how many pieces are moving.', 'bad'); if (nb > q) return toast('More boxes than pieces.', 'bad'); if (nb > 60) return toast('60 boxes at most in one move.', 'bad');
@@ -2774,6 +2795,14 @@ window.WT_ESP = [
   const RL_REASONS = ['Process change', 'Tool change', 'Fixture change', 'Clearer wording', 'Other'];
   const rls = () => Object.values(store.redlines || {});
   const rlPending = () => rls().filter((x) => x.status === 'pending').sort((a, b) => a.at - b.at);
+  // Two signatures on every traveler change: Marty (quality) finalizes the wording and signs, then Paul signs and it goes live.
+  const RL_QA = () => (store.cfg.rules && store.cfg.rules.rlQa) || 'marety', RL_MGR = () => (store.cfg.rules && store.cfg.rules.rlMgr) || 'paul';
+  const rlStage = (x) => x.stage || 'qa';
+  const rlMine = () => !ui.user ? [] : rlPending().filter((x) => (rlStage(x) === 'qa' && ui.user.id === RL_QA()) || (rlStage(x) === 'mgr' && ui.user.id === RL_MGR()));
+  function rlAlert(x, ids, title, extra) {
+    if (!window.WT_NOTIFY) return;
+    window.WT_NOTIFY({ ids, side: null, station: x.station, job: x.job || '', kind: 'redline', from: ui.user ? ui.user.id : '', self: true, title, body: x.pn + ' · ' + opLabel(x.n) + (x.so ? ' · SO ' + x.so : '') + '\n' + (extra || x.text).slice(0, 180), tag: 'wt-rl-' + x.id, url: location.origin + location.pathname + '#rl=' + encodeURIComponent(x.id) }).catch(() => null);
+  }
   // The step text people should follow: a change for this job only, else the newest approved red-line, else the master traveler
   function liveStep(rid, n, base, j) {
     const ed = j && (j.edits || {})[n]; if (ed) return { text: ed.text, how: 'job', x: ed };
@@ -2929,12 +2958,16 @@ window.WT_ESP = [
           rpc('fin_save_settings', { p_token: ui.finTok, p: nv }).then(() => { toast('Costs saved'); finLoad(); }).catch(() => { toast('Could not save. Enter your PIN again.', 'bad'); ui.finTok = null; ui.fin = null; render(); }); return; }
         store.cfg.costs = co; saveCfg((c) => { c.costs = Object.assign({}, c.costs || {}, { rate: co.rate, oh: co.oh, mat: Object.assign({}, (c.costs || {}).mat || {}, co.mat) }); }); return toast('Costs saved');
       }
+      if (d.a === 'rlRev' || d.a === 'rlSign') { if (!need()) return; const x = store.redlines[d.id]; if (!x || x.status !== 'pending') return toast('Already decided.');
+        if (d.a === 'rlRev' && ui.user.id !== RL_QA() && !(ui.user.id === RL_MGR() && rlStage(x) === 'mgr')) return toast(nm(RL_QA()) + ' finalizes the wording.', 'bad');
+        if (d.a === 'rlRev' && ui.user.id === RL_MGR()) { saveRl(Object.assign(W.clone(x), { stage: 'qa' })); rlAlert(x, [RL_QA()], 'Traveler change sent back to you'); return toast('Sent back to ' + nm(RL_QA()) + '.'); }
+        if (d.a === 'rlSign' && ui.user.id !== RL_MGR()) return toast(nm(RL_MGR()) + ' signs this.', 'bad');
+        return openModal({ type: d.a, id: x.id, who: ui.user.id, pin: '', text: x.text }); }
       if (d.a === 'rlOk' || d.a === 'rlNo' || d.a === 'rlCsv') {
         if (d.a === 'rlCsv') { const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; const rows = [['Red-line', 'Part', 'Op', 'Old step', 'New step', 'Reason', 'Note', 'By', 'Approved by', 'Approved']].concat(rls().filter((x) => x.status === 'approved').map((x) => [x.id, x.pn, x.n, x.was, x.text, x.reason, x.note, nm(x.by), nm(x.okBy), new Date(x.okAt).toLocaleString()])); return void store.downloads.save({ filename: 'approved-red-lines.csv', data: rows.map((r) => r.map(q).join(',')).join('\r\n') }).catch(() => {}); }
         if (!need()) return; const x = store.redlines[d.id]; if (!x || x.status !== 'pending') return toast('Already decided.');
-        if (!W.isApprover(ui.user) || !W.covers(ui.user, x.station)) return toast('A signer for this area approves red-lines.', 'bad');
-        if (x.by === ui.user.id) return toast('Another signer must approve your own red-line.', 'bad');
-        if (d.a === 'rlNo') return openModal({ type: 'rlNo', id: x.id, why: '' });
+        if (d.a === 'rlNo') { if (ui.user.id !== RL_QA() && ui.user.id !== RL_MGR() && ui.user.role !== 'manager') return toast(nm(RL_QA()) + ' or ' + nm(RL_MGR()) + ' decides changes.', 'bad'); return openModal({ type: 'rlNo', id: x.id, why: '' }); }
+        if (ui.user.id !== RL_MGR() || rlStage(x) !== 'mgr') return toast(nm(RL_QA()) + ' signs first, then ' + nm(RL_MGR()) + '.', 'bad');
         saveRl(Object.assign(W.clone(x), { status: 'approved', okBy: ui.user.id, okAt: Date.now() }));
         if (store.jobs[x.job]) run(x.job, 'logNote', { a: 'Red-line approved', d: x.id + ' · op ' + x.n + ' now reads: ' + x.text.slice(0, 140) });
         return toast('Approved. Op ' + x.n + ' is updated on every traveler for ' + x.pn + '.');
@@ -3017,7 +3050,7 @@ window.WT_ESP = [
       const j = jobs().find((x) => x.id.toLowerCase() === q || x.so.toLowerCase() === q); if (j) openJob(j.id); }
     if (e.key === 'Enter' && ui.modal && e.target.tagName === 'INPUT') { e.preventDefault(); submit(); }
   });
-  if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message', (e) => { const d = e.data || {}; if (d.type !== 'openJob' || !d.id) return; if (store.jobs[d.id]) { closeModal(); openJob(d.id); render(); } else ui.openJobOnLoad = d.id; });
+  if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message', (e) => { const d = e.data || {}; if (d.type === 'openRl') { closeModal(); return openModal({ type: 'rlList' }); } if (d.type !== 'openJob' || !d.id) return; if (store.jobs[d.id]) { closeModal(); openJob(d.id); render(); } else ui.openJobOnLoad = d.id; });
   window.addEventListener('online', () => { store.offline = false; Object.keys(store.queue).forEach(pump); renderSync(); });
   window.addEventListener('offline', renderSync);
   setInterval(() => {
@@ -3030,6 +3063,7 @@ window.WT_ESP = [
   const okSt = (x) => !!x && (/^all(metal|filter)?$/.test(x) || W.STATIONS.some((s) => s.id === x && s.kind === 'work'));
   ui.station = okSt(hs) ? hs : okSt(saved) ? saved : 'all';
   ui.view = 'home';
+  if (/^rl=/.test(hs)) ui.openRlOnLoad = true;
   if (/^job=/.test(hs)) { ui.station = okSt(saved) ? saved : 'all'; ui.openJobOnLoad = decodeURIComponent(hs.slice(4)); }
   if (hs === 'tv') { ui.tv = true; ui.view = 'board'; document.body.classList.add('tv'); }
   init(); loadMaster();

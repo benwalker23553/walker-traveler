@@ -1,5 +1,5 @@
 // Keeps the app opening when Wi-Fi drops. Always tries the network first, so updates arrive as soon as they are published.
-const SHELL = 'wt-shell-v3';
+const SHELL = 'wt-shell-v4';
 self.addEventListener('install', (e) => { self.skipWaiting(); e.waitUntil(caches.open(SHELL).then((c) => c.addAll(['./', 'index.html', 'supa.js', 'manifest.json', 'icon.png']).catch(() => {}))); });
 self.addEventListener('activate', (e) => { e.waitUntil(self.clients.claim()); });
 self.addEventListener('fetch', (e) => {
@@ -18,7 +18,7 @@ self.addEventListener('push', (e) => {
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const url = (e.notification.data && e.notification.data.url) || './';
-  const id = (/#job=([^&]+)/.exec(url) || [])[1];
+  const id = (/#job=([^&]+)/.exec(url) || [])[1], rl = /#rl=/.test(url);
   // If the app is already open, switch to the traveler without reloading (no second sign-in). Otherwise open it.
-  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => { for (const c of cs) { if ('focus' in c) { if (id) c.postMessage({ type: 'openJob', id: decodeURIComponent(id) }); return c.focus(); } } return self.clients.openWindow(url); }));
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => { for (const c of cs) { if ('focus' in c) { if (id) c.postMessage({ type: 'openJob', id: decodeURIComponent(id) }); else if (rl) c.postMessage({ type: 'openRl' }); return c.focus(); } } return self.clients.openWindow(url); }));
 });
