@@ -475,7 +475,7 @@ window.WT_ES = {
 "Steps, in order":"Pasos, en orden",
 "+ Add step":"+ Agregar paso",
 "Issue work order to the floor":"Emitir orden de trabajo al piso",
-"Cancel":"Cancelar","✎ Change this step":"✎ Cambiar este paso","Traveler changes":"Cambios al traveler","✎ Fix wording + sign":"✎ Corregir texto y firmar","✔ Sign — update traveler":"✔ Firmar — actualizar traveler","Reject":"Rechazar","🔔 Call supervisor":"🔔 Llamar supervisor","🔔 Call a supervisor":"🔔 Llamar a un supervisor","Come check this part":"Ven a revisar esta pieza","First piece ready":"Primera pieza lista","Question on the print":"Pregunta sobre el plano","Machine problem":"Problema con la máquina","Need material":"Falta material","Quality problem":"Problema de calidad","Send alert":"Enviar alerta","Note (optional)":"Nota (opcional)","Pick a reason.":"Elige un motivo.","Not me":"No soy yo","Enter your PIN — tap the numbers or type them on the keyboard.":"Escribe tu PIN — toca los números o usa el teclado.","Create your PIN.":"Crea tu PIN.","Enter the same PIN again to confirm.":"Escribe el mismo PIN otra vez para confirmar.",
+"Cancel":"Cancelar","⤼ Skip this step":"⤼ Saltar este paso","Skip step":"Saltar paso","Not needed on this job":"No se necesita en este trabajo","Already done at another step":"Ya se hizo en otro paso","Supervisor signs":"Firma del supervisor","✎ Change this step":"✎ Cambiar este paso","Traveler changes":"Cambios al traveler","✎ Fix wording + sign":"✎ Corregir texto y firmar","✔ Sign — update traveler":"✔ Firmar — actualizar traveler","Reject":"Rechazar","🔔 Call supervisor":"🔔 Llamar supervisor","🔔 Call a supervisor":"🔔 Llamar a un supervisor","Come check this part":"Ven a revisar esta pieza","First piece ready":"Primera pieza lista","Question on the print":"Pregunta sobre el plano","Machine problem":"Problema con la máquina","Need material":"Falta material","Quality problem":"Problema de calidad","Send alert":"Enviar alerta","Note (optional)":"Nota (opcional)","Pick a reason.":"Elige un motivo.","Not me":"No soy yo","Enter your PIN — tap the numbers or type them on the keyboard.":"Escribe tu PIN — toca los números o usa el teclado.","Create your PIN.":"Crea tu PIN.","Enter the same PIN again to confirm.":"Escribe el mismo PIN otra vez para confirmar.",
 "What to do at this step":"Qué hacer en este paso",
 "Work order number":"Número de orden de trabajo",
 "Part number (or prototype name)":"Número de parte (o nombre del prototipo)",
@@ -932,6 +932,17 @@ window.WT_ESP = [
         touch(job, i, ctx);
         if (op.st === 'ready') { op.setup = { by: ctx.u.id, at: ctx.at, vals: {}, none: true }; log(job, ctx, 'No setup needed', 'Op ' + op.n); }
         op.st = 'first_piece'; seg(op, 'first_piece', ctx); log(job, ctx, 'First article started', 'Op ' + op.n); break;
+      case 'skip': {
+        // Skip a step that is not needed on this job. Only before work starts on it, and only with a supervisor's PIN.
+        op = job.ops[i]; if (!op) fail('Pick a step.');
+        if (!ctx.u || !isApprover(ctx.u)) fail('A supervisor signs to skip a step.');
+        if (['ready', 'setup', 'setup_done'].indexOf(op.st) < 0) fail(op.st === 'pending' ? 'Parts have not reached this step yet.' : 'Work already started on this step. Finish it, or raise a hold.');
+        if (openHolds(job, op.n).length) fail('Close the hold first.');
+        if (!String(p.reason || '').trim()) fail('Say why the step is skipped.');
+        seg(op, null, ctx); op.skipped = { by: ctx.u.id, at: ctx.at, reason: String(p.reason).trim(), ask: p.ask || ctx.u.id };
+        op.good = op.qtyIn - op.scrap; op.short = 0; op.st = 'closed';
+        log(job, ctx, 'Step skipped', 'Op ' + op.n + ' · ' + String(p.reason).trim()); break;
+      }
       case 'reqFirst':
         op = guard(job, i, ctx); if (op.st !== 'first_piece') fail('Make the first article first.');
         touch(job, i, ctx); op.st = 'fp_wait'; op.checks.push({ type: 'first', reqBy: ctx.u.id, reqAt: ctx.at, count: 1, note: p.note || '' });
@@ -1253,7 +1264,7 @@ window.WT_ESP = [
   function finEnd() { const t = ui.finTok; ui.finTok = null; ui.fin = null; ui.finErr = ''; if (t && SRV()) rpc('fin_lock', { p_token: t }).catch(() => {}); }
   /* A supervisor's own phone (alerts turned on there) stays signed in for 12 hours after their PIN, so tapping an alert never asks again. Shared tablets still lock when idle. */
   const myPhone = () => { try { const x = JSON.parse(ls.get('wt-mine') || 'null'); return x && x.id && x.until > Date.now() ? x : null; } catch (e) { return null; } };
-  const markMine = (id) => { if (id && ls.get('wt-alerts') === id) ls.set('wt-mine', JSON.stringify({ id, until: Date.now() + 12 * 36e5 })); };
+  const markMine = (id) => { const mm = ui.modal; if (id && mm && mm.type === 'login') { if (mm.keep) ls.set('wt-keep', id); else if (ls.get('wt-keep') === id) ls.set('wt-keep', ''); } if (id && (ls.get('wt-alerts') === id || ls.get('wt-keep') === id)) ls.set('wt-mine', JSON.stringify({ id, until: Date.now() + 7 * 864e5 })); };
   function signOutUser() { ls.set('wt-mine', ''); finEnd(); ui.user = null; ui.signedAt = 0; if (ui.view === 'finance') ui.view = 'home'; }
   async function finLoad() {
     if (!ui.finTok || !SRV()) return;
@@ -2035,6 +2046,7 @@ window.WT_ESP = [
   function cpBox(title, op, type, extra) {
     const cs = op.checks.filter((c) => c.type === type), c = cs[cs.length - 1];
     let cls = '', body = '<span class="muted">Not requested yet</span>';
+    if (op.skipped) return '<div class="cpbox pass"><h3>' + title + '</h3><b>⤼ Step skipped</b><span class="small">' + esc(op.skipped.reason) + ' · signed by ' + esc(nm(op.skipped.by)) + ' ' + esc(fTime(op.skipped.at)) + '</span></div>';
     if (type === 'mid' && op.midWaived) { cls = 'pass'; body = '<b>Not required</b><span class="small">' + esc(op.midWhy || 'Batch is under ' + store.cfg.rules.minMid + ' pcs') + '</span>'; }
     else if (c && !c.by) { cls = 'wait'; body = '<b>✍ Waiting for supervisor</b><span class="small">Requested by ' + esc(nm(c.reqBy)) + ' · ' + esc(fTime(c.reqAt)) + ' · waiting ' + fDur(Date.now() - c.reqAt) + '</span>'; }
     else if (c && c.result === 'pass') { cls = 'pass'; body = '<b>✔ Passed</b><span class="small">Signed ' + esc(nm(c.by)) + ' · ' + esc(fTime(c.at)) + ' · ' + c.checked + ' checked' + (c.meas ? ' · ' + esc(c.meas) : '') + '</span>'; }
@@ -2081,6 +2093,7 @@ window.WT_ESP = [
     if (active && !holds.length && !op.paused && ['setup', 'first_piece', 'running'].indexOf(op.st) >= 0) sec += M('pause', 'Pause', 'sm');
     if (!holds.length && !op.paused && ['first_piece', 'authorized', 'running'].indexOf(op.st) >= 0) sec += M('scrap', 'Log bad parts', 'sm');
     if (active) sec += M('hold', 'Raise hold', 'sm');
+    if (['ready', 'setup', 'setup_done'].indexOf(op.st) >= 0 && !holds.length) sec += M('skip', '⤼ Skip this step', 'sm');
     sec += M('callSup', '🔔 Call supervisor', 'sm');
     sec += M('redline', '✎ Change this step', 'sm');
     return '<div class="actionbar"><div class="msg">' + msg + '</div><div class="row">' + main + '</div><div class="row">' + sec + '</div></div>';
@@ -2178,7 +2191,7 @@ window.WT_ESP = [
       '<div class="viewer"><img src="' + esc(d.f) + '" alt="' + esc(d.t) + '" style="width:' + ui.zoom + '%"></div></div>' +
       '<div class="col"><div class="doclist">' + r.docs.map((x, k) => '<button class="btn sm ' + (k === ui.doc ? 'sel' : '') + '" data-doc="' + k + '">' + esc(x.t) + (x.rev ? ' · Rev ' + esc(x.rev) : '') + (x.flag ? ' <span class="flagnote">· CHECK REV</span>' : '') + '</button>').join('') + '</div></div></div>';
   }
-  function sig(op, type) { const c = op.checks.filter((x) => x.type === type && x.result === 'pass').pop(); if (type === 'mid' && op.midWaived) return 'n/a'; return c ? esc(nm(c.by)) + '<br><span class="small muted">' + esc(fTime(c.at)) + '</span>' : '—'; }
+  function sig(op, type) { if (op.skipped) return 'SKIPPED · ' + esc(nm(op.skipped.by)) + '<br><span class="small muted">' + esc(fTime(op.skipped.at)) + '</span>'; const c = op.checks.filter((x) => x.type === type && x.result === 'pass').pop(); if (type === 'mid' && op.midWaived) return 'n/a'; return c ? esc(nm(c.by)) + '<br><span class="small muted">' + esc(fTime(c.at)) + '</span>' : '—'; }
   function recordTab(j, r) {
     let h = '<div class="panel"><div class="row" style="justify-content:space-between"><h2>Traveler record · ' + esc(r.form) + '</h2>' + (store.downloads ? '<button class="btn sm" data-a="export" data-job="' + esc(j.id) + '">Print this record</button>' : '') + '</div>' +
       '<div class="label"><span class="qr" id="qr"></span><div><div class="mono" style="font-size:1.4rem">Shop Order ' + esc(j.so) + '</div><div>' + esc(j.pn) + ' · ' + j.qty + ' pcs</div><p class="small muted">Container label. A scanner typed into the search box opens this traveler.</p></div></div>' +
@@ -2414,7 +2427,7 @@ window.WT_ESP = [
     switch (m.type) {
       case 'finpin': h = '<h2>Prices and costs are locked</h2><p><b>' + esc(nm(m.who)) + '</b>, enter your PIN to open them. They lock again when you sign out, after ' + store.cfg.rules.idleLock + ' s idle, or at the end of the shift.</p>' + pad(m) + foot('Open'); break;
       case 'login': { const lp = person(m.who), fresh = lp && !hasPin(lp);
-        h = '<h2>Who is working?</h2>' + who(m) + (lp ? '<div class="pinpop" role="dialog" aria-label="Enter PIN"><div class="pinbox"><div class="row" style="justify-content:space-between;align-items:center"><b style="font-size:1.3rem">' + esc(lp.name) + '</b><button class="btn sm" data-set="who" data-v="">Not me</button></div>' + (fresh ? '<div class="banner info"><div><b>' + (m.first ? 'Enter the same PIN again to confirm.' : 'Create your PIN.') + '</b> Use your birth month and year so you never forget it. March 1985 is 0385.</div></div>' : '<p class="muted" style="margin:0">Enter your PIN — tap the numbers or type them on the keyboard.</p>') + pad(m) + '<div class="row" style="justify-content:space-between"><button class="btn" data-close>Cancel</button><button class="btn primary" data-submit>' + (fresh ? (m.first ? 'Save my PIN' : 'Next') : 'Sign in') + '</button></div></div></div>' : '<p class="muted">Tap your name. First time here, you will create your own PIN.</p><button class="btn sm" data-m="join" style="align-self:flex-start">My name is not here — add me</button>') + foot(fresh ? (m.first ? 'Save my PIN' : 'Next') : 'Sign in'); break; }
+        h = '<h2>Who is working?</h2>' + who(m) + (lp ? '<div class="pinpop" role="dialog" aria-label="Enter PIN"><div class="pinbox"><div class="row" style="justify-content:space-between;align-items:center"><b style="font-size:1.3rem">' + esc(lp.name) + '</b><button class="btn sm" data-set="who" data-v="">Not me</button></div>' + (fresh ? '<div class="banner info"><div><b>' + (m.first ? 'Enter the same PIN again to confirm.' : 'Create your PIN.') + '</b> Use your birth month and year so you never forget it. March 1985 is 0385.</div></div>' : '<p class="muted" style="margin:0">Enter your PIN — tap the numbers or type them on the keyboard.</p>') + pad(m) + (lp.role === 'manager' || W.isApprover(lp) ? '<label class="check" style="display:flex;gap:10px;align-items:center"><input type="checkbox" data-f="keep" style="width:26px;height:26px"' + (m.keep ? ' checked' : '') + '> This is my own phone — keep me signed in (until I sign out, PIN again once a week)</label>' : '') + '<div class="row" style="justify-content:space-between"><button class="btn" data-close>Cancel</button><button class="btn primary" data-submit>' + (fresh ? (m.first ? 'Save my PIN' : 'Next') : 'Sign in') + '</button></div></div></div>' : '<p class="muted">Tap your name. First time here, you will create your own PIN.</p><button class="btn sm" data-m="join" style="align-self:flex-start">My name is not here — add me</button>') + foot(fresh ? (m.first ? 'Save my PIN' : 'Next') : 'Sign in'); break; }
       case 'station': { const grp = (f) => W.STATIONS.filter((s) => s.kind === 'work' && s.floor === f).map((s) => '<button class="btn" data-station="' + s.id + '"><span>' + esc(s.name) + '</span><small>' + esc(s.note) + '</small></button>').join('');
         h = '<h2>Which work area is this tablet at?</h2><h3>Metal floor</h3><div class="tiles"><button class="btn" data-station="allmetal"><span>Whole metal floor</span><small>One shared tablet · every metal area</small></button>' + grp('metal') + '</div><h3>Filter floor</h3><div class="tiles"><button class="btn" data-station="allfilter"><span>Whole filter floor</span><small>One shared tablet · every filter area</small></button>' + grp('filter') + '</div><div class="tiles"><button class="btn" data-station="all"><span>All work areas</span><small>Supervisor and office view</small></button></div><p class="small muted">Each tablet remembers its area.</p><button class="btn" data-close>Close</button>'; break; }
       case 'sign': {
@@ -2450,6 +2463,9 @@ window.WT_ESP = [
       case 'scrap': h = '<h2>Log bad parts · op ' + op.n + '</h2><p class="muted">Use this any time during the run. Bad parts from a supplier? Pick Supplier part bad. They are counted as scrap and already included when you finish the operation.' + (op.scrap ? ' Logged so far: ' + op.scrap + '.' : '') + '</p>' + tiles('reason', W.HOLD_REASONS, m) + supF(m) + inp('qty', 'How many are bad?', m, 'type="number" inputmode="numeric" min="1"') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Log bad parts'); break;
       case 'hold': h = '<h2>Raise a hold · op ' + op.n + '</h2><p class="muted">Use this when parts can\'t be used yet, including bad parts from a supplier before or during the job. Tag the parts and set them aside. Quality decides: return to supplier, rework, use as is or scrap.</p>' + tiles('reason', W.HOLD_REASONS, m) + supF(m) + inp('qty', 'Quantity affected', m, 'type="number" inputmode="numeric" min="1"') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Put on hold', 'stop'); break;
       case 'editStep': h = '<h2>Edit step · op ' + op.n + '</h2><p class="muted">Changes this job only. The master traveler stays the same. The change and the old text go in the record.</p><label>Instruction<textarea data-f="text" id="m-text" style="min-height:160px">' + esc(m.text || '') + '</textarea></label>' + inp('reason', 'Reason for the change', m) + foot('Save change'); break;
+      case 'skip': { const nx = j.ops[m.i + 1]; h = '<h2>⤼ Skip op ' + esc(op.n) + ' · ' + esc(W.station(op.station).name) + '</h2><p class="muted"><span class="mono">' + esc(j.pn) + '</span> · ' + op.qtyIn + ' pcs. They go straight on to ' + (nx ? 'op ' + esc(nx.n) + ' at ' + esc(W.station(W.finalDest(j, m.i)).name) : 'the end of the traveler') + '. A supervisor must sign.</p>' +
+        tiles('reason', ['Not needed on this job', 'Already done at another step', 'Engineering / customer says skip', 'Done by outside vendor', 'Other'], m) + '<label>Note (optional)<input data-f="note" id="m-note" class="field" value="' + esc(m.note || '') + '"></label>' +
+        '<h3>Supervisor signs</h3>' + who(m, true, op.station) + (m.who ? pad(m) : '<p class="small muted">No supervisor here? <button class="btn sm" data-a="skipAsk" data-job="' + esc(j.id) + '" data-i="' + m.i + '">🔔 Send to supervisor’s phone</button></p>') + foot('Skip step', 'go'); break; }
       case 'callSup': h = '<h2>🔔 Call a supervisor</h2><p class="muted"><span class="mono">' + esc(j.pn) + '</span> · op ' + esc(op.n) + ' · ' + esc(W.station(op.station).name) + '. Sends an alert to the ' + esc(W.sideOf(op.station)) + ' supervisors’ phones.</p>' + tiles('reason', ['Come check this part', 'First piece ready', 'Question on the print', 'Machine problem', 'Need material', 'Quality problem'], m) +
         '<label>Note (optional)<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Send alert', 'go'); break;
       case 'alertsOn': h = '<h2>🔔 Alerts on this phone</h2><p>' + esc(nm(m.who)) + ', get a notification when someone in your area calls you, needs a signature, or puts a part on hold.</p><p class="small muted">iPhone: first add this app to your Home Screen (Share → Add to Home Screen) and open it from the icon. Then turn alerts on here.</p>' + pad(m) + foot('Turn on alerts', 'go'); break;
@@ -2471,7 +2487,9 @@ window.WT_ESP = [
           '<div class="tiles">' + W.STATIONS.map((s) => '<button class="btn ' + (m.dest === s.id ? 'sel' : '') + '" data-set="dest" data-v="' + s.id + '"><span>' + esc(s.name) + '</span><small>' + (s.id === expect ? (s.id === op.station ? (next ? 'Next step · stays here' : 'Finished · stays here') : 'Next step') : (s.floor === 'metal' ? 'Metal floor' : 'Filter floor')) + '</small></button>').join('') + '</div>' +
           '<div class="grid2">' + inp('qty', 'How many pieces are moving?', m, 'type="number" inputmode="numeric" min="1" max="' + left + '"') + inp('boxes', 'How many boxes or containers?', m, 'type="number" inputmode="numeric" min="1"') + '</div><p class="small muted">Each box gets its own number and label. Pieces are split evenly across the boxes.</p>' +
           (m.dest && m.dest !== expect ? '<h3>Why not ' + esc(W.station(expect).name) + '?</h3>' + tiles('reason', ['No room at the next area', 'For rework', 'Customer or stock', 'Told by supervisor'], m) : '') +
-          (m.dest && m.dest !== op.station ? '<label class="check"><input type="checkbox" data-f="direct"' + (m.direct ? ' checked' : '') + '> I am delivering them myself right now</label>' : '') + foot('Record move', 'go'); break;
+          (m.dest && m.dest !== op.station ? '<label class="check"><input type="checkbox" data-f="direct"' + (m.direct ? ' checked' : '') + '> I am delivering them myself right now</label>' : '') +
+          (m.dest ? (() => { const sn = W.station(m.dest).name.toLowerCase(), fl = W.station(m.dest).floor, ppl = assignList().slice().sort((a, b) => (String(b.area || '').toLowerCase() === sn) - (String(a.area || '').toLowerCase() === sn) || (W.sideOf(m.dest) === (b.side || '') ) - (W.sideOf(m.dest) === (a.side || '')));
+            return '<label>Hand off to (optional) — it shows as YOU on their tablet, first in line at ' + esc(W.station(m.dest).name) + '<select data-f="handTo" class="field"><option value="">Anyone at ' + esc(W.station(m.dest).name) + '</option>' + ppl.map((x) => '<option value="' + esc(x.id) + '"' + (m.handTo === x.id ? ' selected' : '') + '>' + esc(x.name) + (x.area ? ' — ' + esc(x.area) : '') + '</option>').join('') + '</select></label>'; })() : '') + foot('Record move', 'go'); break;
       }
       case 'receive': { const l = j.lots.find((x) => x.id === m.lot); h = '<h2>Receive container ' + l.id + '</h2><p><span class="mono">' + esc(j.pn) + '</span> · Shop Order ' + esc(j.so) + ' · sent as <b>' + l.qty + ' pcs</b> by ' + esc(nm(l.by)) + '.</p>' + inp('count', 'Count received', m, 'type="number" inputmode="numeric" min="0"') + '<p class="small muted">A different count is recorded and opens a hold for a supervisor to settle.</p>' + foot('Receive', 'go'); break; }
       case 'reroute': { const l = j.lots.find((x) => x.id === m.lot); h = '<h2>Send container ' + l.id + ' where?</h2><p>' + l.qty + ' pcs of <span class="mono">' + esc(j.pn) + '</span>. The next step is at <b>' + esc(W.station(l.expect).name) + '</b>.</p><div class="tiles">' + W.STATIONS.map((s) => '<button class="btn ' + (m.dest === s.id ? 'sel' : '') + '" data-set="dest" data-v="' + s.id + '"><span>' + esc(s.name) + '</span><small>' + (s.id === l.expect ? 'Next step' : '') + '</small></button>').join('') + '</div>' + foot('Redirect'); break; }
@@ -2557,6 +2575,12 @@ window.WT_ESP = [
       case 'scrap': ok = run(m.job, 'scrap', { i: m.i, reason: m.reason, qty: m.qty, note: m.note, supName: m.supName, supRef: m.supRef }); if (ok) toast('Bad parts logged'); break;
       case 'hold': ok = run(m.job, 'hold', { i: m.i, reason: m.reason, qty: m.qty, note: m.note, supName: m.supName, supRef: m.supRef }); break;
       case 'flag': ok = run(m.job, 'flag', { i: m.i, text: m.text }); if (ok) toast('Sent for review'); break;
+      case 'skip': { if (!m.reason) return toast('Pick why.', 'bad'); if (!m.who) return toast('A supervisor taps their name and signs.', 'bad'); if (SRV() && m.pinOk !== m.who + ':' + m.pin && person(m.who)) return pinGate(m); const sp = verify(m, true); if (!sp) return;
+        const why = m.reason + (m.note ? ' — ' + String(m.note).trim() : '');
+        if (!run(m.job, 'skip', { i: m.i, reason: why, ask: ui.user ? ui.user.id : sp.id }, sp)) return;
+        toast('Op ' + store.jobs[m.job].ops[m.i].n + ' skipped · signed by ' + sp.name);
+        const jj = store.jobs[m.job]; if (W.sendable(jj, m.i) > 0) return openModal({ type: 'move', job: m.job, i: m.i, dest: W.finalDest(jj, m.i), boxes: 1, qty: W.unmoved(jj, m.i), direct: false });
+        closeModal(); render(); return; }
       case 'callSup': { if (!m.reason) return toast('Pick a reason.', 'bad'); const j = store.jobs[m.job]; if (m.busy) return; m.busy = true;
         run(m.job, 'logNote', { a: 'Called supervisor', d: m.reason + (m.note ? ' — ' + m.note : '') });
         if (!window.WT_NOTIFY) { closeModal(); return toast('Alerts work on the live app only.', 'bad'); }
@@ -2611,6 +2635,7 @@ window.WT_ESP = [
         try { for (let k = 0; k < nb; k++) { const mp = { i: m.i, qty: base + (k < rem ? 1 : 0), dest: m.dest, direct: m.direct, reason: m.reason }, mc = { u: ui.user, at, cfg: store.cfg }; ops.push(['move', mp, mc]); j2 = W.act(j2, 'move', mp, mc); ids.push(j2.lots[j2.lots.length - 1].id); } }
         catch (e) { if (e.user) return toast(e.message, 'bad'); throw e; }
         { const jid = m.job, want = ids.join(','); save(j2, ops, (out) => { const real = out.lots.slice(-nb).map((l) => l.id); if (real.join(',') !== want) { if (ui.modal && ui.modal.type === 'labels' && ui.modal.job === jid) { ui.modal.lots = real; renderModal(); } toast('Box numbers changed because another tablet moved parts at the same time. Print these labels.', 'bad'); } }); }
+        if (m.handTo) { assignJob(j2, m.handTo, m.dest); toast('Handed off to ' + nm(m.handTo) + ' at ' + W.station(m.dest).name); }
         return openModal({ type: 'labels', job: m.job, lots: ids }); }
       case 'receive': ok = run(m.job, 'receive', { lot: m.lot, count: m.count === '' ? NaN : m.count }); break;
       case 'reroute': ok = run(m.job, 'reroute', { lot: m.lot, dest: m.dest, reason: 'Redirected at ' + areaName() }); break;
@@ -2700,7 +2725,7 @@ window.WT_ESP = [
   /* ---------- export ---------- */
   function exportJob(j) {
     const r = W.routing(j.rid), row = (a) => '<tr>' + a.map((x) => '<td>' + esc(x) + '</td>').join('') + '</tr>';
-    const sg = (op, t) => { if (t === 'mid' && op.midWaived) return 'n/a'; const c = op.checks.filter((x) => x.type === t && x.result === 'pass').pop(); return c ? nm(c.by) + ' ' + fTime(c.at) : ''; };
+    const sg = (op, t) => { if (op.skipped) return 'SKIPPED · ' + nm(op.skipped.by) + ' ' + fTime(op.skipped.at); if (t === 'mid' && op.midWaived) return 'n/a'; const c = op.checks.filter((x) => x.type === t && x.result === 'pass').pop(); return c ? nm(c.by) + ' ' + fTime(c.at) : ''; };
     const html = '<!doctype html><meta charset="utf-8"><title>Traveler ' + esc(j.so) + '</title><style>body{font:12px Arial;margin:24px}table{border-collapse:collapse;width:100%;margin:8px 0 18px}td,th{border:1px solid #000;padding:4px 6px;text-align:left;vertical-align:top}h1{font-size:18px}h2{font-size:14px}</style>' +
       '<h1>Walker Engineering — ' + esc(r.form) + '</h1><p>Shop Order ' + esc(j.so) + ' · Part ' + esc(j.pn) + ' · ' + esc(j.name) + ' · Qty ' + j.qty + ' · Due ' + esc(j.due) + ' · Trav rev ' + esc(j.rel.travRev) + ' ' + esc(j.rel.travDate) + ' · Dwg rev ' + esc(j.rel.dwgRev) + ' · Released by ' + esc(nm(j.rel.by)) + ' ' + esc(fTime(j.rel.at)) + (j.sample ? ' · SAMPLE DATA' : '') + '</p>' +
       '<h2>Operations</h2><table><tr><th>Op</th><th>Description</th><th>Machine / fixture</th><th>Operator</th><th>Accept</th><th>Reject</th><th>First article</th><th>Closing signature</th></tr>' + j.ops.map((op, i) => row([op.n, r.ops[i].text, r.ops[i].mach.join(', '), op.who.map(nm).join(', '), op.good == null ? '' : op.good, op.scrap, sg(op, 'first'), sg(op, 'final')])).join('') + '</table>' +
@@ -2725,7 +2750,7 @@ window.WT_ESP = [
     const r = rt || W.routing(j.rid); if (!r) return toast('The master traveler is still loading. Try again in a moment.', 'bad');
     if (r.master && !r.docs.length && store.dwg && store.dwg[r.dw]) { ensureDocs(r); if (r.dwLoading) { toast('Loading the drawings…'); const t0 = Date.now(), wait = () => (r.docs.length || r.dwFail || Date.now() - t0 > 15000 ? printTraveler(j, rt) : setTimeout(wait, 300)); return void setTimeout(wait, 300); } }
     const blank = !j, E = (v) => esc(v == null || v === '' ? '' : v), now = Date.now();
-    const sgn = (op, t) => { if (!op) return '<div class="blank"></div>'; if (t === 'mid' && op.midWaived) return 'n/a'; const c = op.checks.filter((x) => x.type === t && x.result === 'pass').pop(); if (c) return '<b>' + E(nm(c.by)) + '</b><br><span class="sm">' + E(fTime(c.at)) + '</span>'; const w = op.checks.find((x) => x.type === t && !x.by); return w ? '<span class="sm">Waiting · asked ' + E(fTime(w.reqAt)) + '</span>' : ''; };
+    const sgn = (op, t) => { if (!op) return '<div class="blank"></div>'; if (op.skipped) return '<b>SKIPPED</b><br><span class="sm">' + E(nm(op.skipped.by)) + ' ' + E(fTime(op.skipped.at)) + '</span>'; if (t === 'mid' && op.midWaived) return 'n/a'; const c = op.checks.filter((x) => x.type === t && x.result === 'pass').pop(); if (c) return '<b>' + E(nm(c.by)) + '</b><br><span class="sm">' + E(fTime(c.at)) + '</span>'; const w = op.checks.find((x) => x.type === t && !x.by); return w ? '<span class="sm">Waiting · asked ' + E(fTime(w.reqAt)) + '</span>' : ''; };
     const cell = (l, v) => '<div><span>' + l + '</span><b>' + (v == null || v === '' ? '&nbsp;' : v) + '</b></div>';
     const code = blank ? '' : j.so;
     let h = '<div class="ph"><div><div class="sm">WALKER ENGINEERING · ' + E(r.form) + '</div><h1>' + (blank ? 'Traveler — ' : 'Traveler #' + E(j.so) + ' — ') + '<span class="mono">' + E(blank ? r.pn : j.pn) + '</span></h1><div>' + E(hdr(r, 'name')) + '</div></div><div style="text-align:right">' + (code ? bc(code) + '<div class="mono sm">' + E(code) + '</div>' : '') + '</div></div>';
@@ -2822,7 +2847,7 @@ window.WT_ESP = [
       const mc = { u: { id: 'system', name: 'End of shift', role: 'system' }, at: end, cfg: store.cfg };
       try { const j2 = W.act(j, 'endDay', {}, mc); if (j2 !== j) save(j2, [['endDay', {}, mc]]); } catch (e) { /* another tablet already did it */ }
     });
-    if (ui.user && ui.signedAt && ui.signedAt < end && dayChecked < end) { signOutUser(); closeModal(); render(); toast('End of shift. Everyone is signed out. Sign in with your PIN to start again.'); }
+    if (ui.user && ui.signedAt && ui.signedAt < end && dayChecked < end && !(myPhone() && myPhone().id === ui.user.id)) { signOutUser(); closeModal(); render(); toast('End of shift. Everyone is signed out. Sign in with your PIN to start again.'); }
     dayChecked = end;
   }
   setInterval(endOfDay, 60000);
@@ -2892,6 +2917,9 @@ window.WT_ESP = [
     if (d.open) return openJob(d.open, d.i);
     if (d.trole) { ui.trole = d.trole; return render(); }
     if (d.plane) { ui.plane = d.plane; ui.plq = ''; return render(); }
+    if (d.a === 'skipAsk') { const m = ui.modal, j = store.jobs[d.job]; if (!j) return; const why = (m && m.reason) || 'Skip requested';
+      run(j.id, 'logNote', { a: 'Skip requested', d: 'Op ' + j.ops[Number(d.i)].n + ' · ' + why });
+      sendAlert(j, Number(d.i), 'skip', 'Sign to skip a step', why).then((r) => { if (r && r.data && r.data.sent) toast('Sent to ' + r.data.people.map(nm).join(', ')); else toast('No supervisor has alerts on for this area — go get one.', 'bad'); }); return; }
     if (d.a === 'statDays') { ui.statDays = Number(d.v); return render(); }
     if (/^pl(Add|Task|Up|Dn|Rm|Clear|Done|Undo|Note|Who)$/.test(d.a || '')) return void planAct(d);
     if (d.nav) { if (d.pl) { ui.plane = d.pl; ui.plq = ''; } ui.view = d.nav; if (d.mtab) ui.mtab = d.mtab; if (d.lf) ui.lfilt = d.lf; if (d.nav === 'list') ui.lfloor = d.lfl || 'both'; $('#results').hidden = true; return render(); }
@@ -2903,7 +2931,7 @@ window.WT_ESP = [
     if (d.libdoc) { const r = W.routing(d.libdoc), x = r.docs[Number(d.k)]; $('#results').hidden = true; $('#modal').innerHTML = '<div class="sheet wide"><div class="row" style="justify-content:space-between"><h2>' + esc(x.t) + (x.rev ? ' · Rev ' + esc(x.rev) : '') + '</h2><button class="btn sm" data-close>Close</button></div>' + (x.flag ? '<div class="banner warn"><div><b>Check revision.</b> ' + esc(x.flag) + '</div></div>' : '') + '<div class="viewer"><img src="' + esc(x.f) + '" alt="' + esc(x.t) + '" style="width:160%"></div></div>'; $('#modal').hidden = false; ui.modal = { type: 'lib' }; return; }
     if (d.pin && m) return pinKey(m, d.pin);
     if (d.set && m) {
-      m[d.set] = d.v; if (d.set === 'who') { m.pin = ''; m.first = ''; if (d.v && m.type !== 'login' && m.type !== 'jobWho' && m.type !== 'plWho') setTimeout(() => { const pd = $('#modal .pad'); if (pd) pd.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 30); }
+      m[d.set] = d.v; if (d.set === 'who') { m.pin = ''; m.first = ''; if (m.type === 'login') m.keep = !!d.v && (ls.get('wt-keep') === d.v || ls.get('wt-alerts') === d.v); if (d.v && m.type !== 'login' && m.type !== 'jobWho' && m.type !== 'plWho') setTimeout(() => { const pd = $('#modal .pad'); if (pd) pd.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 30); }
       if ((m.type === 'pause' || m.type === 'block') && d.set === 'reason') { if (run(m.job, m.type, { i: m.i, reason: d.v })) closeModal(); return; }
       return renderModal();
     }
@@ -2932,6 +2960,7 @@ window.WT_ESP = [
       if (d.m === 'receive') { const l = j.lots.find((x) => x.id === d.lot); return openModal({ type: 'receive', job, lot: d.lot, count: l.qty }); }
       if (d.m === 'reroute') { const l = j.lots.find((x) => x.id === d.lot); return openModal({ type: 'reroute', job, lot: d.lot, dest: l.expect }); }
       if (d.m === 'editStep') { const ed = (j.edits || {})[op.n]; return openModal({ type: 'editStep', job, i, text: ed ? ed.text : W.routing(j.rid).ops[i].text, reason: '' }); }
+      if (d.m === 'skip') return openModal({ type: 'skip', job, i, reason: '', note: '', who: ui.user && W.isApprover(ui.user) ? ui.user.id : null, pin: '' });
       if (d.m === 'callSup') return openModal({ type: 'callSup', job, i, reason: '', note: '' });
       if (d.m === 'redline') return openModal({ type: 'redline', job, i, reason: '', text: liveStep(j.rid, op.n, W.routing(j.rid).ops[i].text, null).text, note: '' });
       if (d.m === 'jobWho') { if (!canPlan()) return toast('A manager or supervisor assigns jobs.', 'bad'); let w = ''; LANES.forEach((l) => openItems(l.id).forEach((x) => { if (x.k === 'j' && x.ref === j.id && x.who) w = x.who; })); return openModal({ type: 'jobWho', job: j.id, who: w }); }
