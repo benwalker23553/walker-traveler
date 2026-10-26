@@ -2072,7 +2072,9 @@ window.WT_ESP = [
     if (holds.length) { msg = 'On hold. Nothing moves until a supervisor records a disposition.'; main = '<button class="btn primary stop" data-m="dispose" data-job="' + id + '" data-hold="' + holds[0].id + '">Record disposition</button>'; }
     else if (op.paused) { msg = op.paused.auto ? 'Clocked out at the end of the shift. Sign in with your PIN and tap Start again.' : 'Paused: ' + esc(op.paused.reason) + ' · ' + fDur(Date.now() - op.paused.at); main = A('resume', op.paused.auto ? 'Start again' : 'Resume', 'primary go'); }
     else switch (op.st) {
-      case 'pending': msg = 'Parts for this operation have not been received at ' + esc(W.station(op.station).name) + ' yet.'; break;
+      case 'pending': { const inc = j.lots.filter((l) => l.from === i - 1 && (l.st === 'transit' || l.st === 'delivered'));
+        msg = inc.length ? inc.reduce((a, l) => a + l.qty, 0) + ' pcs are on the way from op ' + esc(j.ops[i - 1].n) + '. Count them and tap Receive to start this step.' : 'Parts for this operation have not been received at ' + esc(W.station(op.station).name) + ' yet.';
+        main = inc.map((l) => '<button class="btn primary go" data-m="receive" data-job="' + id + '" data-lot="' + esc(l.id) + '">Receive ' + esc(l.id) + ' · ' + l.qty + ' pcs</button>').join(''); break; }
       case 'ready':
         if (j.blocked) { msg = 'Not ready to run: ' + esc(j.blocked.reason) + '.'; main = '<button class="btn primary" data-a="unblock" data-job="' + id + '">' + (j.blocked.auto ? 'Supervisor: start without receipt' : 'Mark ready') + '</button>'; }
         else { msg = op.qtyIn + ' pcs here and ready.'; main = A('startSetup', 'Start setup', 'primary go') + A('startFirst', 'No setup needed — start first article', ''); sec = M('block', 'Can’t start', 'sm'); }
@@ -2093,6 +2095,7 @@ window.WT_ESP = [
     if (active && !holds.length && !op.paused && ['setup', 'first_piece', 'running'].indexOf(op.st) >= 0) sec += M('pause', 'Pause', 'sm');
     if (!holds.length && !op.paused && ['first_piece', 'authorized', 'running'].indexOf(op.st) >= 0) sec += M('scrap', 'Log bad parts', 'sm');
     if (active) sec += M('hold', 'Raise hold', 'sm');
+    if (op.st !== 'pending' && i > 0) j.lots.filter((l) => l.from === i - 1 && (l.st === 'transit' || l.st === 'delivered')).forEach((l) => { sec += '<button class="btn sm" data-m="receive" data-job="' + id + '" data-lot="' + esc(l.id) + '">Receive ' + esc(l.id) + ' · ' + l.qty + ' pcs</button>'; });
     if (['ready', 'setup', 'setup_done'].indexOf(op.st) >= 0 && !holds.length) sec += M('skip', '⤼ Skip this step', 'sm');
     sec += M('callSup', '🔔 Call supervisor', 'sm');
     sec += M('redline', '✎ Change this step', 'sm');
