@@ -2074,7 +2074,7 @@ window.WT_ESP = [
     else switch (op.st) {
       case 'pending': { const inc = j.lots.filter((l) => l.from === i - 1 && (l.st === 'transit' || l.st === 'delivered'));
         msg = inc.length ? inc.reduce((a, l) => a + l.qty, 0) + ' pcs are on the way from op ' + esc(j.ops[i - 1].n) + '. Count them and tap Receive to start this step.' : 'Parts for this operation have not been received at ' + esc(W.station(op.station).name) + ' yet.';
-        main = inc.map((l) => '<button class="btn primary go" data-m="receive" data-job="' + id + '" data-lot="' + esc(l.id) + '">Receive ' + esc(l.id) + ' · ' + l.qty + ' pcs</button>').join(''); break; }
+        main = inc.map((l) => l.to === op.station ? '<button class="btn primary go" data-m="receive" data-job="' + id + '" data-lot="' + esc(l.id) + '">Receive ' + esc(l.id) + ' · ' + l.qty + ' pcs</button>' : '<button class="btn primary" data-m="reroute" data-job="' + id + '" data-lot="' + esc(l.id) + '">' + esc(l.id) + ' went to ' + esc(W.station(l.to).name) + ' — send it to ' + esc(W.station(op.station).name) + '</button>').join(''); break; }
       case 'ready':
         if (j.blocked) { msg = 'Not ready to run: ' + esc(j.blocked.reason) + '.'; main = '<button class="btn primary" data-a="unblock" data-job="' + id + '">' + (j.blocked.auto ? 'Supervisor: start without receipt' : 'Mark ready') + '</button>'; }
         else { msg = op.qtyIn + ' pcs here and ready.'; main = A('startSetup', 'Start setup', 'primary go') + A('startFirst', 'No setup needed — start first article', ''); sec = M('block', 'Can’t start', 'sm'); }
