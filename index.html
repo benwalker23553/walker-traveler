@@ -315,6 +315,15 @@ body.tv .board { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
 .pinbox .pad button { height: 70px; }
 td.bad { color: var(--bad); font-weight: 700; }
 
+.xl-wrap { overflow: auto; max-height: 72vh; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); }
+table.xl { border-collapse: collapse; font-size: .92rem; min-width: 100%; }
+table.xl th { position: sticky; top: 0; background: #217346; color: #fff; text-align: left; padding: 6px 8px; white-space: nowrap; border-right: 1px solid rgba(255,255,255,.25); z-index: 1; }
+table.xl td { padding: 4px 8px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.xl tbody tr:nth-child(even) td { background: var(--panel2); }
+table.xl tr.xl-done td { color: var(--ink2); }
+table.xl .xl-n { width: 1%; padding: 2px 4px; }
+table.xl th { text-transform: none; letter-spacing: 0; font-family: var(--f-body, inherit); }
+
 </style>
 <header class="top">
   <button id="b-home" class="brandbtn" type="button">⌂ Main menu</button>
@@ -1341,7 +1350,7 @@ window.WT_ESP = [
       Object.keys(store.queue).forEach((id) => { m[id] = store.queue[id].job || store.queue[id]; });
       store.jobs = m; store.loaded = true; if (ui.openRlOnLoad && !ui.modal) { ui.openRlOnLoad = false; setTimeout(() => openModal({ type: 'rlList' }), 600); } if (ui.openJobOnLoad && m[ui.openJobOnLoad]) { const oj = ui.openJobOnLoad; ui.openJobOnLoad = null; try { history.replaceState(null, '', location.pathname); } catch (e) { /* ok */ } openJob(oj); } render(); setTimeout(endOfDay, 1500);
     }, () => { store.mode = 'local'; loadLocal(); store.loaded = true; render(); });
-    db.collection('logs').onSnapshot((s) => { s.docs.forEach((d) => { const x = d.data(); store.logs[d.id] = (x && x.rows) || []; if (d.id === 'final' && x) store.finMeta = { at: x.at, by: x.by, file: x.file }; }); render(); }, () => {});
+    db.collection('logs').onSnapshot((s) => { s.docs.forEach((d) => { const x = d.data(); if (/_x$/.test(d.id)) { (store.logx = store.logx || {})[d.id.slice(0, -2)] = x; return; } store.logs[d.id] = (x && x.rows) || []; if (d.id === 'final' && x) store.finMeta = { at: x.at, by: x.by, file: x.file }; }); render(); }, () => {});
     db.collection('routings').onSnapshot((s) => { s.docs.forEach((d) => { const r = d.data(); if (r && r.id && !W.routing(r.id)) W.ROUTINGS.push(W.clone(r)); }); render(); }, () => {});
     db.collection('sage').onSnapshot((s) => { s.docs.forEach((d) => { if (d.id === 'bom') { const x = d.data(); store.sageBom = (x && x.bom) || {}; store.sageAt = x && x.at; } }); render(); }, () => {});
     db.collection('prints').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.pn) m[d.id] = x; }); store.prints = m; render(); if (ui.modal) renderModal(); }, () => {});
@@ -1726,6 +1735,7 @@ window.WT_ESP = [
       final: () => tile('data-nav="list" data-lf="active" data-lfl="final"', 'Final assembly / packing', 'PO and Sales Order for shipping', paper().filter((x) => x.f === 'final' && x.r.s === 'O').length + jobs().filter((j) => j.st !== 'complete' && (j.final || j.floor === 'final')).length),
       lib: () => tile('data-nav="library"', 'Traveler library', 'Read or fix any master traveler', null),
       imp: () => tile('data-nav="improve"', 'Improve · analytics', 'Late jobs, time, people, suppliers', prompts().length, prompts().length ? 'warn' : ''),
+      xl: () => (ui.user && (ui.user.role === 'manager' || W.isApprover(ui.user) || W.canDispose(ui.user)) ? tile('data-nav="xl"', 'Traveler logs', 'The Excel logs — same columns, updated hourly', null) : ''),
       where: () => tile('data-nav="floor"', 'Where is everything', 'Parts in each area right now', null),
       manage: () => tile('data-nav="manage" data-mtab="' + (mgr ? 'release' : 'holds') + '"', 'Manage', mgr ? 'Holds, numbers, people, rules' : 'Holds and numbers', null),
       train: () => tile('data-nav="train"', 'Training', 'How to use this', null),
@@ -1735,7 +1745,7 @@ window.WT_ESP = [
     // Each person sees only what they use. Operators: their work. Supervisors, quality and managers: everything.
     const order = !ui.user ? ['inout', 'work', 'today', 'board', 'all', 'asap', 'where', 'train', 'area']
       : !lead ? ['work', 'mine', 'today', 'board', 'all', 'asap', 'hold', 'where', 'train', 'area', 'inout']
-      : ['work', 'prio', 'board', 'sign', 'alerts', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
+      : ['work', 'prio', 'board', 'sign', 'xl', 'alerts', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
     return '<div class="head"><div><h1>Main menu</h1><p class="muted">' + (ui.user ? 'Signed in as ' + esc(ui.user.name.replace(/\.$/, '')) + '.' : 'Not signed in.') + ' This tablet is set to ' + esc(areaName()) + '.</p></div></div><div class="menu">' + order.map((k) => T[k]()).join('') + '</div>';
   }
 
@@ -1873,6 +1883,21 @@ window.WT_ESP = [
       return '<section class="bcol"><div class="bhead"><h2>' + esc(l.name) + '</h2><span class="small">' + (planStale(l.id) ? '⚠ not updated today' : 'Set ' + esc(fTime(P.at)) + ' · ' + esc(nm(P.by))) + '</span></div>' +
         (open.length ? open.slice(0, maxItems).map((x, k) => { const I = itemInfo(x); return '<div class="bitem' + (k === 0 ? ' next' : '') + '"><b class="bn">' + (k + 1) + '</b><span class="bt"><span class="mono">' + esc(I.title) + '</span>' + (I.sub ? '<span class="small">' + esc(I.sub) + '</span>' : '') + (x.who ? '<span class="small">👤 ' + esc(nm(x.who)) + '</span>' : '') + (x.note ? '<span class="small"><b>Note:</b> <span class="notr">' + esc(x.note) + '</span></span>' : '') + '</span></div>'; }).join('') + (open.length > maxItems ? '<div class="small muted">+ ' + (open.length - maxItems) + ' more</div>' : '') : '<div class="small muted">All done</div>') +
         (done.length ? '<div class="small bdone">✓ ' + done.length + ' done today</div>' : '') + '</section>'; }).join('');
+  }
+  /* ---------- the Excel traveler logs, shown the way they look in Excel ---------- */
+  function renderXl() {
+    const L = [['metal', 'Shop Traveler Log (metal)'], ['filter', 'Filter Log Sheet'], ['final', 'Final Assembly Traveler Log']], k = ui.xlLog || 'metal', x = (store.logx || {})[k];
+    if (!(ui.user && (ui.user.role === 'manager' || W.isApprover(ui.user) || W.canDispose(ui.user)))) return '<div class="head"><h1>Traveler logs</h1></div><div class="banner warn"><div>Sign in as a supervisor, quality or manager to see the logs.</div><button class="btn sm" data-m="login">Sign in</button></div>';
+    let h = '<div class="head"><div><h1>Traveler logs</h1><p class="muted">The same logs you use in Excel — same columns, same order. Read only. Updated every hour from the files on the Z: drive' + (x ? ' · ' + esc(x.file) + ' saved ' + esc(x.saved) : '') + '.</p></div></div>';
+    h += '<div class="tabs">' + L.map((l) => '<button class="' + (k === l[0] ? 'on' : '') + '" data-a="xlLog" data-v="' + l[0] + '">' + l[1] + '</button>').join('') + '</div>';
+    if (!x || !x.cols) return h + '<div class="banner info"><div>This log arrives with the next hourly update from the office PC.</div></div>';
+    const q = String(ui.xlQ || '').trim().toLowerCase(), si = x.cols.findIndex((c) => /status|exception|finished$|date finished|complete/i.test(c));
+    const isOpen = (r) => { const st = x.cols.findIndex((c) => /^status$/i.test(c)), fin = x.cols.findIndex((c) => /date finished|date complete|finished date|completed/i.test(c)); const s1 = st >= 0 ? String(r[st] || '') : '', f1 = fin >= 0 ? String(r[fin] || '') : ''; return !f1 && !/clos|complete|void|cancel/i.test(s1); };
+    let rows = x.rows.filter((r) => (!q || r.join(' ').toLowerCase().indexOf(q) >= 0) && (!ui.xlOpen || isOpen(r)));
+    if (!ui.xlOld) rows = rows.slice().reverse();
+    h += '<div class="row" style="flex-wrap:wrap;gap:8px;margin:8px 0"><input id="xl-q" class="field" style="max-width:340px" placeholder="Search traveler #, part #, description…" value="' + esc(ui.xlQ || '') + '"><button class="btn sm ' + (ui.xlOpen ? 'sel' : '') + '" data-a="xlOpen">Open only</button><button class="btn sm" data-a="xlOld">' + (ui.xlOld ? 'Oldest first (like Excel)' : 'Newest first') + '</button><span class="small muted">' + rows.length + ' of ' + x.rows.length + ' rows this year</span></div>';
+    h += '<div class="xl-wrap"><table class="xl"><thead><tr><th class="xl-n"></th>' + x.cols.map((c) => '<th>' + esc(c) + '</th>').join('') + '</tr></thead><tbody>' + rows.slice(0, 1500).map((r, n) => { const t = r[0], live = store.jobs['so-' + t]; return '<tr class="' + (isOpen(r) ? '' : 'xl-done') + '"><td class="xl-n">' + (live ? '<button class="btn sm" data-job="' + esc(live.id) + '" data-a="xlJob">Open</button>' : '') + '</td>' + r.map((c) => '<td>' + esc(c) + '</td>').join('') + '</tr>'; }).join('') + '</tbody></table></div>';
+    return h;
   }
   function renderBoard() {
     const cols = boardCols(ui.tv ? 5 : 10);
@@ -2788,7 +2813,7 @@ window.WT_ESP = [
     const main = $('#main'); if (!main) return;
     if (ui.tv) { ui.view = 'board'; ui.modal = null; }
     const y = window.scrollY;
-    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'prio' ? renderPrio() : ui.view === 'board' ? renderBoard() : ui.view === 'mine' ? renderMine() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
+    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'prio' ? renderPrio() : ui.view === 'board' ? renderBoard() : ui.view === 'xl' ? renderXl() : ui.view === 'mine' ? renderMine() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
     $('#b-home').textContent = '⌂ Main menu'; $('#b-list').textContent = '☰ Travelers'; $('#q').setAttribute('placeholder', 'Search or scan'); $('#b-lang').textContent = LANG === 'es' ? 'English' : 'Español';
     if (!document.fullscreenElement) $('#b-full').textContent = '⛶ Full';
     $('#b-station').textContent = 'Area: ' + areaName();
@@ -2923,6 +2948,10 @@ window.WT_ESP = [
     if (d.a === 'skipAsk') { const m = ui.modal, j = store.jobs[d.job]; if (!j) return; const why = (m && m.reason) || 'Skip requested';
       run(j.id, 'logNote', { a: 'Skip requested', d: 'Op ' + j.ops[Number(d.i)].n + ' · ' + why });
       sendAlert(j, Number(d.i), 'skip', 'Sign to skip a step', why).then((r) => { if (r && r.data && r.data.sent) toast('Sent to ' + r.data.people.map(nm).join(', ')); else toast('No supervisor has alerts on for this area — go get one.', 'bad'); }); return; }
+    if (d.a === 'xlLog') { ui.xlLog = d.v; return render(); }
+    if (d.a === 'xlOpen') { ui.xlOpen = !ui.xlOpen; return render(); }
+    if (d.a === 'xlOld') { ui.xlOld = !ui.xlOld; return render(); }
+    if (d.a === 'xlJob') { openJob(d.job); return render(); }
     if (d.a === 'statDays') { ui.statDays = Number(d.v); return render(); }
     if (/^pl(Add|Task|Up|Dn|Rm|Clear|Done|Undo|Note|Who)$/.test(d.a || '')) return void planAct(d);
     if (d.nav) { if (d.pl) { ui.plane = d.pl; ui.plq = ''; } ui.view = d.nav; if (d.mtab) ui.mtab = d.mtab; if (d.lf) ui.lfilt = d.lf; if (d.nav === 'list') ui.lfloor = d.lfl || 'both'; $('#results').hidden = true; return render(); }
@@ -3059,6 +3088,7 @@ window.WT_ESP = [
   document.addEventListener('input', (e) => {
     ui.touched = Date.now(); const t = e.target, m = ui.modal;
     if (t.id === 'q') return search(t.value);
+    if (t.id === 'xl-q') { ui.xlQ = t.value; clearTimeout(ui.xlT); ui.xlT = setTimeout(() => { const pos = ($('#xl-q') || {}).selectionStart; render(); const n = $('#xl-q'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (er) { /* ok */ } } }, 250); return; }
     if (t.id === 'lib-q') { ui.libQ = t.value; const hb = $('#lib-hits'); if (hb) { hb.innerHTML = libHits(t.value); trDom(hb); } return; }
     if (t.id === 'pl-q') { ui.plq = t.value; const hb = $('#pl-hits'); if (hb) { hb.innerHTML = planHits(t.value, ui.plane); trDom(hb); } return; }
     if (t.id === 'rel-find') { ui.relQ = t.value; const hb = $('#rel-hits'); if (hb) hb.innerHTML = relHits(t.value); return; }
