@@ -791,6 +791,7 @@ window.WT_ESP = [
     { id: 'metal', floor: 'metal', name: 'Metal Floor', kind: 'work', note: 'Shear, punch, roll · sand blasting' },
     { id: 'wash', floor: 'metal', name: 'Wash', kind: 'work', note: 'Wash station' },
     { id: 'machine', floor: 'metal', name: 'Machine Shop', kind: 'work', note: 'Cold saw, lathe, mill' },
+    { id: 'cnc', floor: 'metal', name: 'CNC', kind: 'work', note: 'Haas lathes and mills · deburr · tumbler · ultrasonic' },
     { id: 'weld', floor: 'metal', name: 'Welding', kind: 'work', note: 'Spot welder #383 · fixture FX685' },
     { id: 'wire', floor: 'metal', name: 'Wire welding', kind: 'work', note: 'Wire welding' },
     { id: 'glue', floor: 'metal', name: 'Glue', kind: 'work', note: 'Glue and foam' },
@@ -1848,7 +1849,7 @@ window.WT_ESP = [
   const wipRows = (ln) => ((store.wip && store.wip.rows) || []).filter((r) => r.ln === ln);
   const wipDate = () => (store.wip && store.wip.date ? fDue(store.wip.date) : '');
   let LOGIX = null, LOGIXk = null;
-  const logRow = (t) => { const k = [store.logs.metal, store.logs.filter, store.logs.final]; if (!LOGIX || LOGIXk[0] !== k[0] || LOGIXk[1] !== k[1] || LOGIXk[2] !== k[2]) { LOGIX = {}; LOGIXk = k; ['metal', 'filter', 'final'].forEach((f) => (store.logs[f] || []).forEach((r) => { if (!LOGIX[r.t]) LOGIX[r.t] = { r, f }; })); } return LOGIX[String(t)] || null; };
+  const logRow = (t) => { const k = [store.logs.metal, store.logs.filter, store.logs.final, store.logs.cnc]; if (!LOGIX || LOGIXk[0] !== k[0] || LOGIXk[1] !== k[1] || LOGIXk[2] !== k[2] || LOGIXk[3] !== k[3]) { LOGIX = {}; LOGIXk = k; ['metal', 'filter', 'final', 'cnc'].forEach((f) => (store.logs[f] || []).forEach((r) => { if (!LOGIX[r.t]) LOGIX[r.t] = { r, f }; })); } return LOGIX[String(t)] || null; };
   const wDesc = (w) => { const lr = logRow(w.t); return lr && String(lr.r.pn).toLowerCase() === String(w.pn).toLowerCase() ? lr.r.d || '' : ''; };
   let FLX = null, FLXk = null;
   const floorAt = (t) => { if (FLXk !== store.wip) { FLXk = store.wip; FLX = {}; ((store.wip && store.wip.rows) || []).forEach((w) => w.t.split('/').forEach((k) => { k = k.trim(); const L = FLX[k] = FLX[k] || []; if (L.indexOf(w.loc) < 0) L.push(w.loc); })); } return (FLX[String(t)] || []).join(', '); };
@@ -1905,7 +1906,7 @@ window.WT_ESP = [
   }
   /* ---------- the Excel traveler logs, shown the way they look in Excel ---------- */
   function renderXl() {
-    const L = [['metal', 'Shop Traveler Log (metal)'], ['filter', 'Filter Log Sheet'], ['final', 'Final Assembly Traveler Log']], k = ui.xlLog || 'metal', x = (store.logx || {})[k];
+    const L = [['metal', 'Shop Traveler Log (metal)'], ['filter', 'Filter Log Sheet'], ['final', 'Final Assembly Traveler Log'], ['cnc', 'CNC Traveler Log']], k = ui.xlLog || 'metal', x = (store.logx || {})[k];
     if (!(ui.user && (ui.user.role === 'manager' || W.isApprover(ui.user) || W.canDispose(ui.user)))) return '<div class="head"><h1>Traveler logs</h1></div><div class="banner warn"><div>Sign in as a supervisor, quality or manager to see the logs.</div><button class="btn sm" data-m="login">Sign in</button></div>';
     let h = '<div class="head"><div><h1>Traveler logs</h1><p class="muted">The same logs you use in Excel — same columns, same order. Read only. Updated every hour from the files on the Z: drive' + (x ? ' · ' + esc(x.file) + ' saved ' + esc(x.saved) : '') + '.</p></div></div>';
     h += '<div class="tabs">' + L.map((l) => '<button class="' + (k === l[0] ? 'on' : '') + '" data-a="xlLog" data-v="' + l[0] + '">' + l[1] + '</button>').join('') + '</div>';
@@ -1991,7 +1992,7 @@ window.WT_ESP = [
   const assignList = () => store.cfg.roster.slice().filter((p) => p.role === 'operator' || W.isApprover(p)).sort((a, b) => String(a.area || '').localeCompare(String(b.area || '')) || a.name.localeCompare(b.name));
   function assignJob(job, who, laneId) { const ln = laneId || (() => { const k = job.ops.findIndex((o, i) => W.bucket(job, i)); return job.ops[k >= 0 ? k : 0].station; })();
     return savePlan(ln, (p) => { let x = p.items.find((y) => !y.done && y.k === 'j' && y.ref === job.id); if (!x) { x = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), k: 'j', ref: job.id, fl: '', snap: null, add: { by: ui.user.id, at: Date.now() }, done: null }; p.items.push(x); } x.who = who || ''; }, true); }
-  function paper() { const out = []; ['metal', 'filter', 'final'].forEach((f) => (store.logs[f] || []).forEach((r) => { if (!store.jobs['so-' + r.t]) out.push({ r: f === 'final' ? finS(r) : r, f }); })); return out; }
+  function paper() { const out = []; ['metal', 'filter', 'final', 'cnc'].forEach((f) => (store.logs[f] || []).forEach((r) => { if (!store.jobs['so-' + r.t]) out.push({ r: f === 'final' ? finS(r) : r, f }); })); return out; }
   const BASE = W.ROUTINGS.slice(), midx = {};
   const HAND = { '40-1022 TRV MASTER': 1, '207-7469 TRV KEY risk': 1, '270-7257 TRV KEY risk': 1, '1001050 TRV MASTER': 1, '1001249 PLEAT TRV': 1, '207-7469 PACKAGING TRAVELER': 1, '270-7257 PACKAGING TRAVELER': 1 };
   const key = (s) => String(s || '').trim().toUpperCase();
@@ -2003,6 +2004,7 @@ window.WT_ESP = [
     if (/WASH/.test(L)) return 'wash';
     if (/CLIP/.test(L)) return 'clip';
     if (/POWDER|PAINT/.test(L)) return 'powder';
+    if (/\bCNC\b|HAAS/.test(L)) return 'cnc';
     if (/MACHINE SHOP|COLD SAW|LATHE|MILL/.test(L)) return 'machine';
     if (/GLUE/.test(L)) return 'glue';
     if (/CLEAN/.test(L)) return 'metal';
@@ -2011,7 +2013,13 @@ window.WT_ESP = [
     return 'metal';
   }
   function guessFloor(m) { return /PLEAT|FILTER TRV|PANEL|CRIMP|SCREEN TRV/.test(key(m.kind)) || m.ops.some((o) => /FLTR|FILTER/.test(key(o[2])) || /URETHANE|PLEAT PACK|POTTING/.test(key(o[1]))) ? 'filter' : 'metal'; }
+  // CNC department: lathe / mill / deburr / ultrasonic in CNC; "wash dept" goes to Wash; "prod dept" to the metal floor
+  const cncStation = (mach, text) => { const L = key(mach); if (/WASH DEPT|WASH STATION/.test(L) || /WASH STATION/.test(key(text))) return 'wash'; if (/PROD DEPT/.test(L)) return 'metal'; return 'cnc'; };
   function toRouting(m) {
+    if (m.fl === 'cnc') return { id: 'M:' + m.f, master: true, anyDest: true, floor: 'metal', series: 'cnc', pn: m.pn, wpn: '', name: m.name, kind: 'CNC TRAVELER', form: 'CNC Shop Order and Traveler', fa: false,
+      travRev: m.tr || '—', travDate: '', dwgRev: m.dr || '—', dwgDate: '', customer: m.cu || 'N/A', material: m.mat || '', risk: '', moveTo: 'stage', pages: 0, file: m.pdf, extra: [], dw: '',
+      cncPdf: 'docs/cnc/pdf/' + m.pdf, cncSetup: (m.su || []).map((f) => ({ t: f.replace(/\.pdf$/i, ''), path: 'docs/cnc/setup/' + f })),
+      ops: m.ops.map((o) => ({ n: o[0], station: cncStation(o[2], o[1]), mach: [o[2] || '—'], text: o[1] })), docs: [] };
     const floor = guessFloor(m);
     return { id: 'M:' + m.f, master: true, anyDest: true, floor, pn: m.pn, wpn: m.wpn, name: m.name || m.kind, kind: m.kind, form: m.fa ? 'FORM 9-3 · Final Assembly Traveler' : 'FORM 117 · Shop Order and Traveler', fa: !!m.fa,
       travRev: m.tr || '—', travDate: m.td || '', dwgRev: m.dr || '—', dwgDate: '', customer: m.cu || 'N/A', material: m.mat || '', risk: '', moveTo: m.fa ? 'fg' : 'stage', pages: m.pg, file: m.f + '.pdf', extra: m.x || [], dw: String(m.f).replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
@@ -2030,12 +2038,16 @@ window.WT_ESP = [
   function loadMaster() {
     fetch('data/risk.json').then((r) => r.json()).then((x) => { store.risk = x; applyRisk(); render(); if (ui.modal) renderModal(); }).catch(() => { store.risk = null; });
     fetch('data/dwg-index.json').then((r) => r.json()).then((x) => { store.dwg = x; render(); }).catch(() => { store.dwg = {}; });
+    fetch('data/cnc_routings.json').then((r) => r.json()).then((arr) => {
+      arr.forEach((m) => { const R = toRouting(m); if (W.routing(R.id)) return; W.ROUTINGS.push(R); [m.pn, String(m.f).replace(/^CNC /, '').split(' ')[0]].forEach((k) => { if (k && (midx[key(k)] || []).indexOf(R) < 0) (midx[key(k)] = midx[key(k)] || []).push(R); }); });
+      store.cncN = arr.length; applyRisk(); applyAreas(); render();
+    }).catch(() => { store.cncN = -1; });
     fetch('data/routings.json').then((r) => r.json()).then((arr) => {
       arr.forEach((m) => { if (HAND[m.f]) return; const R = toRouting(m); W.ROUTINGS.push(R); [m.pn, m.wpn, String(m.f).split(' ')[0]].forEach((k) => { if (k && (midx[key(k)] || []).indexOf(R) < 0) (midx[key(k)] = midx[key(k)] || []).push(R); }); });
       store.masterN = arr.length; applyRisk(); applyAreas(); render();
     }).catch(() => { store.masterN = -1; });
   }
-  const dwN = (r) => (r.docs.length || (r.master && store.dwg && store.dwg[r.dw] ? store.dwg[r.dw].n : 0));
+  const dwN = (r) => (r.series === 'cnc' ? 1 + (r.cncSetup || []).length : r.docs.length || (r.master && store.dwg && store.dwg[r.dw] ? store.dwg[r.dw].n : 0));
   const SHARD = {}, PRINTS_ONLY = { '1002698': 'UPLOAD-1002698' }, ALIAS = { '102911': '1002911' }, PR = {};
   function printsFor(slug) { PR[slug] = PR[slug] || { master: true, docs: [], dw: slug }; ensureDocs(PR[slug]); return PR[slug]; }
   function ensureDocs(r) {
@@ -2068,7 +2080,7 @@ window.WT_ESP = [
     const topP = LANES.map((l) => ({ l, x: openItems(l.id)[0], n: openItems(l.id).length })).filter((o) => o.x);
     const prioTop = topP.length ? '<div class="panel ptop"><div class="row" style="justify-content:space-between"><h2>Next up in each area</h2><button class="btn sm" data-nav="board">All priorities</button></div><div class="ptgrid">' + topP.map((o) => { const I = itemInfo(o.x); return '<button class="ptcell" data-nav="board"><small>' + esc(o.l.name) + ' · ' + o.n + ' on the list</small><b class="mono">' + esc(I.title) + '</b><span class="small muted">' + esc(I.sub) + (o.x.who ? ' · 👤 ' + esc(nm(o.x.who)) : '') + '</span></button>'; }).join('') + '</div></div>' : '';
     let h = '<div class="head"><div><h1>Travelers</h1><p class="muted">Every traveler on the floor, from your metal and filter logs. Tap one to open it.</p>' + (ui.lfloor === 'final' ? '<p class="muted small">The final assembly log has no finish dates, so Open here means issued in the last 45 days.</p>' : '') + '</div>' + '<span class="row">' + (ui.user && W.canDispose(ui.user) ? '<button class="btn" data-nav="manage" data-mtab="release">+ Issue a traveler</button>' : '') + (store.downloads ? '<button class="btn sm" data-a="csv">Save list as spreadsheet</button>' : '') + '</span>' + '</div>' +
-      '<div class="row"><span class="small muted" style="min-width:52px">Floor</span>' + chip('lfloor', 'both', 'Both') + chip('lfloor', 'metal', 'Metal') + chip('lfloor', 'filter', 'Filter') + chip('lfloor', 'final', 'Final assembly / packing') + '</div>' +
+      '<div class="row"><span class="small muted" style="min-width:52px">Floor</span>' + chip('lfloor', 'both', 'Both') + chip('lfloor', 'metal', 'Metal') + chip('lfloor', 'filter', 'Filter') + chip('lfloor', 'final', 'Final assembly / packing') + chip('lfloor', 'cnc', 'CNC') + '</div>' +
       '<div class="row"><span class="small muted" style="min-width:52px">Show</span>' + chip('lfilt', 'active', 'Open ' + n('active')) + chip('lfilt', 'late', 'Past due ' + n('late')) + chip('lfilt', 'sign', 'Needs signature ' + n('sign')) + chip('lfilt', 'hold', 'On hold ' + n('hold')) + chip('lfilt', 'done', 'Closed ' + n('done')) + chip('lfilt', 'all', 'All ' + items.length) + '</div>' +
       '<div class="row"><span class="small muted" style="min-width:52px">Sort</span>' + chip('lsort', 'part', 'Part · most volume first') + chip('lsort', 'issued', 'Date issued') + chip('lsort', 'due', 'Due date') + chip('lsort', 'pri', 'Run order') + '</div>' + prioTop;
     if (!store.loaded) return h + '<div class="empty">Connecting to the shop record.</div>';
@@ -2284,7 +2296,13 @@ window.WT_ESP = [
     return '<div class="panel" style="margin-bottom:12px"><h3>Parts list from Sage</h3>' + (L ? '<div class="tbl-wrap"><table><tr><th>Part</th><th>Description</th><th class="num">Qty per</th></tr>' + L.map((c) => '<tr><td class="mono">' + esc(c[0]) + '</td><td>' + esc(c[1] || '') + '</td><td class="num">' + esc(c[2] == null ? '' : c[2]) + '</td></tr>').join('') + '</table></div>' : '') +
       (parents.length ? '<p class="small">Goes into: ' + parents.map((x) => '<span class="mono chip">' + esc(x) + '</span>').join(' ') + '</p>' : '') + '<p class="small muted">From the Sage bill of materials' + (store.sageAt ? ', read ' + esc(store.sageAt) : '') + '. If it does not match the traveler, tell a supervisor.</p></div>';
   }
+  function cncDocs(r) {
+    if (!r || r.series !== 'cnc') return '';
+    const L = [{ t: 'CNC master traveler · ' + r.pn, path: r.cncPdf }].concat(r.cncSetup || []);
+    return '<div class="panel"><h2>CNC traveler and setup sheets</h2><p class="small muted">From Joseph / Justin’s Traveler CNC folder (F: drive). Read only.</p>' + L.map((x, k) => { const pg = pdfPages(x.path); return '<details' + (k === 0 && L.length === 1 ? ' open' : k === 1 ? ' open' : '') + '><summary><b>' + esc(x.t) + '</b></summary>' + (pg ? (pg.length ? pg.map((u) => '<img src="' + u + '" alt="' + esc(x.t) + '" style="width:100%;border:1px solid var(--line);margin:6px 0">').join('') : '<p class="small muted">Not on the tablet yet — it arrives with the next hourly update.</p>') : '<p class="small muted">Loading…</p>') + '</details>'; }).join('') + '</div>';
+  }
   function docsTab(j, r) {
+    const cd = cncDocs(r); if (cd) return sageParts(j ? j.pn : r && r.pn) + cd + curPrintsHtml(r, j);
     const sp = sageParts(j ? j.pn : r && r.pn);
     const cur = curPrintsHtml(r, j); if (cur) return sp + cur + '<h3 style="margin-top:12px">Pages from the master traveler file</h3>' + docsTab0(j, r);
     return sp + docsTab0(j, r);
@@ -2358,7 +2376,7 @@ window.WT_ESP = [
     fk = fk || relKind();
     raw = (raw || '').trim(); if (raw.length < 2) return '';
     raw = stripAsk(raw); const q = (spoken(raw) || raw).toLowerCase(), nq = normKey(q);
-    const hits = W.ROUTINGS.filter((r) => (fk !== 'final' || W.isFinal(r)) && (normKey(r.pn).indexOf(nq) >= 0 || normKey(r.wpn || '').indexOf(nq) >= 0 || (nq.length >= 4 && /[a-z]{4}/.test(q) && String(r.name).toLowerCase().indexOf(q) >= 0))).sort((a, b) => (normKey(a.pn) === nq ? 0 : 1) - (normKey(b.pn) === nq ? 0 : 1) || a.pn.localeCompare(b.pn, undefined, { numeric: true })).slice(0, 12);
+    const hits = W.ROUTINGS.filter((r) => (fk !== 'final' || W.isFinal(r)) && (fk !== 'cnc' || r.series === 'cnc') && (normKey(r.pn).indexOf(nq) >= 0 || normKey(r.wpn || '').indexOf(nq) >= 0 || (nq.length >= 4 && /[a-z]{4}/.test(q) && String(r.name).toLowerCase().indexOf(q) >= 0))).sort((a, b) => (normKey(a.pn) === nq ? 0 : 1) - (normKey(b.pn) === nq ? 0 : 1) || a.pn.localeCompare(b.pn, undefined, { numeric: true })).slice(0, 12);
     if (!hits.length) return '<p class="muted">No master traveler found for “' + esc(raw) + '”. Check the number, or the master traveler for this part has not been loaded.</p>';
     return hits.map((r) => '<button class="btn sm ' + (ui.relRid === r.id ? 'sel' : '') + '" data-rel="' + esc(r.id) + '"><span class="mono">' + esc(r.pn) + '</span><small>' + esc(String(r.name).slice(0, 44)) + ' · ' + esc(r.kind || (r.id.indexOf('PK-') === 0 ? 'FINAL ASSEMBLY' : 'TRV')) + ' · rev ' + esc(r.travRev) + '</small></button>').join('');
   }
@@ -2417,12 +2435,13 @@ window.WT_ESP = [
       }).join('') : '<div class="empty">No jobs yet. Release the first one from the Release job tab.</div>';
     }
     if (ui.mtab === 'release') {
-      const sel = ui.relRid && W.routing(ui.relRid) ? W.routing(ui.relRid) : null, fin = sel && W.isFinal(sel), fl = sel ? (fin ? 'final' : W.sideOf(sel.ops[sel.ops.length - 1].station)) : '';
+      const sel = ui.relRid && W.routing(ui.relRid) ? W.routing(ui.relRid) : null, fin = sel && W.isFinal(sel), fl = sel ? (fin ? 'final' : sel.series || W.sideOf(sel.ops[sel.ops.length - 1].station)) : '';
       const fk = relKind();
-      h += '<div class="panel"><h2>Issue a traveler</h2><div class="row"><button class="btn ' + (fk === 'prod' ? 'sel' : '') + '" data-relkind="prod">Production traveler</button><button class="btn ' + (fk === 'final' ? 'sel' : '') + '" data-relkind="final">Final assembly / packing</button></div>' +
+      h += '<div class="panel"><h2>Issue a traveler</h2><div class="row"><button class="btn ' + (fk === 'prod' ? 'sel' : '') + '" data-relkind="prod">Production traveler</button><button class="btn ' + (fk === 'final' ? 'sel' : '') + '" data-relkind="final">Final assembly / packing</button><button class="btn ' + (fk === 'cnc' ? 'sel' : '') + '" data-relkind="cnc">CNC traveler</button></div>' +
+        (fk === 'cnc' ? '<p class="muted">CNC department travelers. Numbers continue the CNC Traveler Log (next is <b>' + esc(nextNo('cnc') || '—') + '</b>). ' + (store.cncN > 0 ? store.cncN + ' CNC master travelers loaded.' : 'CNC master travelers arrive with the next hourly update.') + '</p>' : '') +
         (fk === 'final' ? '<p class="muted">Final assembly and packing travelers. Numbers continue the Final Assembly log. Enter the customer PO # and Sales Order # for shipping.</p>' : '<p class="muted">Three steps: find the part, enter the quantity, issue. No PC log needed. The traveler number is assigned for you.</p>') +
         '<label>1 · Part number — type it, scan it, or tap the keyboard microphone and say it<input id="rel-find" class="field" autocomplete="off" value="' + esc(ui.relQ || '') + '" placeholder="Example: 1001050"></label><div id="rel-hits" class="tiles">' + relHits(ui.relQ || '', fk) + '</div>' +
-        (sel ? '<div class="banner info"><div><b class="mono" style="font-size:1.2rem">' + esc(sel.pn) + '</b> ' + esc(sel.name) + '<br><span class="small">' + esc(sel.kind || sel.form) + ' · traveler rev ' + esc(sel.travRev) + ' · ' + sel.ops.length + ' operations · ' + (fin ? 'Final assembly / packing' : fl === 'metal' ? 'Metal floor' : 'Filter floor') + '. This traveler is locked to that revision when you issue it.</span></div></div>' +
+        (sel ? '<div class="banner info"><div><b class="mono" style="font-size:1.2rem">' + esc(sel.pn) + '</b> ' + esc(sel.name) + '<br><span class="small">' + esc(sel.kind || sel.form) + ' · traveler rev ' + esc(sel.travRev) + ' · ' + sel.ops.length + ' operations · ' + (fin ? 'Final assembly / packing' : fl === 'cnc' ? 'CNC department' : fl === 'metal' ? 'Metal floor' : 'Filter floor') + '. This traveler is locked to that revision when you issue it.</span></div></div>' +
           '<div class="grid2"><label>2 · Quantity<input id="rel-qty" class="field" type="number" inputmode="numeric" min="1"></label><label>Due date<input id="rel-due" class="field" type="date" value="' + new Date(now + 90 * 864e5).toISOString().slice(0, 10) + '"></label>' +
           '<label>Traveler number (next in the ' + fl + ' series)<input id="rel-so" class="field" autocomplete="off" inputmode="numeric" value="' + esc(nextNo(fl)) + '"></label><label class="check" style="flex-direction:row;align-items:center;gap:12px"><input id="rel-rush" type="checkbox" style="width:28px;height:28px;min-height:28px;flex:0 0 auto"> RUSH — run this first (ASAP)</label></div>' +
           (() => { if (fin || fl !== 'metal') return ''; const hh = assyHist(sel.pn), kw = ASSY_KW.test(String(sel.name || '') + ' ' + String(sel.kind || '')), auto = hh.n ? hh.y * 2 >= hh.n : kw, yes = ui.relAssy != null ? ui.relAssy : auto, nx = nextAssy();
@@ -2999,7 +3018,7 @@ window.WT_ESP = [
       const st = ui.wo, steps = st.steps.filter((x) => String(x.text).trim()), so = String(st.so || '').trim();
       if (!ui.user || !W.canDispose(ui.user)) return toast('A manager, supervisor or quality issues work orders.', 'bad');
       if (!String(st.pn).trim()) return toast('Enter the part number or prototype name.', 'bad'); if (!steps.length) return toast('Write at least one step.', 'bad'); if (!so) return toast('Enter the work order number.', 'bad');
-      if (store.jobs['so-' + so.replace(/[^A-Za-z0-9_-]/g, '-')] || ['metal', 'filter', 'final'].some((f) => (store.logs[f] || []).some((r) => String(r.t) === so))) return toast('Number ' + so + ' is already used. Use the next free number.', 'bad');
+      if (store.jobs['so-' + so.replace(/[^A-Za-z0-9_-]/g, '-')] || ['metal', 'filter', 'final', 'cnc'].some((f) => (store.logs[f] || []).some((r) => String(r.t) === so))) return toast('Number ' + so + ' is already used. Use the next free number.', 'bad');
       const rid = 'WO:' + so, rt = { id: rid, wo: true, master: false, floor: st.floor, pn: String(st.pn).trim(), wpn: String(st.pn).trim(), name: String(st.name).trim() || 'Work order', kind: 'WORK ORDER', form: 'Work order · no master traveler', fa: false, travRev: 'WO', travDate: new Date().toLocaleDateString('en-US'), dwgRev: '—', customer: String(st.cust).trim() || 'N/A', material: String(st.mat).trim(), risk: '', moveTo: 'stage', file: '', extra: [], dw: '', docs: [], by: ui.user.id, at: Date.now(),
         ops: steps.map((x, k) => ({ n: String((k + 1) * 10).padStart(3, '0'), station: x.st, mach: [W.station(x.st).name], text: String(x.text).trim() })) };
       try { W.ROUTINGS.push(rt); const j = W.newJob({ rid, so, qty: st.qty, due: st.due, pri: 50 }, { u: ui.user, at: Date.now() }); j.floor = st.floor;
@@ -3139,7 +3158,7 @@ window.WT_ESP = [
         try {
           const c2 = { u: ui.user, at: Date.now() }, base = { so: $('#rel-so').value.trim(), qty: $('#rel-qty').value, due: $('#rel-due').value, pri: 50, rush: $('#rel-rush').checked }, rid = ui.relRid, rt = W.routing(rid);
           if (!rt) return toast('Pick the part first.', 'bad');
-          const fin = W.isFinal(rt), fl = fin ? 'final' : W.sideOf(rt.ops[rt.ops.length - 1].station);
+          const fin = W.isFinal(rt), fl = fin ? 'final' : rt.series || W.sideOf(rt.ops[rt.ops.length - 1].station);
           if (fin && $('#rel-po')) base.ship = { po: $('#rel-po').value, sales: $('#rel-sales').value };
           if (fin && (store.logs.final || []).some((r) => String(r.t) === base.so && r.pn)) return toast('Traveler number ' + base.so + ' is already used on the final assembly log. Use the next free number.', 'bad');
           if (['metal', 'filter'].some((f) => (store.logs[f] || []).some((r) => r.t === base.so))) return toast('Traveler number ' + base.so + ' is already used on the paper log. Use the next free number.', 'bad');
