@@ -1594,13 +1594,16 @@ window.WT_ESP = [
     return '<div class="panel"><h2>Cost and margin</h2>' + (ui.finTok ? '<p class="muted">Loading…</p>' : '<p class="muted">' + esc(ui.finErr || 'Prices and costs are locked.') + '</p><button class="btn primary" data-m="finpin" style="align-self:flex-start">Enter my PIN to open</button>') + '</div>';
   }
   // Supervisors and administrators only. Everything on this screen comes from fin_get with a live token; nothing is stored on the tablet.
+  const F0so = (f) => (f && f.so) || [];
   function renderFinance() {
     let h = '<div class="head"><div><h1>Prices and costs</h1><p class="muted">From Sage, read ' + esc((ui.fin && ui.fin.recon && ui.fin.recon.meta && ui.fin.recon.meta.read) || '') + '. Selling prices and costs are kept apart. Locks when you sign out.</p></div>' + (ui.fin ? '<button class="btn" data-a="finLock">Lock now</button>' : '') + '</div>';
     if (!SRV()) return h + '<div class="banner warn"><div>Prices and costs open only on the shop server with a supervisor or administrator PIN.</div></div>';
     if (!ui.fin) return h + finLockedPanel();
-    const F = ui.fin, I = F.items || {}, SO = F.so || [], BOM = F.bom || {}, up = (s) => String(s || '').toUpperCase();
+    const Y0 = new Date().getFullYear() + '-01-01', SOall = F0so(ui.fin), SO = SOall.filter((l) => !l.date || String(l.date) >= Y0), SOold = SOall.length - SO.length;
+    const F = ui.fin, I = F.items || {}, BOM = F.bom || {}, up = (s) => String(s || '').toUpperCase();
     const flags = (F.recon && F.recon.flags) || [];
     const today = new Date().toISOString().slice(0, 10), shipD = (d) => !d ? '—' : '<span' + (d < today ? ' style="color:var(--bad);font-weight:600"' : '') + '>' + esc(new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.slice(0, 4) === today.slice(0, 4) ? undefined : 'numeric' })) + (d < today ? ' · late' : '') + '</span>';
+    h += '<div class="banner info"><div><b>Year to date only:</b> Sage orders entered since ' + new Date(Y0 + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' (' + SO.length + ' open lines).' + (SOold ? ' ' + SOold + ' older order lines are still open in Sage and are hidden here — see “Old open orders” below.' : '') + '</div></div>';
     h += '<div class="panel"><h2>Check these (' + flags.length + ')</h2>' + flags.map((f) => '<div class="banner ' + (f.lvl === 'bad' ? 'bad' : f.lvl === 'warn' ? 'warn' : 'info') + '"><div><b>' + esc(f.t) + '</b><br><span class="small">' + esc(f.d) + '</span></div></div>').join('') + '</div>';
     // Open travelers matched to Sage
     const open = []; jobs().filter((j) => j.st !== 'complete').forEach((j) => open.push({ t: j.so, pn: j.pn, d: j.name, q: Number(j.qty) || 0, src: 'Tablet' }));
