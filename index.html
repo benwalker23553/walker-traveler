@@ -324,6 +324,11 @@ table.xl tr.xl-done td { color: var(--ink2); }
 table.xl .xl-n { width: 1%; padding: 2px 4px; }
 table.xl th { text-transform: none; letter-spacing: 0; font-family: var(--f-body, inherit); }
 
+.jn-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.jn { border-left: 4px solid var(--line); padding: 4px 10px; display: flex; flex-direction: column; gap: 4px; }
+.jn-img { padding: 0; border: 1px solid var(--line); border-radius: var(--r); background: none; align-self: flex-start; cursor: zoom-in; }
+.jn-img img { display: block; max-width: 220px; max-height: 165px; border-radius: var(--r); }
+
 </style>
 <header class="top">
   <button id="b-home" class="brandbtn" type="button">⌂ Main menu</button>
@@ -484,7 +489,7 @@ window.WT_ES = {
 "Steps, in order":"Pasos, en orden",
 "+ Add step":"+ Agregar paso",
 "Issue work order to the floor":"Emitir orden de trabajo al piso",
-"Cancel":"Cancelar","Operators":"Operadores","Tap your name — see only your jobs and priorities":"Toca tu nombre — ve solo tus trabajos y prioridades","Nothing assigned":"Nada asignado","Not you? Operators":"¿No eres tú? Operadores","⤼ Skip this step":"⤼ Saltar este paso","Skip step":"Saltar paso","Not needed on this job":"No se necesita en este trabajo","Already done at another step":"Ya se hizo en otro paso","Supervisor signs":"Firma del supervisor","✎ Change this step":"✎ Cambiar este paso","Traveler changes":"Cambios al traveler","✎ Fix wording + sign":"✎ Corregir texto y firmar","✔ Sign — update traveler":"✔ Firmar — actualizar traveler","Reject":"Rechazar","🔔 Call supervisor":"🔔 Llamar supervisor","🔔 Call a supervisor":"🔔 Llamar a un supervisor","Come check this part":"Ven a revisar esta pieza","First piece ready":"Primera pieza lista","Question on the print":"Pregunta sobre el plano","Machine problem":"Problema con la máquina","Need material":"Falta material","Quality problem":"Problema de calidad","Send alert":"Enviar alerta","Note (optional)":"Nota (opcional)","Pick a reason.":"Elige un motivo.","Not me":"No soy yo","Enter your PIN — tap the numbers or type them on the keyboard.":"Escribe tu PIN — toca los números o usa el teclado.","Create your PIN.":"Crea tu PIN.","Enter the same PIN again to confirm.":"Escribe el mismo PIN otra vez para confirmar.",
+"Cancel":"Cancelar","Notes and photos":"Notas y fotos","📷 Add photo":"📷 Agregar foto","Save note":"Guardar nota","Add a note":"Agregar una nota","No notes or photos yet.":"Todavía no hay notas ni fotos.","Operators":"Operadores","Tap your name — see only your jobs and priorities":"Toca tu nombre — ve solo tus trabajos y prioridades","Nothing assigned":"Nada asignado","Not you? Operators":"¿No eres tú? Operadores","⤼ Skip this step":"⤼ Saltar este paso","Skip step":"Saltar paso","Not needed on this job":"No se necesita en este trabajo","Already done at another step":"Ya se hizo en otro paso","Supervisor signs":"Firma del supervisor","✎ Change this step":"✎ Cambiar este paso","Traveler changes":"Cambios al traveler","✎ Fix wording + sign":"✎ Corregir texto y firmar","✔ Sign — update traveler":"✔ Firmar — actualizar traveler","Reject":"Rechazar","🔔 Call supervisor":"🔔 Llamar supervisor","🔔 Call a supervisor":"🔔 Llamar a un supervisor","Come check this part":"Ven a revisar esta pieza","First piece ready":"Primera pieza lista","Question on the print":"Pregunta sobre el plano","Machine problem":"Problema con la máquina","Need material":"Falta material","Quality problem":"Problema de calidad","Send alert":"Enviar alerta","Note (optional)":"Nota (opcional)","Pick a reason.":"Elige un motivo.","Not me":"No soy yo","Enter your PIN — tap the numbers or type them on the keyboard.":"Escribe tu PIN — toca los números o usa el teclado.","Create your PIN.":"Crea tu PIN.","Enter the same PIN again to confirm.":"Escribe el mismo PIN otra vez para confirmar.",
 "What to do at this step":"Qué hacer en este paso",
 "Work order number":"Número de orden de trabajo",
 "Part number (or prototype name)":"Número de parte (o nombre del prototipo)",
@@ -1122,6 +1127,13 @@ window.WT_ESP = [
         const n = job.ops[i].n; job.edits = job.edits || {}; const was = job.edits[n] ? job.edits[n].text : '(master text)';
         job.edits[n] = { text: tx, by: ctx.u.id, at: ctx.at, reason: p.reason.trim() };
         log(job, ctx, 'Step changed', 'Op ' + n + ' · ' + p.reason.trim() + ' · was: ' + was.slice(0, 120) + ' · now: ' + tx.slice(0, 160)); break;
+      }
+      case 'jobNote': {
+        if (!ctx.u) fail('Sign in first.');
+        const text = String(p.text || '').trim().slice(0, 2000), photo = p.photo ? String(p.photo) : '';
+        if (!text && !photo) fail('Type a note or add a photo.');
+        job.notes = job.notes || []; const n = { id: 'N' + (job.notes.length + 1), op: p.op || '', text, photo, by: ctx.u.id, at: ctx.at };
+        job.notes.push(n); log(job, ctx, photo ? 'Photo added' : 'Note added', (n.op ? 'Op ' + n.op + ' · ' : '') + (text || 'photo')); break;
       }
       case 'logNote': if (!ctx.u) fail('Sign in first.'); log(job, ctx, String(p.a || 'Note'), String(p.d || '')); break;
       case 'flag':
@@ -2155,6 +2167,26 @@ window.WT_ESP = [
         : canMgr ? '<span class="row"><button class="btn go sm" data-a="rlSign" data-id="' + esc(x.id) + '">✔ Sign — update traveler</button><button class="btn sm" data-a="rlRev" data-id="' + esc(x.id) + '">Send back to ' + esc(nm(RL_QA())) + '</button><button class="btn sm" data-a="rlNo" data-id="' + esc(x.id) + '">Reject</button></span>'
         : '<span class="small muted">' + esc(st === 'qa' ? nm(RL_QA()) + ' signs first.' : nm(RL_MGR()) + ' signs next.') + '</span>') + '</div>';
   }
+  /* ---------- job notes and photos ---------- */
+  function notesPanel(j, op) {
+    const N = (j.notes || []).slice().reverse();
+    return '<div class="panel"><h2>Notes and photos</h2>' +
+      (ui.user ? '<label>Add a note<textarea id="jn-text" placeholder="Type, or tap the microphone on the keyboard and speak"></textarea></label><div class="row" style="flex-wrap:wrap;gap:8px"><label class="btn" style="cursor:pointer">📷 Add photo<input id="jn-photo" type="file" accept="image/*" capture="environment" hidden data-job="' + esc(j.id) + '" data-op="' + esc(op.n) + '"></label><button class="btn primary" data-a="jnSave" data-job="' + esc(j.id) + '" data-op="' + esc(op.n) + '">Save note</button><span id="jn-status" class="small muted"></span></div>' : '<p class="small muted">Sign in to add notes or photos.</p>') +
+      (N.length ? '<div class="jn-list">' + N.map((n) => '<div class="jn"><div class="small muted"><b>' + esc(nm(n.by)) + '</b> · ' + esc(fTime(n.at)) + (n.op ? ' · op ' + esc(n.op) : '') + '</div>' + (n.text ? '<div>' + esc(n.text) + '</div>' : '') + (n.photo ? '<button class="jn-img" data-a="jnView" data-src="' + esc(n.photo) + '"><img src="' + esc(n.photo) + '" alt="Photo from ' + esc(nm(n.by)) + '" loading="lazy"></button>' : '') + '</div>').join('') + '</div>' : '<p class="small muted">No notes or photos yet.</p>') + '</div>';
+  }
+  function shrinkPhoto(file) {
+    return new Promise((res, rej) => { const img = new Image(), u = URL.createObjectURL(file); img.onload = () => { const k = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(u); c.toBlob((b) => (b ? res(b) : rej(new Error('photo'))), 'image/jpeg', 0.8); }; img.onerror = () => rej(new Error('That file is not a photo.')); img.src = u; });
+  }
+  async function savePhoto(jobId, opN, file) {
+    const st = $('#jn-status'); if (st) st.textContent = 'Uploading photo…';
+    try {
+      const blob = await shrinkPhoto(file); let path;
+      if (window.WT_SB) { path = 'photos/' + jobId.replace(/[^\w-]/g, '') + '/' + Date.now().toString(36) + '.jpg'; const { error } = await window.WT_SB.storage.from('files').upload(path, blob, { contentType: 'image/jpeg' }); if (error) throw error; }
+      else path = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+      const tx = ($('#jn-text') || {}).value || '';
+      if (run(jobId, 'jobNote', { text: tx, photo: path, op: opN })) toast('Photo saved on the traveler');
+    } catch (e) { if (st) st.textContent = ''; toast('Photo not saved: ' + (e.message || e), 'bad'); }
+  }
   function workTab(j, r, i) {
     const op = j.ops[i], o = r.ops[i], now = Date.now(), holds = W.openHolds(j, op.n), b = W.bucket(j, i);
     let h = '<div class="panel"><div class="row" style="justify-content:space-between"><h2>Op ' + op.n + ' · ' + esc(W.station(op.station).name) + ' ' + riskBox(rk(r, o), true) + '</h2>' +
@@ -2173,6 +2205,7 @@ window.WT_ESP = [
     if (r.key) h += '<p class="small"><b>From the drawing:</b> ' + esc(r.key) + '</p>';
     if (op.setup && op.setup.vals && Object.keys(op.setup.vals).length) h += '<p class="small"><b>Recorded at setup</b> by ' + esc(nm(op.setup.by)) + ': ' + Object.keys(op.setup.vals).map((k) => esc(k) + ' ' + esc(op.setup.vals[k])).join(' · ') + '</p>';
     h += (dwN(r) ? '<button class="btn sm" data-tab="docs" style="align-self:flex-start">Open prints and traveler (' + dwN(r) + ')</button>' : '') + '</div>';
+    h += notesPanel(j, op);
     h += '<div class="panel"><h2>Two signatures on this operation</h2><div class="cp cp2">' + cpBox('1 · First article', op, 'first', 'Batch stays locked until signed') + cpBox('2 · Closing signature', op, 'final', 'Counts must add up') + '</div>';
     const pend = op.pend;
     h += '<div class="kv"><div><b class="num">' + op.qtyIn + '</b><span>Pcs in</span></div><div><b class="num">' + (op.good != null ? op.good : pend ? pend.good + '*' : '—') + '</b><span>Good</span></div><div><b class="num">' + (op.scrap + (pend ? pend.scrap : 0)) + '</b><span>Scrap</span></div><div><b class="num">' + (op.good != null ? op.short : pend ? pend.short : '—') + '</b><span>Not run</span></div><div><b class="num">' + W.unmoved(j, i) + '</b><span>Waiting to move</span></div></div>' + (pend ? '<p class="small muted">* Submitted, not yet approved.</p>' : '');
@@ -2967,6 +3000,8 @@ window.WT_ESP = [
       run(j.id, 'logNote', { a: 'Skip requested', d: 'Op ' + j.ops[Number(d.i)].n + ' · ' + why });
       sendAlert(j, Number(d.i), 'skip', 'Sign to skip a step', why).then((r) => { if (r && r.data && r.data.sent) toast('Sent to ' + r.data.people.map(nm).join(', ')); else toast('No supervisor has alerts on for this area — go get one.', 'bad'); }); return; }
     if (d.a === 'opsMe') { const id = d.v; if (ui.user && ui.user.id === id) { ui.view = 'mine'; return render(); } if (ui.user) signOutUser(); render(); return openModal({ type: 'login', who: id, pin: '', then: 'mine', keep: ls.get('wt-keep') === id || ls.get('wt-alerts') === id }); }
+    if (d.a === 'jnSave') { if (!need()) return; const tx = ($('#jn-text') || {}).value || ''; if (!tx.trim()) return toast('Type a note first, or tap Add photo.', 'bad'); if (run(d.job, 'jobNote', { text: tx, op: d.op })) toast('Note saved'); return; }
+    if (d.a === 'jnView') { $('#modal').innerHTML = '<div class="sheet wide"><div class="row" style="justify-content:space-between"><h2>Photo</h2><button class="btn sm" data-close>Close</button></div><div class="viewer"><img src="' + esc(d.src) + '" alt="Job photo" style="max-width:100%"></div></div>'; $('#modal').hidden = false; ui.modal = { type: 'lib' }; return; }
     if (d.a === 'xlLog') { ui.xlLog = d.v; return render(); }
     if (d.a === 'xlOpen') { ui.xlOpen = !ui.xlOpen; return render(); }
     if (d.a === 'xlOld') { ui.xlOld = !ui.xlOld; return render(); }
@@ -3103,7 +3138,8 @@ window.WT_ESP = [
       return void run(d.job, d.a, { i: Number(d.i) });
     }
   });
-  document.addEventListener('change', (e) => { const t = e.target; if (t && t.id === 'fin-file' && t.files && t.files[0]) { uploadFinalLog(t.files[0]); t.value = ''; } });
+  document.addEventListener('change', (e) => { const t = e.target; if (t && t.id === 'fin-file' && t.files && t.files[0]) { uploadFinalLog(t.files[0]); t.value = ''; }
+    if (t && t.id === 'jn-photo' && t.files && t.files[0]) { if (!need()) return; savePhoto(t.dataset.job, t.dataset.op, t.files[0]); t.value = ''; } });
   document.addEventListener('input', (e) => {
     ui.touched = Date.now(); const t = e.target, m = ui.modal;
     if (t.id === 'q') return search(t.value);

@@ -105,7 +105,7 @@
   };
   // <img src="docs/..."> → load from private storage
   // Images, videos and posters that point at private files are loaded through the shop login
-  const PRIV = /^(docs|training)\//;
+  const PRIV = /^(docs|training|photos)\//;
   const fixEl = (el, attr) => { const s = el.getAttribute(attr) || ''; if (!PRIV.test(s) || el.dataset['wt' + attr]) return; el.dataset['wt' + attr] = s; el.removeAttribute(attr); authed.then(() => getFile(s)).then((b) => { el.setAttribute(attr, URL.createObjectURL(b)); if (el.tagName === 'SOURCE' && el.parentNode && el.parentNode.load) el.parentNode.load(); }).catch(() => {}); };
   const scan = (n) => { if (n.nodeType !== 1) return; [n].concat([...n.querySelectorAll('img,source,video')]).forEach((el) => { if (el.tagName === 'IMG' || el.tagName === 'SOURCE') fixEl(el, 'src'); if (el.tagName === 'VIDEO') fixEl(el, 'poster'); }); };
   new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach(scan))).observe(document.documentElement, { childList: true, subtree: true });
