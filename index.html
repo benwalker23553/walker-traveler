@@ -329,6 +329,11 @@ table.xl th { text-transform: none; letter-spacing: 0; font-family: var(--f-body
 .jn-img { padding: 0; border: 1px solid var(--line); border-radius: var(--r); background: none; align-self: flex-start; cursor: zoom-in; }
 .jn-img img { display: block; max-width: 220px; max-height: 165px; border-radius: var(--r); }
 
+.fxbox { display: flex; gap: 14px; align-items: flex-start; border: 2px solid var(--ok); background: var(--ok-bg); border-radius: var(--r); padding: 10px; margin: 8px 0; }
+.fxbox.warn { border-color: var(--warn); background: var(--warn-bg); }
+.fxbox.empty { border-style: dashed; border-color: var(--line); background: var(--panel2); justify-content: space-between; align-items: center; }
+.fxbox .jn-img img { max-width: 260px; max-height: 200px; }
+
 </style>
 <header class="top">
   <button id="b-home" class="brandbtn" type="button">⌂ Main menu</button>
@@ -489,7 +494,7 @@ window.WT_ES = {
 "Steps, in order":"Pasos, en orden",
 "+ Add step":"+ Agregar paso",
 "Issue work order to the floor":"Emitir orden de trabajo al piso",
-"Cancel":"Cancelar","Notes and photos":"Notas y fotos","📷 Add photo":"📷 Agregar foto","Save note":"Guardar nota","Add a note":"Agregar una nota","No notes or photos yet.":"Todavía no hay notas ni fotos.","Operators":"Operadores","Tap your name — see only your jobs and priorities":"Toca tu nombre — ve solo tus trabajos y prioridades","Nothing assigned":"Nada asignado","Not you? Operators":"¿No eres tú? Operadores","⤼ Skip this step":"⤼ Saltar este paso","Skip step":"Saltar paso","Not needed on this job":"No se necesita en este trabajo","Already done at another step":"Ya se hizo en otro paso","Supervisor signs":"Firma del supervisor","✎ Change this step":"✎ Cambiar este paso","Traveler changes":"Cambios al traveler","✎ Fix wording + sign":"✎ Corregir texto y firmar","✔ Sign — update traveler":"✔ Firmar — actualizar traveler","Reject":"Rechazar","🔔 Call supervisor":"🔔 Llamar supervisor","🔔 Call a supervisor":"🔔 Llamar a un supervisor","Come check this part":"Ven a revisar esta pieza","First piece ready":"Primera pieza lista","Question on the print":"Pregunta sobre el plano","Machine problem":"Problema con la máquina","Need material":"Falta material","Quality problem":"Problema de calidad","Send alert":"Enviar alerta","Note (optional)":"Nota (opcional)","Pick a reason.":"Elige un motivo.","Not me":"No soy yo","Enter your PIN — tap the numbers or type them on the keyboard.":"Escribe tu PIN — toca los números o usa el teclado.","Create your PIN.":"Crea tu PIN.","Enter the same PIN again to confirm.":"Escribe el mismo PIN otra vez para confirmar.",
+"Cancel":"Cancelar","Use this fixture":"Usa este fixture","✔ Right fixture":"✔ Fixture correcto","Not confirmed yet — check with your supervisor":"Sin confirmar — pregunta a tu supervisor","Notes and photos":"Notas y fotos","📷 Add photo":"📷 Agregar foto","Save note":"Guardar nota","Add a note":"Agregar una nota","No notes or photos yet.":"Todavía no hay notas ni fotos.","Operators":"Operadores","Tap your name — see only your jobs and priorities":"Toca tu nombre — ve solo tus trabajos y prioridades","Nothing assigned":"Nada asignado","Not you? Operators":"¿No eres tú? Operadores","⤼ Skip this step":"⤼ Saltar este paso","Skip step":"Saltar paso","Not needed on this job":"No se necesita en este trabajo","Already done at another step":"Ya se hizo en otro paso","Supervisor signs":"Firma del supervisor","✎ Change this step":"✎ Cambiar este paso","Traveler changes":"Cambios al traveler","✎ Fix wording + sign":"✎ Corregir texto y firmar","✔ Sign — update traveler":"✔ Firmar — actualizar traveler","Reject":"Rechazar","🔔 Call supervisor":"🔔 Llamar supervisor","🔔 Call a supervisor":"🔔 Llamar a un supervisor","Come check this part":"Ven a revisar esta pieza","First piece ready":"Primera pieza lista","Question on the print":"Pregunta sobre el plano","Machine problem":"Problema con la máquina","Need material":"Falta material","Quality problem":"Problema de calidad","Send alert":"Enviar alerta","Note (optional)":"Nota (opcional)","Pick a reason.":"Elige un motivo.","Not me":"No soy yo","Enter your PIN — tap the numbers or type them on the keyboard.":"Escribe tu PIN — toca los números o usa el teclado.","Create your PIN.":"Crea tu PIN.","Enter the same PIN again to confirm.":"Escribe el mismo PIN otra vez para confirmar.",
 "What to do at this step":"Qué hacer en este paso",
 "Work order number":"Número de orden de trabajo",
 "Part number (or prototype name)":"Número de parte (o nombre del prototipo)",
@@ -1365,6 +1370,7 @@ window.WT_ESP = [
     db.collection('logs').onSnapshot((s) => { s.docs.forEach((d) => { const x = d.data(); if (/_x$/.test(d.id)) { (store.logx = store.logx || {})[d.id.slice(0, -2)] = x; return; } store.logs[d.id] = (x && x.rows) || []; if (d.id === 'final' && x) store.finMeta = { at: x.at, by: x.by, file: x.file }; }); render(); }, () => {});
     db.collection('routings').onSnapshot((s) => { s.docs.forEach((d) => { const r = d.data(); if (r && r.id && !W.routing(r.id)) W.ROUTINGS.push(W.clone(r)); }); render(); }, () => {});
     db.collection('sage').onSnapshot((s) => { s.docs.forEach((d) => { if (d.id === 'bom') { const x = d.data(); store.sageBom = (x && x.bom) || {}; store.sageAt = x && x.at; } }); render(); }, () => {});
+    db.collection('fixtures').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.path) m[d.id] = x; }); store.fixtures = m; render(); }, () => {});
     db.collection('prints').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.pn) m[d.id] = x; }); store.prints = m; render(); if (ui.modal) renderModal(); }, () => {});
     db.collection('redlines').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.redlines = m; applyAreas(); render(); if (ui.modal) renderModal(); }, () => {});
     db.collection('wip').onSnapshot((sn) => { sn.docs.forEach((d) => { if (d.id === 'count') { const x = d.data(), lnOf = (l) => (/^paint/i.test(l) ? 'powder' : /^wel/i.test(l) ? 'weld' : /^wash/i.test(l) ? 'wash' : /^metal/i.test(l) ? 'metal' : /^lui[sz]/i.test(l) ? 'glue' : ''); store.wip = Object.assign({}, x, { rows: (x.rows || []).map((r) => (Array.isArray(r) ? { t: String(r[0]), pn: String(r[1] || ''), loc: r[2], ln: lnOf(r[2]) } : r)) }); } }); render(); }, () => {});
@@ -2167,6 +2173,30 @@ window.WT_ESP = [
         : canMgr ? '<span class="row"><button class="btn go sm" data-a="rlSign" data-id="' + esc(x.id) + '">✔ Sign — update traveler</button><button class="btn sm" data-a="rlRev" data-id="' + esc(x.id) + '">Send back to ' + esc(nm(RL_QA())) + '</button><button class="btn sm" data-a="rlNo" data-id="' + esc(x.id) + '">Reject</button></span>'
         : '<span class="small muted">' + esc(st === 'qa' ? nm(RL_QA()) + ' signs first.' : nm(RL_MGR()) + ' signs next.') + '</span>') + '</div>';
   }
+  /* ---------- fixture photos: one per part + operation, shown on every traveler of that part ---------- */
+  const fxKey = (rid, n) => String(rid || '').replace(/[^\w-]+/g, '_') + '__' + String(n || '').replace(/[^\w-]+/g, '_');
+  const fxGuess = (t) => { const m = /\b(?:FIXTURE|FIX\.?)\s*#?\s*([A-Z]{0,3}-?\d{2,5})|\b(FX-?\d{2,5})\b/i.exec(String(t || '')); return m ? (m[1] || m[2]).toUpperCase() : ''; };
+  function fixtureBlock(j, r, o) {
+    const fx = (store.fixtures || {})[fxKey(j.rid, o.n)], sup = ui.user && (W.isApprover(ui.user) || ui.user.role === 'manager'), guess = fxGuess(liveStep(j.rid, o.n, o.text, j).text);
+    const add = ui.user ? '<label class="btn sm" style="cursor:pointer">📷 ' + (fx ? 'Replace fixture photo' : 'Take fixture photo') + '<input id="fx-photo" type="file" accept="image/*" capture="environment" hidden data-rid="' + esc(j.rid) + '" data-n="' + esc(o.n) + '" data-pn="' + esc(j.pn) + '" data-fx="' + esc((fx && fx.fx) || guess) + '"></label>' : '';
+    if (!fx) return '<div class="fxbox empty"><div><b>Fixture' + (guess ? ' ' + esc(guess) : '') + '</b><br><span class="small muted">No photo yet. Find the right fixture and take a picture — every ' + esc(j.pn) + ' traveler will show it here at op ' + esc(o.n) + '.</span></div>' + add + '</div>';
+    return '<div class="fxbox' + (fx.ok ? '' : ' warn') + '"><button class="jn-img" data-a="jnView" data-src="' + esc(fx.path) + '"><img src="' + esc(fx.path) + '" alt="Fixture for op ' + esc(o.n) + '"></button><div><b>Use this fixture' + (fx.fx ? ': ' + esc(fx.fx) : '') + '</b><br><span class="small">Photo by ' + esc(nm(fx.by)) + ' ' + esc(fTime(fx.at)) + (fx.ok ? ' · confirmed by ' + esc(nm(fx.ok.by)) : '') + '</span>' +
+      (fx.ok ? '' : '<br><span class="pill warn">Not confirmed yet — check with your supervisor</span>') + '<div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">' + (!fx.ok && sup ? '<button class="btn sm go" data-a="fxOk" data-k="' + esc(fxKey(j.rid, o.n)) + '">✔ Right fixture</button>' : '') + add + '</div></div></div>';
+  }
+  async function saveFixture(t, file) {
+    if (!need()) return; const rid = t.dataset.rid, n = t.dataset.n, key = fxKey(rid, n);
+    toast('Uploading fixture photo…');
+    try {
+      const blob = await shrinkPhoto(file); let path;
+      if (window.WT_SB) { path = 'photos/fixtures/' + key + '-' + Date.now().toString(36) + '.jpg'; const { error } = await window.WT_SB.storage.from('files').upload(path, blob, { contentType: 'image/jpeg' }); if (error) throw error; }
+      else path = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+      const old = (store.fixtures || {})[key], sup = W.isApprover(ui.user) || ui.user.role === 'manager', at = Date.now();
+      const doc = { rid, n, pn: t.dataset.pn, fx: t.dataset.fx || '', path, by: ui.user.id, at, ok: sup ? { by: ui.user.id, at } : null, hist: ((old && old.hist) || []).concat(old ? [{ path: old.path, by: old.by, at: old.at, fx: old.fx }] : []).slice(-10) };
+      (store.fixtures = store.fixtures || {})[key] = doc; render();
+      if (store.mode === 'shared') await store.db.doc('fixtures/' + key).set(W.clone(doc));
+      toast(sup ? 'Fixture photo saved — every ' + doc.pn + ' traveler shows it at op ' + n : 'Fixture photo saved. A supervisor confirms it is the right fixture.');
+    } catch (e) { toast('Fixture photo not saved: ' + (e.message || e), 'bad'); }
+  }
   /* ---------- job notes and photos ---------- */
   function notesPanel(j, op) {
     const N = (j.notes || []).slice().reverse();
@@ -2200,6 +2230,7 @@ window.WT_ESP = [
     if (ui.user && W.isApprover(ui.user)) h += '<button class="btn sm" data-m="editStep" data-job="' + esc(j.id) + '" data-i="' + i + '" style="align-self:flex-start">✎ Edit this step for this job</button>';
     if (o.warn) h += '<div class="banner warn"><div><b>' + esc(o.warn) + '</b></div></div>';
     if (o.insp) h += '<p><b>Operator check:</b> ' + esc(o.insp) + '</p>';
+    h += fixtureBlock(j, r, o);
     h += setupBlocks(r, o);
     if (r.master && (r.extra || []).length) h += '<div><h3>Notes on this traveler</h3><ul class="clean small">' + r.extra.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
     if (r.key) h += '<p class="small"><b>From the drawing:</b> ' + esc(r.key) + '</p>';
@@ -3000,6 +3031,7 @@ window.WT_ESP = [
       run(j.id, 'logNote', { a: 'Skip requested', d: 'Op ' + j.ops[Number(d.i)].n + ' · ' + why });
       sendAlert(j, Number(d.i), 'skip', 'Sign to skip a step', why).then((r) => { if (r && r.data && r.data.sent) toast('Sent to ' + r.data.people.map(nm).join(', ')); else toast('No supervisor has alerts on for this area — go get one.', 'bad'); }); return; }
     if (d.a === 'opsMe') { const id = d.v; if (ui.user && ui.user.id === id) { ui.view = 'mine'; return render(); } if (ui.user) signOutUser(); render(); return openModal({ type: 'login', who: id, pin: '', then: 'mine', keep: ls.get('wt-keep') === id || ls.get('wt-alerts') === id }); }
+    if (d.a === 'fxOk') { if (!need()) return; if (!(W.isApprover(ui.user) || ui.user.role === 'manager')) return toast('A supervisor confirms the fixture.', 'bad'); const x = (store.fixtures || {})[d.k]; if (!x) return; const y = Object.assign(W.clone(x), { ok: { by: ui.user.id, at: Date.now() } }); store.fixtures[d.k] = y; render(); if (store.mode === 'shared') store.db.doc('fixtures/' + d.k).set(W.clone(y)).catch(() => toast('Could not save. Check the connection.', 'bad')); return toast('Fixture confirmed'); }
     if (d.a === 'jnSave') { if (!need()) return; const tx = ($('#jn-text') || {}).value || ''; if (!tx.trim()) return toast('Type a note first, or tap Add photo.', 'bad'); if (run(d.job, 'jobNote', { text: tx, op: d.op })) toast('Note saved'); return; }
     if (d.a === 'jnView') { $('#modal').innerHTML = '<div class="sheet wide"><div class="row" style="justify-content:space-between"><h2>Photo</h2><button class="btn sm" data-close>Close</button></div><div class="viewer"><img src="' + esc(d.src) + '" alt="Job photo" style="max-width:100%"></div></div>'; $('#modal').hidden = false; ui.modal = { type: 'lib' }; return; }
     if (d.a === 'xlLog') { ui.xlLog = d.v; return render(); }
@@ -3139,6 +3171,7 @@ window.WT_ESP = [
     }
   });
   document.addEventListener('change', (e) => { const t = e.target; if (t && t.id === 'fin-file' && t.files && t.files[0]) { uploadFinalLog(t.files[0]); t.value = ''; }
+    if (t && t.id === 'fx-photo' && t.files && t.files[0]) { saveFixture(t, t.files[0]); t.value = ''; return; }
     if (t && t.id === 'jn-photo' && t.files && t.files[0]) { if (!need()) return; savePhoto(t.dataset.job, t.dataset.op, t.files[0]); t.value = ''; } });
   document.addEventListener('input', (e) => {
     ui.touched = Date.now(); const t = e.target, m = ui.modal;
