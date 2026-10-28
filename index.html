@@ -484,7 +484,7 @@ window.WT_ES = {
 "Steps, in order":"Pasos, en orden",
 "+ Add step":"+ Agregar paso",
 "Issue work order to the floor":"Emitir orden de trabajo al piso",
-"Cancel":"Cancelar","⤼ Skip this step":"⤼ Saltar este paso","Skip step":"Saltar paso","Not needed on this job":"No se necesita en este trabajo","Already done at another step":"Ya se hizo en otro paso","Supervisor signs":"Firma del supervisor","✎ Change this step":"✎ Cambiar este paso","Traveler changes":"Cambios al traveler","✎ Fix wording + sign":"✎ Corregir texto y firmar","✔ Sign — update traveler":"✔ Firmar — actualizar traveler","Reject":"Rechazar","🔔 Call supervisor":"🔔 Llamar supervisor","🔔 Call a supervisor":"🔔 Llamar a un supervisor","Come check this part":"Ven a revisar esta pieza","First piece ready":"Primera pieza lista","Question on the print":"Pregunta sobre el plano","Machine problem":"Problema con la máquina","Need material":"Falta material","Quality problem":"Problema de calidad","Send alert":"Enviar alerta","Note (optional)":"Nota (opcional)","Pick a reason.":"Elige un motivo.","Not me":"No soy yo","Enter your PIN — tap the numbers or type them on the keyboard.":"Escribe tu PIN — toca los números o usa el teclado.","Create your PIN.":"Crea tu PIN.","Enter the same PIN again to confirm.":"Escribe el mismo PIN otra vez para confirmar.",
+"Cancel":"Cancelar","Operators":"Operadores","Tap your name — see only your jobs and priorities":"Toca tu nombre — ve solo tus trabajos y prioridades","Nothing assigned":"Nada asignado","Not you? Operators":"¿No eres tú? Operadores","⤼ Skip this step":"⤼ Saltar este paso","Skip step":"Saltar paso","Not needed on this job":"No se necesita en este trabajo","Already done at another step":"Ya se hizo en otro paso","Supervisor signs":"Firma del supervisor","✎ Change this step":"✎ Cambiar este paso","Traveler changes":"Cambios al traveler","✎ Fix wording + sign":"✎ Corregir texto y firmar","✔ Sign — update traveler":"✔ Firmar — actualizar traveler","Reject":"Rechazar","🔔 Call supervisor":"🔔 Llamar supervisor","🔔 Call a supervisor":"🔔 Llamar a un supervisor","Come check this part":"Ven a revisar esta pieza","First piece ready":"Primera pieza lista","Question on the print":"Pregunta sobre el plano","Machine problem":"Problema con la máquina","Need material":"Falta material","Quality problem":"Problema de calidad","Send alert":"Enviar alerta","Note (optional)":"Nota (opcional)","Pick a reason.":"Elige un motivo.","Not me":"No soy yo","Enter your PIN — tap the numbers or type them on the keyboard.":"Escribe tu PIN — toca los números o usa el teclado.","Create your PIN.":"Crea tu PIN.","Enter the same PIN again to confirm.":"Escribe el mismo PIN otra vez para confirmar.",
 "What to do at this step":"Qué hacer en este paso",
 "Work order number":"Número de orden de trabajo",
 "Part number (or prototype name)":"Número de parte (o nombre del prototipo)",
@@ -1723,6 +1723,7 @@ window.WT_ESP = [
       all: () => tile('data-nav="list" data-lf="active"', 'All travelers', 'Search, sort, open any traveler', J.length + openPaper),
       asap: () => (J.some((j) => j.rush) ? tile('data-nav="list" data-lf="active"', 'ASAP', 'Run these first', J.filter((j) => j.rush).length, 'bad') : ''),
       board: () => { const n = LANES.filter((l) => openItems(l.id).length).length; return n ? tile('data-nav="board"', 'Priorities board', 'Next up in every area', n, '') : ''; },
+      ops: () => tile('data-nav="ops"', 'Operators', 'Tap your name — see only your jobs and priorities', null, 'go'),
       mine: () => { if (!ui.user) return ''; const M = []; LANES.forEach((l) => openItems(l.id).forEach((x) => { if (x.who === ui.user.id) M.push(x); })); return M.length ? tile('data-nav="mine"', 'Assigned to me', 'Your supervisor picked these for you', M.length, 'go') : ''; },
       today: () => { const n = LANES.filter((l) => laneSeen(l)).reduce((a, l) => a + openItems(l.id).length, 0); return n ? tile('data-nav="station"', 'Run first today', 'Set by your supervisor', n, 'go') : ''; },
       prio: () => (canPlan() ? tile('data-nav="prio"', 'Daily priorities', 'What each area runs first', LANES.reduce((a, l) => a + openItems(l.id).length, 0), LANES.some((l) => planStale(l.id)) ? 'warn' : '') : T.today()),
@@ -1743,9 +1744,9 @@ window.WT_ESP = [
       inout: () => (ui.user ? tile('id="t-out"', 'Sign out', esc(ui.user.name), null) : tile('data-m="login"', 'Sign in', 'Tap your name, enter your PIN', null, 'go'))
     };
     // Each person sees only what they use. Operators: their work. Supervisors, quality and managers: everything.
-    const order = !ui.user ? ['inout', 'work', 'today', 'board', 'all', 'asap', 'where', 'train', 'area']
-      : !lead ? ['work', 'mine', 'today', 'board', 'all', 'asap', 'hold', 'where', 'train', 'area', 'inout']
-      : ['work', 'prio', 'board', 'sign', 'xl', 'alerts', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
+    const order = !ui.user ? ['ops', 'inout', 'work', 'today', 'board', 'all', 'asap', 'where', 'train', 'area']
+      : !lead ? ['ops', 'work', 'mine', 'today', 'board', 'all', 'asap', 'hold', 'where', 'train', 'area', 'inout']
+      : ['work', 'prio', 'board', 'sign', 'ops', 'xl', 'alerts', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
     return '<div class="head"><div><h1>Main menu</h1><p class="muted">' + (ui.user ? 'Signed in as ' + esc(ui.user.name.replace(/\.$/, '')) + '.' : 'Not signed in.') + ' This tablet is set to ' + esc(areaName()) + '.</p></div></div><div class="menu">' + order.map((k) => T[k]()).join('') + '</div>';
   }
 
@@ -1905,11 +1906,22 @@ window.WT_ESP = [
     const cols = boardCols(ui.tv ? 5 : 10);
     return '<div class="head"><div><h1>Priorities · all areas</h1><p class="muted">Live. Each area runs #1 first. Managers and supervisors set these in Daily priorities.</p></div><div class="row"><span class="tvclock num">' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + '</span>' + (ui.tv ? '' : (canPlan() ? '<button class="btn" data-nav="prio">Change priorities</button>' : '') + '<a class="btn" href="#tv" target="_blank" rel="noopener">Open TV view</a>') + '</div></div>' + (cols ? '<div class="board">' + cols + '</div>' : '<div class="empty">No priorities set yet. A manager or supervisor sets them in Daily priorities.</div>');
   }
+  /* ---------- Operators folder: each person taps their name and sees only their own work ---------- */
+  const myItems = (id) => { const M = []; LANES.forEach((l) => openItems(l.id).forEach((x) => { if (x.who === id) M.push(x); })); return M; };
+  const myRunning = (id) => { const R = []; jobs().forEach((j) => { if (j.st === 'complete') return; j.ops.forEach((o, i) => { if (o.st !== 'pending' && o.st !== 'done' && o.st !== 'closed' && (o.who || []).indexOf(id) >= 0) R.push([j, i]); }); }); return R; };
+  function renderOps() {
+    const ppl = store.cfg.roster.filter((p) => p.active !== false && !/^z/.test(p.id)), groups = {};
+    ppl.forEach((p) => { const a = p.role === 'operator' ? (p.area || 'Other') : 'Supervisors, quality, managers'; (groups[a] = groups[a] || []).push(p); });
+    const keys = Object.keys(groups).sort((a, b) => (a === 'Supervisors, quality, managers') - (b === 'Supervisors, quality, managers') || a.localeCompare(b));
+    return '<div class="head"><div><h1>Operators</h1><p class="muted">Tap your name and enter your PIN. You see only your own jobs and priorities.</p></div></div>' +
+      keys.map((k) => '<section class="sec"><div class="ghead"><h2>' + esc(k) + '</h2></div><div class="tiles">' + groups[k].sort((a, b) => a.name.localeCompare(b.name)).map((p) => { const n = myItems(p.id).length + myRunning(p.id).length; return '<button class="btn ' + (ui.user && ui.user.id === p.id ? 'sel' : '') + '" data-a="opsMe" data-v="' + esc(p.id) + '"><span>' + esc(p.name) + '</span><small>' + (n ? n + ' job' + (n > 1 ? 's' : '') + ' for you' : 'Nothing assigned') + '</small></button>'; }).join('') + '</div></section>').join('');
+  }
   function renderMine() {
     if (!ui.user) return '<div class="empty">Sign in to see the jobs assigned to you.</div>';
     const M = []; LANES.forEach((l) => liveItems(l.id).forEach((x) => { if (x.who === ui.user.id) M.push([l, x]); }));
-    const open = M.filter((o) => !o[1].done), dn = M.filter((o) => o[1].done);
-    return '<div class="head"><div><h1>Assigned to ' + esc(ui.user.name.replace(/\.$/, '')) + '</h1><p class="muted">Run these in order, top first. Tap ✓ Done when each is finished.</p></div></div>' +
+    const open = M.filter((o) => !o[1].done), dn = M.filter((o) => o[1].done), R = myRunning(ui.user.id);
+    return '<div class="head"><div><h1>' + esc(ui.user.name.replace(/\.$/, '')) + ' — my jobs</h1><p class="muted">Only your work. Run your priorities in order, top first. Tap ✓ Done when each is finished.</p></div><button class="btn sm" data-nav="ops">Not you? Operators</button></div>' +
+      (R.length ? '<h2>In progress — you are working on</h2><div class="tiles">' + R.map((x) => { const j = x[0], o = j.ops[x[1]]; return '<button class="btn" data-a="xlJob" data-job="' + esc(j.id) + '"><span class="mono">' + esc(j.pn) + '</span><small>SO ' + esc(j.so) + ' · op ' + esc(o.n) + ' · ' + esc(W.station(o.station).name) + ' · ' + esc(W.ST_LABEL[o.st] || o.st) + '</small></button>'; }).join('') + '</div><h2 style="margin-top:14px">My priorities</h2>' : '') +
       (open.length ? open.map((o, k) => '<div class="small muted" style="margin:10px 0 2px"><b>' + esc(o[0].name) + '</b> · #' + (openItems(o[0].id).indexOf(o[1]) + 1) + ' on that area\'s list</div>' + planRow(o[1], k, false, o[0].id, open.length)).join('') : '<div class="empty">Nothing assigned to you right now. Check your area\'s list.</div>') +
       (dn.length ? '<h2 style="margin-top:18px">Done today</h2>' + dn.map((o) => planRow(o[1], 0, false, o[0].id, 0)).join('') : '');
   }
@@ -2582,7 +2594,7 @@ window.WT_ESP = [
           rpc(fresh ? 'pin_create' : 'pin_login', { p_id: lp.id, p_pin: m.pin }).then((r) => {
             m.busy = false; if (ui.modal !== m) return;
             if (!r || !r.ok) { m.pin = ''; m.first = ''; renderModal(); loadStaff(); return toast(r && r.reason === 'exists' ? 'A PIN is already set. Enter it to sign in.' : pinWhy(r || {}), 'bad'); }
-            signedIn(person(lp.id) || lp, r); if (fresh) loadStaff(); closeModal(); if (ui.view === 'home') ui.view = 'station'; render(); toast((fresh ? 'PIN saved. ' : '') + 'Signed in as ' + lp.name);
+            signedIn(person(lp.id) || lp, r); if (fresh) loadStaff(); closeModal(); ui.view = m.then || (ui.view === 'home' ? 'station' : ui.view); render(); toast((fresh ? 'PIN saved. ' : '') + 'Signed in as ' + lp.name);
           }).catch(() => { m.busy = false; toast('Could not check the PIN. Check the connection and try again.', 'bad'); });
           return;
         }
@@ -2590,9 +2602,9 @@ window.WT_ESP = [
           if ((m.pin || '').length !== 4) return toast('Enter 4 digits.', 'bad');
           if (!m.first) { m.first = m.pin; m.pin = ''; return renderModal(); }
           if (m.first !== m.pin) { m.first = ''; m.pin = ''; renderModal(); return toast('Those did not match. Start again.', 'bad'); }
-          lp.pin = m.pin; delete lp.tempPin; { const pid = lp.id, pin = m.pin; saveCfg((c) => { const x = c.roster.find((y) => y.id === pid); if (x) { x.pin = pin; delete x.tempPin; } }); } ui.user = lp; markMine(lp.id); ui.touched = Date.now(); ui.signedAt = Date.now(); closeModal(); if (ui.view === 'home') ui.view = 'station'; render(); return toast('PIN saved. Signed in as ' + lp.name);
+          lp.pin = m.pin; delete lp.tempPin; { const pid = lp.id, pin = m.pin; saveCfg((c) => { const x = c.roster.find((y) => y.id === pid); if (x) { x.pin = pin; delete x.tempPin; } }); } ui.user = lp; markMine(lp.id); ui.touched = Date.now(); ui.signedAt = Date.now(); closeModal(); ui.view = m.then || (ui.view === 'home' ? 'station' : ui.view); render(); return toast('PIN saved. Signed in as ' + lp.name);
         } }
-      case 'login-go': p = verify(m); if (!p) return; ui.user = p; markMine(p.id); ui.touched = Date.now(); ui.signedAt = Date.now(); closeModal(); if (ui.view === 'home') ui.view = 'station'; render(); toast('Signed in as ' + p.name); return;
+      case 'login-go': p = verify(m); if (!p) return; ui.user = p; markMine(p.id); ui.touched = Date.now(); ui.signedAt = Date.now(); closeModal(); ui.view = m.then || (ui.view === 'home' ? 'station' : ui.view); render(); toast('Signed in as ' + p.name); return;
       case 'sign': if (!m.result) return toast('Choose pass or fail.', 'bad'); if (SRV() && m.pinOk !== m.who + ':' + m.pin && person(m.who)) return pinGate(m); p = verify(m, true); if (!p) return;
         ok = run(m.job, 'sign', { i: m.i, type: m.ctype, result: m.result, checked: m.checked, meas: m.meas, note: m.note, reason: m.reason, qty: m.qty }, p);
         if (ok) toast(m.result === 'pass' ? 'Signed by ' + p.name : 'Hold opened by ' + p.name, m.result === 'pass' ? '' : 'bad'); break;
@@ -2819,7 +2831,7 @@ window.WT_ESP = [
     const main = $('#main'); if (!main) return;
     if (ui.tv) { ui.view = 'board'; ui.modal = null; }
     const y = window.scrollY;
-    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'prio' ? renderPrio() : ui.view === 'board' ? renderBoard() : ui.view === 'xl' ? renderXl() : ui.view === 'mine' ? renderMine() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
+    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'prio' ? renderPrio() : ui.view === 'board' ? renderBoard() : ui.view === 'xl' ? renderXl() : ui.view === 'ops' ? renderOps() : ui.view === 'mine' ? renderMine() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
     $('#b-home').textContent = '⌂ Main menu'; $('#b-list').textContent = '☰ Travelers'; $('#q').setAttribute('placeholder', 'Search or scan'); $('#b-lang').textContent = LANG === 'es' ? 'English' : 'Español';
     if (!document.fullscreenElement) $('#b-full').textContent = '⛶ Full';
     $('#b-station').textContent = 'Area: ' + areaName();
@@ -2954,6 +2966,7 @@ window.WT_ESP = [
     if (d.a === 'skipAsk') { const m = ui.modal, j = store.jobs[d.job]; if (!j) return; const why = (m && m.reason) || 'Skip requested';
       run(j.id, 'logNote', { a: 'Skip requested', d: 'Op ' + j.ops[Number(d.i)].n + ' · ' + why });
       sendAlert(j, Number(d.i), 'skip', 'Sign to skip a step', why).then((r) => { if (r && r.data && r.data.sent) toast('Sent to ' + r.data.people.map(nm).join(', ')); else toast('No supervisor has alerts on for this area — go get one.', 'bad'); }); return; }
+    if (d.a === 'opsMe') { const id = d.v; if (ui.user && ui.user.id === id) { ui.view = 'mine'; return render(); } if (ui.user) signOutUser(); render(); return openModal({ type: 'login', who: id, pin: '', then: 'mine', keep: ls.get('wt-keep') === id || ls.get('wt-alerts') === id }); }
     if (d.a === 'xlLog') { ui.xlLog = d.v; return render(); }
     if (d.a === 'xlOpen') { ui.xlOpen = !ui.xlOpen; return render(); }
     if (d.a === 'xlOld') { ui.xlOld = !ui.xlOld; return render(); }
