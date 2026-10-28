@@ -1371,6 +1371,7 @@ window.WT_ESP = [
     db.collection('logs').onSnapshot((s) => { s.docs.forEach((d) => { const x = d.data(); if (/_x$/.test(d.id)) { (store.logx = store.logx || {})[d.id.slice(0, -2)] = x; return; } store.logs[d.id] = (x && x.rows) || []; if (d.id === 'final' && x) store.finMeta = { at: x.at, by: x.by, file: x.file }; }); render(); }, () => {});
     db.collection('routings').onSnapshot((s) => { s.docs.forEach((d) => { const r = d.data(); if (r && r.id && !W.routing(r.id)) W.ROUTINGS.push(W.clone(r)); }); render(); }, () => {});
     db.collection('sage').onSnapshot((s) => { s.docs.forEach((d) => { if (d.id === 'bom') { const x = d.data(); store.sageBom = (x && x.bom) || {}; store.sageAt = x && x.at; } }); render(); }, () => {});
+    db.collection('cnc').onSnapshot((s) => { s.docs.forEach((d) => { if (d.id === 'materials') { const x = d.data(); store.cncMat = (x && x.rows) || []; } }); }, () => {});
     db.collection('fixtures').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.path) m[d.id] = x; }); store.fixtures = m; render(); }, () => {});
     db.collection('prints').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.pn) m[d.id] = x; }); store.prints = m; render(); if (ui.modal) renderModal(); }, () => {});
     db.collection('redlines').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.redlines = m; applyAreas(); render(); if (ui.modal) renderModal(); }, () => {});
@@ -2381,6 +2382,82 @@ window.WT_ESP = [
     return hits.map((r) => '<button class="btn sm ' + (ui.relRid === r.id ? 'sel' : '') + '" data-rel="' + esc(r.id) + '"><span class="mono">' + esc(r.pn) + '</span><small>' + esc(String(r.name).slice(0, 44)) + ' · ' + esc(r.kind || (r.id.indexOf('PK-') === 0 ? 'FINAL ASSEMBLY' : 'TRV')) + ' · rev ' + esc(r.travRev) + '</small></button>').join('');
   }
 
+  /* ---------- work order from a PDM drawing: find the released print, read its title block, fill the form ---------- */
+  function woDrawingPanel(st) {
+    const d = st.dw;
+    let h = '<div class="panel" style="background:var(--panel2)"><h3>Start from the drawing (PDM)</h3><p class="small muted">Type the part number. The released print is pulled in and the form fills itself: description, drawing rev, material, finish, and CNC steps copied from the closest CNC traveler.</p>' +
+      '<div class="row" style="gap:8px;flex-wrap:wrap"><input id="wo-dpn" class="field" style="max-width:220px" placeholder="Part number, e.g. 1005232" value="' + esc(st.dpn || st.pn || '') + '"><button class="btn go" data-a="woPdm">Pull drawing</button>' +
+      '<label class="btn" style="cursor:pointer">Pick the PDF from PDM<input id="wo-dpdf" type="file" accept="application/pdf,.pdf" hidden></label><span id="wo-dst" class="small muted">' + esc(st.dmsg || '') + '</span></div>';
+    if (d && d.pages && d.pages.length) h += '<div class="cols" style="margin-top:8px"><div class="col"><img src="' + d.pages[0] + '" alt="Drawing ' + esc(d.pn) + '" style="width:100%;border:1px solid var(--line);background:#fff"></div><div class="col"><table class="small">' +
+      [['Drawing', d.pn + (d.rev ? ' rev ' + d.rev : '')], ['Description', d.title], ['Material', d.mat], ['Finish', d.finish], ['Notes', (d.notes || []).join(' · ')], ['Steps from', d.from || 'standard CNC steps'], ['Bar stock on file', d.stock || '—']].filter((x) => x[1]).map((x) => '<tr><th style="text-align:left;padding-right:10px;vertical-align:top">' + esc(x[0]) + '</th><td>' + esc(x[1]) + '</td></tr>').join('') + '</table><p class="small muted">Check the filled-in fields below, then issue. The print stays attached to every traveler for ' + esc(d.pn) + '.</p></div></div>';
+    return h + '</div>';
+  }
+  async function pdfText(path, blob) {
+    const lib = await loadPdfJs(); const buf = blob ? await blob.arrayBuffer() : await fetch(path).then((x) => x.arrayBuffer());
+    const doc = await lib.getDocument({ data: buf }).promise, pg = await doc.getPage(1), vp = pg.getViewport({ scale: 1 }), tc = await pg.getTextContent();
+    const items = tc.items.filter((it) => String(it.str).trim()).map((it) => ({ s: String(it.str).trim(), x: it.transform[4] / vp.width, y: 1 - it.transform[5] / vp.height, h: Math.abs(it.transform[3]) }));
+    const cv = document.createElement('canvas'), v2 = pg.getViewport({ scale: 1.6 }); cv.width = v2.width; cv.height = v2.height; await pg.render({ canvasContext: cv.getContext('2d'), viewport: v2 }).promise;
+    return { items, img: cv.toDataURL('image/jpeg', 0.82) };
+  }
+  function readTitleBlock(items, pn) {
+    // group into lines by y
+    const L = []; items.slice().sort((a, b) => a.y - b.y || a.x - b.x).forEach((it) => { const l = L.find((q) => Math.abs(q.y - it.y) < 0.006 && Math.abs(q.h - it.h) < 2); if (l) { l.t.push(it); } else L.push({ y: it.y, h: it.h, t: [it] }); });
+    L.forEach((l) => { l.t.sort((a, b) => a.x - b.x); l.s = l.t.map((q) => q.s).join(' ').replace(/\s+/g, ' ').trim(); l.x = l.t[0].x; });
+    const all = L.map((l) => l.s).join('\n');
+    const LABEL = /^(DRAWN|CHECKED|ENG|MFG|Q\.?A|SALES|NAME|DATE|SIZE|DWG|REV|SCALE|WEIGHT|SHEET|THIRD ANGLE|DO NOT SCALE|UNLESS|DIMENSIONS|TOLERANCE|FRACTIONAL|ANGULAR|TWO PLACE|THREE PLACE|INTERPRET|MATERIAL|FINISH|PROPRIETARY|THE INFORMATION|WALKER|NEXT ASSY|USED ON|APPLICATION|COMMENTS)/i;
+    const tb = L.filter((l) => l.x > 0.55 && l.y > 0.78 && !LABEL.test(l.s) && /[A-Z]{3}/.test(l.s) && !/\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l.s) && l.s.replace(/[^A-Z]/g, '').length >= 4 && !/^[A-Z]{1,3}$/.test(l.s) && !/ENTERPRISES|ENGINEERING|SUN VALLEY|FAX|WWW/i.test(l.s));
+    const hmax = Math.max(0, ...tb.map((l) => l.h)), title = tb.filter((l) => l.h >= hmax - 1.5).sort((a, b) => a.y - b.y).map((l) => l.s).join(' ').replace(/\s+/g, ' ').trim();
+    const revRows = (all.match(/^\s*([A-Z]{1,2})\s+(?:RELEASED|SPECIFIED|REVISED|ADDED|CHANGED|UPDATED|REMOVED|CORRECTED|NEW|ECN)[^\n]*/gim) || []).map((x) => x.trim().split(/\s+/)[0]);
+    let rev = revRows.length ? revRows[revRows.length - 1] : ''; if (!rev) { const r2 = /\bREV\b[^\n]*\n?\s*([A-Z]{1,2})\b/.exec(all); if (r2) rev = r2[1]; }
+    const note = (rx) => { const m = rx.exec(all); return m ? m[1].replace(/\s+/g, ' ').trim() : ''; };
+    const mat = note(/MATERIAL:\s*([^\n]+)/i), finish = note(/FINISH:\s*([^\n]+)/i);
+    const notes = (all.split('\n').filter((x) => /^\d\.\s+[A-Z]/.test(x.trim()) && !/MATERIAL|FINISH/.test(x)).map((x) => x.replace(/^\d\.\s+/, '').trim())).slice(0, 6);
+    const thread = (/(\d+\/\d+-\d+\s*(?:UNF|UNC|NPT|NPTF|ORB|UN)?|M\d+\s*X\s*[\d.]+|\d\/\d+\s*NPT)/i.exec(title + ' ' + all) || [])[1] || '';
+    return { pn, rev, title, mat, finish, notes, thread };
+  }
+  function woFromDrawing(st, d) {
+    const toks = (t) => String(t || '').toUpperCase().match(/\d+\/\d+-\d+|[A-Z]{4,}/g) || [];
+    const want = toks(d.title + ' ' + d.thread), hasThread = !!d.thread;
+    let best = null, bs = 0;
+    W.ROUTINGS.filter((r) => r.series === 'cnc').forEach((r) => { const tk = toks(r.name + ' ' + r.ops.map((o) => o.text).join(' ')); let sc = 0; want.forEach((w) => { if (tk.indexOf(w) >= 0) sc += /\//.test(w) ? 5 : 1; }); if (/BUNG|FITTING|BOSS|PORT/.test(String(r.name).toUpperCase()) && /BUNG|FITTING|BOSS|PORT/.test(String(d.title).toUpperCase())) sc += 2; if (sc > bs) { bs = sc; best = r; } });
+    const ref = 'See drawing ' + d.pn + (d.rev ? ' rev ' + d.rev : '') + ' for dimensions.';
+    let steps;
+    if (best && bs >= 3) {
+      const old = [best.pn].concat(String(best.name).match(/\b\d{7}\b|\b\d{2,3}-\d{4}\b/g) || []);
+      steps = best.ops.map((o) => { let t = o.text; old.forEach((p) => { if (p) t = t.split(p).join(d.pn); }); t = t.replace(/REFER TO DRAWING [A-Z0-9-]+( REVISION [A-Z0-9]+)?,?( FOR (DETAILED )?DIMENSIONS)?\.?/i, ref).replace(/LOAD PROGRAM #?O\d+/i, 'LOAD PROGRAM # ____'); return { st: o.station === 'wash' ? 'wash' : 'cnc', text: t }; });
+      d.from = 'CNC traveler ' + best.pn + ' (' + best.name + ') — program numbers left blank. Check every dimension against the drawing before issuing.';
+    } else {
+      steps = [{ st: 'cnc', text: 'Cut material to length (' + (d.mat || 'material per drawing') + '). Run first article part and take to QA for inspection. ' + ref },
+        { st: 'cnc', text: 'Turn, drill' + (hasThread ? ' and thread ' + d.thread : '') + ' per drawing. Load program # ____ and offset tools from the setup sheet. ' + ref },
+        { st: 'cnc', text: 'Deburr and remove all burrs and sharp edges.' }, { st: 'cnc', text: 'Wash parts in ultrasonic cleaner.' },
+        { st: 'cnc', text: 'Box and label parts ' + d.pn + ' with quantity. Place completed parts in CNC inventory.' }];
+      d.from = 'standard CNC steps (no close CNC traveler found)';
+    }
+    const ms = (store.cncMat || []).find((m) => new RegExp('(^|[^0-9])' + String(d.pn).replace(/[^0-9A-Za-z]/g, '') + '([^0-9]|$)').test(String(m.used || '')));
+    d.stock = ms ? ms.mat + (ms.po ? ' · last PO ' + ms.po : '') + (ms.rcv ? ' · received ' + ms.rcv : '') : '';
+    Object.assign(st, { pn: d.pn, name: d.title || st.name, mat: [d.mat && 'Material: ' + d.mat, d.finish && 'Finish: ' + d.finish, d.stock && 'Bar stock: ' + d.stock].filter(Boolean).join(' · '), floor: 'cnc', so: nextNo('cnc'), steps, dw: d, dwgRev: d.rev || '—', dmsg: 'Drawing ' + d.pn + (d.rev ? ' rev ' + d.rev : '') + ' loaded.' });
+  }
+  function run2note(j, d) { try { j.log.push({ at: Date.now(), by: ui.user.id, a: 'Started from drawing', d: d.pn + (d.rev ? ' rev ' + d.rev : '') + ' · ' + (d.title || '') + ' · steps from ' + (d.from || '') }); } catch (e) { /* ok */ } }
+  async function woPullDrawing(pn, blob) {
+    const st = ui.wo; if (!st) return; st.dpn = pn; const key = pKey(pn), P = store.prints || {};
+    const say = (m) => { st.dmsg = m; const e = $('#wo-dst'); if (e) e.textContent = m; };
+    try {
+      let path = P[key] && P[key].path, rev = P[key] && P[key].rev;
+      if (blob) {
+        say('Reading the PDF…');
+        if (window.WT_SB && ui.user && W.isApprover(ui.user)) { const t0 = await pdfText(null, blob), d0 = readTitleBlock(t0.items, pn); rev = d0.rev || rev || 'X'; path = 'pdm/' + key + '__' + String(rev).replace(/[^A-Z0-9]/g, '') + '.pdf';
+          const { error } = await window.WT_SB.storage.from('files').upload(path, blob, { upsert: true, contentType: 'application/pdf' }); if (error) throw error;
+          const old = P[key], doc = { pn, rev, path, at: Date.now(), by: ui.user.id, src: 'work order', name: blob.name || pn + '.pdf', hist: ((old && old.hist) || []).concat(old && old.rev !== rev ? [{ rev: old.rev, path: old.path, at: old.at, by: old.by }] : []).slice(-10) };
+          await store.db.doc('prints/' + key).set(doc); (store.prints = store.prints || {})[key] = doc;
+          const d = Object.assign(d0, { pages: [t0.img] }); woFromDrawing(st, d); render(); return toast('Drawing ' + pn + ' rev ' + rev + ' read and saved as the current print'); }
+        const t0 = await pdfText(null, blob), d = Object.assign(readTitleBlock(t0.items, pn), { pages: [t0.img] }); woFromDrawing(st, d); render(); return;
+      }
+      if (!path) { say('Drawing ' + pn + ' is not in the app yet. Tap "Pick the PDF from PDM" and choose it from the PDM vault (C:\\swpdm…).'); return; }
+      say('Pulling drawing ' + pn + ' rev ' + rev + '…');
+      const t = await pdfText(path), d = Object.assign(readTitleBlock(t.items, pn), { pages: [t.img] }); if (!d.rev) d.rev = rev; woFromDrawing(st, d); render();
+    } catch (e) { say('Could not read the drawing: ' + (e.message || e)); }
+  }
+
   /* ---------- analytics: who makes what, how fast, how clean ---------- */
   function statsData(J, now, days) {
     const from = days ? now - days * 864e5 : 0, P = {}, G = {};
@@ -2422,7 +2499,7 @@ window.WT_ESP = [
   /* ---------- manage ---------- */
   function renderManage() {
     const J = jobs(), now = Date.now(), mgr = ui.user && ui.user.role === 'manager';
-    const tabs = [['release', 'Issue a traveler'], ['holds', 'Holds'], ['numbers', 'Numbers'], ['stats', 'Analytics'], ['routings', 'Routings + open questions'], ['people', 'People + rules'], ['plan', 'Rollout']];
+    const tabs = [['release', 'Issue a traveler'], ['wo', 'Work order'], ['holds', 'Holds'], ['numbers', 'Numbers'], ['stats', 'Analytics'], ['routings', 'Routings + open questions'], ['people', 'People + rules'], ['plan', 'Rollout']];
     let h = '<div class="head"><div><h1>Manage</h1><p class="muted">Issue travelers, close holds, check the numbers.</p></div></div><div class="tabs">' + tabs.map((t) => '<button class="' + (ui.mtab === t[0] ? 'on' : '') + '" data-mtab="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>';
     const canIssue = ui.user && W.canDispose(ui.user);
     if ((ui.mtab === 'release' && !canIssue) || (ui.mtab === 'people' && !(ui.user && W.isApprover(ui.user)))) h += '<div class="banner warn"><div>Sign in as a manager, supervisor or quality to make changes here.</div><button class="btn sm" data-m="login">Sign in</button></div>';
@@ -2454,13 +2531,14 @@ window.WT_ESP = [
           (sel.lots ? '<label class="check" style="flex-direction:row;align-items:center;gap:12px"><input id="rel-set" type="checkbox" checked style="width:28px;height:28px;min-height:28px;flex:0 0 auto"> Also issue the baffle (1001050) and pleat pack (1001249) travelers for this order. Welding waits for the baffles and pouring waits for the pleat packs.</label>' : '') +
           '<button class="btn primary go" data-a="release" style="align-self:flex-start">3 · Issue to the floor</button>' : '<p class="muted">Pick a part above to continue.</p>') + '</div>';
     }
-    if (ui.mtab === 'release') {
+    if (ui.mtab === 'release' || ui.mtab === 'wo') {
       const can = ui.user && W.canDispose(ui.user), st = ui.wo;
       h += '<div class="panel"><h2>New build, prototype or one-off — no traveler yet?</h2><p class="small muted">Write a quick work order right here: part, quantity and the steps in order, each sent to its department. It runs on the tablets like any traveler (sign-offs, bad parts, holds, time, prints). It also lands in the Traveler library so drafting can turn it into a real traveler later.</p>' +
         (!st ? '<button class="btn" data-a="woStart" style="align-self:flex-start">+ Start a work order</button>' :
+        woDrawingPanel(st) +
         '<div class="grid2"><label>Part number (or prototype name)<input id="wo-pn" class="field" autocomplete="off" value="' + esc(st.pn) + '"></label><label>Description<input id="wo-name" class="field" autocomplete="off" value="' + esc(st.name) + '"></label>' +
         '<label>Quantity<input id="wo-qty" class="field" type="number" inputmode="numeric" min="1" value="' + esc(st.qty) + '"></label><label>Due date<input id="wo-due" class="field" type="date" value="' + esc(st.due) + '"></label>' +
-        '<label>Customer (optional)<input id="wo-cust" class="field" autocomplete="off" value="' + esc(st.cust) + '"></label><label>Floor<select id="wo-floor" class="field">' + ['metal', 'filter'].map((f) => '<option value="' + f + '"' + (st.floor === f ? ' selected' : '') + '>' + (f === 'metal' ? 'Metal floor' : 'Filter floor') + '</option>').join('') + '</select></label>' +
+        '<label>Customer (optional)<input id="wo-cust" class="field" autocomplete="off" value="' + esc(st.cust) + '"></label><label>Floor<select id="wo-floor" class="field">' + ['metal', 'filter', 'cnc'].map((f) => '<option value="' + f + '"' + (st.floor === f ? ' selected' : '') + '>' + (f === 'metal' ? 'Metal floor' : f === 'cnc' ? 'CNC department' : 'Filter floor') + '</option>').join('') + '</select></label>' +
         '<label>Work order number<input id="wo-so" class="field" autocomplete="off" inputmode="numeric" value="' + esc(st.so || nextNo(st.floor)) + '"></label><label>Material / notes (optional)<input id="wo-mat" class="field" autocomplete="off" value="' + esc(st.mat) + '"></label></div>' +
         '<h3>Steps, in order</h3>' + st.steps.map((x, k) => '<div class="row" style="align-items:flex-end;gap:8px;flex-wrap:nowrap"><b class="mono" style="min-width:36px">' + String((k + 1) * 10).padStart(3, '0') + '</b><select class="field wo-st" style="max-width:190px">' + W.STATIONS.map((o) => '<option value="' + o.id + '"' + (x.st === o.id ? ' selected' : '') + '>' + esc(o.name) + '</option>').join('') + '</select><input class="field wo-tx" style="flex:1" placeholder="What to do at this step" value="' + esc(x.text) + '">' + (st.steps.length > 1 ? '<button class="btn sm" data-a="woDel" data-k="' + k + '">✕</button>' : '') + '</div>').join('') +
         '<div class="row"><button class="btn sm" data-a="woAdd">+ Add step</button></div><p class="small muted">Prints: after issuing, open it in the Traveler library and tap ⬆ Upload new print revision, or let drafting\'s Released Prints sync add it by part number.</p>' +
@@ -3008,6 +3086,7 @@ window.WT_ESP = [
     if (d.lsort) { ui.lsort = d.lsort; return render(); }
     if (d.lfloor) { ui.lfloor = d.lfloor; return render(); }
     if (d.master) { $('#results').hidden = true; return openModal({ type: 'master', rid: d.master }); }
+    if (d.a === 'woPdm') { const pn = (($('#wo-dpn') || {}).value || '').trim(); if (!pn) return toast('Type the part number.', 'bad'); if (ui.wo) { ui.wo.dpn = pn; } return void woPullDrawing(pn); }
     if (/^wo(Start|Add|Del|Cancel|Issue)$/.test(d.a || '')) {
       const woRead = () => { const st = ui.wo; if (!st || !$('#wo-pn')) return; st.pn = $('#wo-pn').value; st.name = $('#wo-name').value; st.qty = $('#wo-qty').value; st.due = $('#wo-due').value; st.cust = $('#wo-cust').value; st.floor = $('#wo-floor').value; st.so = $('#wo-so').value; st.mat = $('#wo-mat').value; const S = [...document.querySelectorAll('.wo-st')], X = [...document.querySelectorAll('.wo-tx')]; st.steps = S.map((e, k) => ({ st: e.value, text: X[k].value })); };
       if (d.a === 'woStart') { ui.wo = { pn: '', name: '', qty: '', due: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), cust: '', floor: 'metal', so: '', mat: '', steps: [{ st: 'metal', text: '' }, { st: 'metal', text: '' }, { st: 'qc', text: 'Inspect and count' }] }; return render(); }
@@ -3019,9 +3098,9 @@ window.WT_ESP = [
       if (!ui.user || !W.canDispose(ui.user)) return toast('A manager, supervisor or quality issues work orders.', 'bad');
       if (!String(st.pn).trim()) return toast('Enter the part number or prototype name.', 'bad'); if (!steps.length) return toast('Write at least one step.', 'bad'); if (!so) return toast('Enter the work order number.', 'bad');
       if (store.jobs['so-' + so.replace(/[^A-Za-z0-9_-]/g, '-')] || ['metal', 'filter', 'final', 'cnc'].some((f) => (store.logs[f] || []).some((r) => String(r.t) === so))) return toast('Number ' + so + ' is already used. Use the next free number.', 'bad');
-      const rid = 'WO:' + so, rt = { id: rid, wo: true, master: false, floor: st.floor, pn: String(st.pn).trim(), wpn: String(st.pn).trim(), name: String(st.name).trim() || 'Work order', kind: 'WORK ORDER', form: 'Work order · no master traveler', fa: false, travRev: 'WO', travDate: new Date().toLocaleDateString('en-US'), dwgRev: '—', customer: String(st.cust).trim() || 'N/A', material: String(st.mat).trim(), risk: '', moveTo: 'stage', file: '', extra: [], dw: '', docs: [], by: ui.user.id, at: Date.now(),
+      const rid = 'WO:' + so, rt = { id: rid, wo: true, master: false, floor: st.floor, pn: String(st.pn).trim(), wpn: String(st.pn).trim(), name: String(st.name).trim() || 'Work order', kind: 'WORK ORDER', form: 'Work order · no master traveler', fa: false, travRev: 'WO', travDate: new Date().toLocaleDateString('en-US'), dwgRev: st.dwgRev || '—', customer: String(st.cust).trim() || 'N/A', material: String(st.mat).trim(), risk: '', moveTo: 'stage', file: '', extra: [], dw: '', docs: [], by: ui.user.id, at: Date.now(),
         ops: steps.map((x, k) => ({ n: String((k + 1) * 10).padStart(3, '0'), station: x.st, mach: [W.station(x.st).name], text: String(x.text).trim() })) };
-      try { W.ROUTINGS.push(rt); const j = W.newJob({ rid, so, qty: st.qty, due: st.due, pri: 50 }, { u: ui.user, at: Date.now() }); j.floor = st.floor;
+      try { W.ROUTINGS.push(rt); const j = W.newJob({ rid, so, qty: st.qty, due: st.due, pri: 50 }, { u: ui.user, at: Date.now() }); j.floor = st.floor; if (st.dw) run2note(j, st.dw);
         if (store.mode === 'shared') store.db.doc('routings/' + rid.replace(/[^A-Za-z0-9_-]/g, '-')).set(W.clone(rt)).catch(() => toast('Could not save the work order steps. Check the connection.', 'bad'));
         save(j); ui.wo = null; openJob(j.id); toast('Work order ' + so + ' issued'); }
       catch (e) { W.ROUTINGS.splice(W.ROUTINGS.indexOf(rt), 1); if (e.user) return toast(e.message, 'bad'); throw e; }
@@ -3190,6 +3269,7 @@ window.WT_ESP = [
     }
   });
   document.addEventListener('change', (e) => { const t = e.target; if (t && t.id === 'fin-file' && t.files && t.files[0]) { uploadFinalLog(t.files[0]); t.value = ''; }
+    if (t && t.id === 'wo-dpdf' && t.files && t.files[0]) { const f = t.files[0], pn = (($('#wo-dpn') || {}).value || '').trim() || f.name.replace(/\.pdf$/i, '').replace(/\s*(REV|R)\s*[A-Z0-9]{1,2}$/i, '').trim(); t.value = ''; woPullDrawing(pn, f); return; }
     if (t && t.id === 'fx-photo' && t.files && t.files[0]) { saveFixture(t, t.files[0]); t.value = ''; return; }
     if (t && t.id === 'jn-photo' && t.files && t.files[0]) { if (!need()) return; savePhoto(t.dataset.job, t.dataset.op, t.files[0]); t.value = ''; } });
   document.addEventListener('input', (e) => {
