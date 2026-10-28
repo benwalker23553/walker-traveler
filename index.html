@@ -2385,9 +2385,8 @@ window.WT_ESP = [
   /* ---------- work order from a PDM drawing: find the released print, read its title block, fill the form ---------- */
   function woDrawingPanel(st) {
     const d = st.dw;
-    let h = '<div class="panel" style="background:var(--panel2)"><h3>Start from the drawing (PDM)</h3><p class="small muted">Type the part number. The released print is pulled in and the form fills itself: description, drawing rev, material, finish, and CNC steps copied from the closest CNC traveler.</p>' +
-      '<div class="row" style="gap:8px;flex-wrap:wrap"><input id="wo-dpn" class="field" style="max-width:220px" placeholder="Part number, e.g. 1005232" value="' + esc(st.dpn || st.pn || '') + '"><button class="btn go" data-a="woPdm">Pull drawing</button>' +
-      '<label class="btn" style="cursor:pointer">Pick the PDF from PDM<input id="wo-dpdf" type="file" accept="application/pdf,.pdf" hidden></label><span id="wo-dst" class="small muted">' + esc(st.dmsg || '') + '</span></div>';
+    let h = '<div class="panel" style="background:var(--panel2)"><h3>Start from the drawing</h3><p class="small muted">Upload the drawing PDF that was sent to the department (email, USB, desktop — any folder). The form fills itself: part #, description, drawing rev, material, finish, and CNC steps copied from the closest CNC traveler.</p>' +
+      '<div class="row" style="gap:8px;flex-wrap:wrap"><label class="btn primary go" style="cursor:pointer">⬆ Upload drawing PDF<input id="wo-dpdf" type="file" accept="application/pdf,.pdf" hidden></label><input id="wo-dpn" class="field" style="max-width:220px" placeholder="Part # (optional)" value="' + esc(st.dpn || st.pn || '') + '"><span id="wo-dst" class="small muted">' + esc(st.dmsg || '') + '</span></div>';
     if (d && d.pages && d.pages.length) h += '<div class="cols" style="margin-top:8px"><div class="col"><img src="' + d.pages[0] + '" alt="Drawing ' + esc(d.pn) + '" style="width:100%;border:1px solid var(--line);background:#fff"></div><div class="col"><table class="small">' +
       [['Drawing', d.pn + (d.rev ? ' rev ' + d.rev : '')], ['Description', d.title], ['Material', d.mat], ['Finish', d.finish], ['Notes', (d.notes || []).join(' · ')], ['Steps from', d.from || 'standard CNC steps'], ['Bar stock on file', d.stock || '—']].filter((x) => x[1]).map((x) => '<tr><th style="text-align:left;padding-right:10px;vertical-align:top">' + esc(x[0]) + '</th><td>' + esc(x[1]) + '</td></tr>').join('') + '</table><p class="small muted">Check the filled-in fields below, then issue. The print stays attached to every traveler for ' + esc(d.pn) + '.</p></div></div>';
     return h + '</div>';
@@ -2413,7 +2412,8 @@ window.WT_ESP = [
     const mat = note(/MATERIAL:\s*([^\n]+)/i), finish = note(/FINISH:\s*([^\n]+)/i);
     const notes = (all.split('\n').filter((x) => /^\d\.\s+[A-Z]/.test(x.trim()) && !/MATERIAL|FINISH/.test(x)).map((x) => x.replace(/^\d\.\s+/, '').trim())).slice(0, 6);
     const thread = (/(\d+\/\d+-\d+\s*(?:UNF|UNC|NPT|NPTF|ORB|UN)?|M\d+\s*X\s*[\d.]+|\d\/\d+\s*NPT)/i.exec(title + ' ' + all) || [])[1] || '';
-    return { pn, rev, title, mat, finish, notes, thread };
+    const big = L.filter((l) => l.x > 0.55 && l.y > 0.85).flatMap((l) => l.t).filter((q) => /^(\d{7}|\d{2,3}-\d{4}(-\d{1,2})?|[A-Z]{1,3}\d{3,}[A-Z]?)$/.test(q.s)).sort((a, b) => b.h - a.h)[0];
+    return { pn: big ? big.s : pn, dwgNo: big ? big.s : '', rev, title, mat, finish, notes, thread };
   }
   function woFromDrawing(st, d) {
     const toks = (t) => String(t || '').toUpperCase().match(/\d+\/\d+-\d+|[A-Z]{4,}/g) || [];
@@ -2438,21 +2438,21 @@ window.WT_ESP = [
     Object.assign(st, { pn: d.pn, name: d.title || st.name, mat: [d.mat && 'Material: ' + d.mat, d.finish && 'Finish: ' + d.finish, d.stock && 'Bar stock: ' + d.stock].filter(Boolean).join(' · '), floor: 'cnc', so: nextNo('cnc'), steps, dw: d, dwgRev: d.rev || '—', dmsg: 'Drawing ' + d.pn + (d.rev ? ' rev ' + d.rev : '') + ' loaded.' });
   }
   function run2note(j, d) { try { j.log.push({ at: Date.now(), by: ui.user.id, a: 'Started from drawing', d: d.pn + (d.rev ? ' rev ' + d.rev : '') + ' · ' + (d.title || '') + ' · steps from ' + (d.from || '') }); } catch (e) { /* ok */ } }
-  async function woPullDrawing(pn, blob) {
-    const st = ui.wo; if (!st) return; st.dpn = pn; const key = pKey(pn), P = store.prints || {};
+  async function woPullDrawing(pn, blob, typed) {
+    const st = ui.wo; if (!st) return; st.dpn = pn; let key = pKey(pn); const P = store.prints || {};
     const say = (m) => { st.dmsg = m; const e = $('#wo-dst'); if (e) e.textContent = m; };
     try {
       let path = P[key] && P[key].path, rev = P[key] && P[key].rev;
       if (blob) {
         say('Reading the PDF…');
-        if (window.WT_SB && ui.user && W.isApprover(ui.user)) { const t0 = await pdfText(null, blob), d0 = readTitleBlock(t0.items, pn); rev = d0.rev || rev || 'X'; path = 'pdm/' + key + '__' + String(rev).replace(/[^A-Z0-9]/g, '') + '.pdf';
+        if (window.WT_SB && ui.user && W.isApprover(ui.user)) { const t0 = await pdfText(null, blob), d0 = readTitleBlock(t0.items, pn); if (!typed && d0.dwgNo) pn = d0.dwgNo; d0.pn = pn; key = pKey(pn); st.dpn = pn; rev = d0.rev || (P[key] && P[key].rev) || 'X'; path = 'pdm/' + key + '__' + String(rev).replace(/[^A-Z0-9]/g, '') + '.pdf';
           const { error } = await window.WT_SB.storage.from('files').upload(path, blob, { upsert: true, contentType: 'application/pdf' }); if (error) throw error;
           const old = P[key], doc = { pn, rev, path, at: Date.now(), by: ui.user.id, src: 'work order', name: blob.name || pn + '.pdf', hist: ((old && old.hist) || []).concat(old && old.rev !== rev ? [{ rev: old.rev, path: old.path, at: old.at, by: old.by }] : []).slice(-10) };
           await store.db.doc('prints/' + key).set(doc); (store.prints = store.prints || {})[key] = doc;
           const d = Object.assign(d0, { pages: [t0.img] }); woFromDrawing(st, d); render(); return toast('Drawing ' + pn + ' rev ' + rev + ' read and saved as the current print'); }
-        const t0 = await pdfText(null, blob), d = Object.assign(readTitleBlock(t0.items, pn), { pages: [t0.img] }); woFromDrawing(st, d); render(); return;
+        const t0 = await pdfText(null, blob), d = Object.assign(readTitleBlock(t0.items, pn), { pages: [t0.img] }); if (typed || !d.dwgNo) d.pn = pn; woFromDrawing(st, d); render(); return;
       }
-      if (!path) { say('Drawing ' + pn + ' is not in the app yet. Tap "Pick the PDF from PDM" and choose it from the PDM vault (C:\\swpdm…).'); return; }
+      if (!path) { say('Tap “Upload drawing PDF” and pick the drawing file.'); return; }
       say('Pulling drawing ' + pn + ' rev ' + rev + '…');
       const t = await pdfText(path), d = Object.assign(readTitleBlock(t.items, pn), { pages: [t.img] }); if (!d.rev) d.rev = rev; woFromDrawing(st, d); render();
     } catch (e) { say('Could not read the drawing: ' + (e.message || e)); }
@@ -2540,7 +2540,7 @@ window.WT_ESP = [
         '<label>Quantity<input id="wo-qty" class="field" type="number" inputmode="numeric" min="1" value="' + esc(st.qty) + '"></label><label>Due date<input id="wo-due" class="field" type="date" value="' + esc(st.due) + '"></label>' +
         '<label>Customer (optional)<input id="wo-cust" class="field" autocomplete="off" value="' + esc(st.cust) + '"></label><label>Floor<select id="wo-floor" class="field">' + ['metal', 'filter', 'cnc'].map((f) => '<option value="' + f + '"' + (st.floor === f ? ' selected' : '') + '>' + (f === 'metal' ? 'Metal floor' : f === 'cnc' ? 'CNC department' : 'Filter floor') + '</option>').join('') + '</select></label>' +
         '<label>Work order number<input id="wo-so" class="field" autocomplete="off" inputmode="numeric" value="' + esc(st.so || nextNo(st.floor)) + '"></label><label>Material / notes (optional)<input id="wo-mat" class="field" autocomplete="off" value="' + esc(st.mat) + '"></label></div>' +
-        '<h3>Steps, in order</h3>' + st.steps.map((x, k) => '<div class="row" style="align-items:flex-end;gap:8px;flex-wrap:nowrap"><b class="mono" style="min-width:36px">' + String((k + 1) * 10).padStart(3, '0') + '</b><select class="field wo-st" style="max-width:190px">' + W.STATIONS.map((o) => '<option value="' + o.id + '"' + (x.st === o.id ? ' selected' : '') + '>' + esc(o.name) + '</option>').join('') + '</select><input class="field wo-tx" style="flex:1" placeholder="What to do at this step" value="' + esc(x.text) + '">' + (st.steps.length > 1 ? '<button class="btn sm" data-a="woDel" data-k="' + k + '">✕</button>' : '') + '</div>').join('') +
+        '<h3>Steps, in order</h3>' + st.steps.map((x, k) => '<div class="row" style="align-items:flex-end;gap:8px;flex-wrap:nowrap"><b class="mono" style="min-width:36px">' + String((k + 1) * 10).padStart(3, '0') + '</b><select class="field wo-st" id="wo-st-' + k + '" style="max-width:190px">' + W.STATIONS.map((o) => '<option value="' + o.id + '"' + (x.st === o.id ? ' selected' : '') + '>' + esc(o.name) + '</option>').join('') + '</select><input class="field wo-tx" id="wo-tx-' + k + '" style="flex:1" placeholder="What to do at this step" value="' + esc(x.text) + '">' + (st.steps.length > 1 ? '<button class="btn sm" data-a="woDel" data-k="' + k + '">✕</button>' : '') + '</div>').join('') +
         '<div class="row"><button class="btn sm" data-a="woAdd">+ Add step</button></div><p class="small muted">Prints: after issuing, open it in the Traveler library and tap ⬆ Upload new print revision, or let drafting\'s Released Prints sync add it by part number.</p>' +
         '<div class="row"><button class="btn primary go" data-a="woIssue"' + (can ? '' : ' disabled') + '>Issue work order to the floor</button><button class="btn" data-a="woCancel">Cancel</button></div>' + (can ? '' : '<p class="small muted">A manager, supervisor or quality signs in first.</p>')) + '</div>';
     }
@@ -2987,12 +2987,18 @@ window.WT_ESP = [
   // Long words (mostly Spanish) shrink to fit their tile instead of breaking mid-word.
   function fitTiles() { document.querySelectorAll('.mtile .mt-t').forEach((e) => { e.style.fontSize = ''; let f = 1.6; while (e.scrollWidth > e.clientWidth + 1 && f > 1.05) { f -= 0.1; e.style.fontSize = f.toFixed(2) + 'rem'; } }); }
   window.addEventListener('resize', () => fitTiles());
+  // Forms keep what people typed when the screen refreshes (live updates from other tablets, the 30 s clock, sync)
+  const KEEP = /^rel-/;
+  function keepForm() { const st = ui.wo; if (st && $('#wo-pn')) { st.pn = $('#wo-pn').value; st.name = $('#wo-name').value; st.qty = $('#wo-qty').value; st.due = $('#wo-due').value; st.cust = $('#wo-cust').value; st.floor = $('#wo-floor').value; st.so = $('#wo-so').value; st.mat = $('#wo-mat').value; const S = [...document.querySelectorAll('.wo-st')], X = [...document.querySelectorAll('.wo-tx')]; if (S.length) st.steps = S.map((e, k) => ({ st: e.value, text: X[k] ? X[k].value : '' })); const dp = $('#wo-dpn'); if (dp) st.dpn = dp.value; } }
   function render() {
     if (!ui.user && store.loaded) restoreMine();
     const main = $('#main'); if (!main) return;
+    const act = document.activeElement, actId = act && main.contains(act) ? act.id : '', caret = actId && act.selectionStart != null ? [act.selectionStart, act.selectionEnd] : null;
     if (ui.tv) { ui.view = 'board'; ui.modal = null; }
     const y = window.scrollY;
     main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'prio' ? renderPrio() : ui.view === 'board' ? renderBoard() : ui.view === 'xl' ? renderXl() : ui.view === 'ops' ? renderOps() : ui.view === 'mine' ? renderMine() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
+    if (ui.keep) Object.keys(ui.keep).forEach((id) => { const e = document.getElementById(id); if (!e) return; if (e.type === 'checkbox') e.checked = !!ui.keep[id]; else if (e.type !== 'file') e.value = ui.keep[id]; });
+    if (actId) { const e = document.getElementById(actId); if (e && e !== document.activeElement) { try { e.focus({ preventScroll: true }); if (caret && e.setSelectionRange) e.setSelectionRange(caret[0], caret[1]); } catch (er) { /* number inputs */ } } }
     $('#b-home').textContent = '⌂ Main menu'; $('#b-list').textContent = '☰ Travelers'; $('#q').setAttribute('placeholder', 'Search or scan'); $('#b-lang').textContent = LANG === 'es' ? 'English' : 'Español';
     if (!document.fullscreenElement) $('#b-full').textContent = '⛶ Full';
     $('#b-station').textContent = 'Area: ' + areaName();
@@ -3080,8 +3086,8 @@ window.WT_ESP = [
     if (t.id === 't-area') return openModal({ type: 'station' });
     if (t.id === 't-out') { signOutUser(); render(); return toast('Signed out'); }
     if ('back' in d) { ui.view = ui.back || 'station'; return render(); }
-    if (d.relkind) { ui.relKind = d.relkind; ui.relRid = null; return render(); }
-    if (d.rel) { ui.relRid = d.rel; ui.relAssy = null; return render(); }
+    if (d.relkind) { ui.relKind = d.relkind; ui.relRid = null; ui.keep = {}; return render(); }
+    if (d.rel) { ui.relRid = d.rel; ui.relAssy = null; ui.keep = {}; return render(); }
     if (d.a === 'csv') { return void saveCsv(); }
     if (d.lsort) { ui.lsort = d.lsort; return render(); }
     if (d.lfloor) { ui.lfloor = d.lfloor; return render(); }
@@ -3089,8 +3095,8 @@ window.WT_ESP = [
     if (d.a === 'woPdm') { const pn = (($('#wo-dpn') || {}).value || '').trim(); if (!pn) return toast('Type the part number.', 'bad'); if (ui.wo) { ui.wo.dpn = pn; } return void woPullDrawing(pn); }
     if (/^wo(Start|Add|Del|Cancel|Issue)$/.test(d.a || '')) {
       const woRead = () => { const st = ui.wo; if (!st || !$('#wo-pn')) return; st.pn = $('#wo-pn').value; st.name = $('#wo-name').value; st.qty = $('#wo-qty').value; st.due = $('#wo-due').value; st.cust = $('#wo-cust').value; st.floor = $('#wo-floor').value; st.so = $('#wo-so').value; st.mat = $('#wo-mat').value; const S = [...document.querySelectorAll('.wo-st')], X = [...document.querySelectorAll('.wo-tx')]; st.steps = S.map((e, k) => ({ st: e.value, text: X[k].value })); };
-      if (d.a === 'woStart') { ui.wo = { pn: '', name: '', qty: '', due: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), cust: '', floor: 'metal', so: '', mat: '', steps: [{ st: 'metal', text: '' }, { st: 'metal', text: '' }, { st: 'qc', text: 'Inspect and count' }] }; return render(); }
-      if (d.a === 'woCancel') { ui.wo = null; return render(); }
+      if (d.a === 'woStart') { ui.keep = {}; ui.wo = { pn: '', name: '', qty: '', due: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10), cust: '', floor: 'metal', so: '', mat: '', steps: [{ st: 'metal', text: '' }, { st: 'metal', text: '' }, { st: 'qc', text: 'Inspect and count' }] }; return render(); }
+      if (d.a === 'woCancel') { ui.wo = null; ui.keep = {}; return render(); }
       woRead();
       if (d.a === 'woAdd') { ui.wo.steps.push({ st: ui.wo.steps.length ? ui.wo.steps[ui.wo.steps.length - 1].st : 'metal', text: '' }); return render(); }
       if (d.a === 'woDel') { ui.wo.steps.splice(Number(d.k), 1); return render(); }
@@ -3102,7 +3108,7 @@ window.WT_ESP = [
         ops: steps.map((x, k) => ({ n: String((k + 1) * 10).padStart(3, '0'), station: x.st, mach: [W.station(x.st).name], text: String(x.text).trim() })) };
       try { W.ROUTINGS.push(rt); const j = W.newJob({ rid, so, qty: st.qty, due: st.due, pri: 50 }, { u: ui.user, at: Date.now() }); j.floor = st.floor; if (st.dw) run2note(j, st.dw);
         if (store.mode === 'shared') store.db.doc('routings/' + rid.replace(/[^A-Za-z0-9_-]/g, '-')).set(W.clone(rt)).catch(() => toast('Could not save the work order steps. Check the connection.', 'bad'));
-        save(j); ui.wo = null; openJob(j.id); toast('Work order ' + so + ' issued'); }
+        save(j); ui.wo = null; ui.keep = {}; openJob(j.id); toast('Work order ' + so + ' issued'); }
       catch (e) { W.ROUTINGS.splice(W.ROUTINGS.indexOf(rt), 1); if (e.user) return toast(e.message, 'bad'); throw e; }
       return;
     }
@@ -3248,7 +3254,7 @@ window.WT_ESP = [
           if (assy && !/^\d{6}$/.test(assy)) return toast('Assembly number is 6 digits: month, year, number (example ' + nextAssy() + ').', 'bad');
           if (assyUsed(assy)) return toast('Assembly number ' + assy + ' is already used. Next free is ' + nextAssy() + '.', 'bad');
           if (assy) j.assy = assy;
-          j.floor = fl; kids.forEach((k) => { k.job.parent = j.id; put(k.job); }); save(j); ui.relRid = null; ui.relQ = ''; ui.relAssy = null; if (who) assignJob(j, who); openJob(j.id); toast('Traveler ' + j.so + ' issued' + (kids.length ? ' with baffle and pleat pack travelers' : ''));
+          j.floor = fl; kids.forEach((k) => { k.job.parent = j.id; put(k.job); }); save(j); ui.keep = {}; ui.relRid = null; ui.relQ = ''; ui.relAssy = null; if (who) assignJob(j, who); openJob(j.id); toast('Traveler ' + j.so + ' issued' + (kids.length ? ' with baffle and pleat pack travelers' : ''));
         }
         catch (err) { if (err.user) toast(err.message, 'bad'); else throw err; } return;
       }
@@ -3269,11 +3275,13 @@ window.WT_ESP = [
     }
   });
   document.addEventListener('change', (e) => { const t = e.target; if (t && t.id === 'fin-file' && t.files && t.files[0]) { uploadFinalLog(t.files[0]); t.value = ''; }
-    if (t && t.id === 'wo-dpdf' && t.files && t.files[0]) { const f = t.files[0], pn = (($('#wo-dpn') || {}).value || '').trim() || f.name.replace(/\.pdf$/i, '').replace(/\s*(REV|R)\s*[A-Z0-9]{1,2}$/i, '').trim(); t.value = ''; woPullDrawing(pn, f); return; }
+    if (t && t.id === 'wo-dpdf' && t.files && t.files[0]) { const f = t.files[0], typed = (($('#wo-dpn') || {}).value || '').trim(), pn = typed || f.name.replace(/\.pdf$/i, '').replace(/\s*(REV|R)\s*[A-Z0-9]{1,2}$/i, '').trim(); t.value = ''; woPullDrawing(pn, f, !!typed); return; }
     if (t && t.id === 'fx-photo' && t.files && t.files[0]) { saveFixture(t, t.files[0]); t.value = ''; return; }
     if (t && t.id === 'jn-photo' && t.files && t.files[0]) { if (!need()) return; savePhoto(t.dataset.job, t.dataset.op, t.files[0]); t.value = ''; } });
+  const keepIt = (t) => { if (t && t.id && KEEP.test(t.id) && t.id !== 'rel-find' && t.type !== 'file') { (ui.keep = ui.keep || {})[t.id] = t.type === 'checkbox' ? t.checked : t.value; } if (t && t.closest && t.closest('#main') && (t.classList.contains('wo-st') || t.classList.contains('wo-tx') || /^wo-/.test(t.id || ''))) keepForm(); };
+  document.addEventListener('change', (e) => keepIt(e.target), true);
   document.addEventListener('input', (e) => {
-    ui.touched = Date.now(); const t = e.target, m = ui.modal;
+    ui.touched = Date.now(); const t = e.target, m = ui.modal; keepIt(t);
     if (t.id === 'q') return search(t.value);
     if (t.id === 'xl-q') { ui.xlQ = t.value; clearTimeout(ui.xlT); ui.xlT = setTimeout(() => { const pos = ($('#xl-q') || {}).selectionStart; render(); const n = $('#xl-q'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (er) { /* ok */ } } }, 250); return; }
     if (t.id === 'lib-q') { ui.libQ = t.value; const hb = $('#lib-hits'); if (hb) { hb.innerHTML = libHits(t.value); trDom(hb); } return; }
