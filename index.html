@@ -1764,7 +1764,7 @@ window.WT_ESP = [
       lib: () => tile('data-nav="library"', 'Traveler library', 'Read or fix any master traveler', null),
       imp: () => tile('data-nav="improve"', 'Improve · analytics', 'Late jobs, time, people, suppliers', prompts().length, prompts().length ? 'warn' : ''),
       xl: () => (ui.user && (ui.user.role === 'manager' || W.isApprover(ui.user) || W.canDispose(ui.user)) ? tile('data-nav="xl"', 'Traveler logs', 'The Excel logs — same columns, updated hourly', null) : ''),
-      pm: () => { pmLoad(); const c = pmCounts(), n = c.over + c.daily + c.down; return tile('data-nav="pm"', 'Maintenance (PM)', c.down ? c.down + ' machine' + (c.down > 1 ? 's' : '') + ' down · PM list' : 'Every machine · PM due · work orders', n, c.down ? 'bad' : n ? 'warn' : ''); },
+      pm: () => { pmLoad(); const c = pmCounts(), n = c.over + c.today + c.daily + c.down; return tile('data-nav="pm"', 'Maintenance (PM)', c.down ? c.down + ' machine' + (c.down > 1 ? 's' : '') + ' down · PM list' : 'Every machine · PM due · work orders', n, c.down ? 'bad' : n ? 'warn' : ''); },
       where: () => tile('data-nav="floor"', 'Where is everything', 'Parts in each area right now', null),
       manage: () => tile('data-nav="manage" data-mtab="' + (mgr ? 'release' : 'holds') + '"', 'Manage', mgr ? 'Holds, numbers, people, rules' : 'Holds and numbers', null),
       train: () => tile('data-nav="train"', 'Training', 'How to use this', null),
@@ -1799,13 +1799,16 @@ window.WT_ESP = [
     } catch (er) { store.pmErr = er.message || String(er); store.pmEqAt = 0; }
     if (ui.view === 'pm' || ui.view === 'home') render();
   }
-  function eqDue(e) { // maintenance machines: last PM + every N days. Calibration gages: cal due date.
+  const workDay = (t) => { let d = day0(t); while ([5, 6, 0].indexOf(new Date(d).getDay()) >= 0) d += DAY; return d; }; // shop runs 4x10 Mon–Thu
+  function eqDue(e) { // maintenance machines: last PM + every N days, never earlier than the planned day (due_date). Calibration gages: cal due date.
     const cal = e.maint_type === 'calibration';
-    const due = cal && e.cal_due ? pD(e.cal_due) : e.last_pm_date && e.pm_freq_days ? pD(e.last_pm_date) + e.pm_freq_days * DAY : e.due_date ? pD(e.due_date) : 0;
+    let due = cal && e.cal_due ? pD(e.cal_due) : e.last_pm_date && e.pm_freq_days ? pD(e.last_pm_date) + e.pm_freq_days * DAY : 0;
+    if (!cal && e.due_date && pD(e.due_date) > due) due = pD(e.due_date);
+    if (due && !cal) due = workDay(due);
     if (e.status !== 'active') return { st: 'inactive', due, cal };
     if (!due) return { st: 'unknown', due, cal };
     const today = day0(Date.now());
-    return { st: due < today ? 'over' : due - today <= 7 * DAY ? 'week' : 'ok', due, cal, late: Math.floor((today - due) / DAY) };
+    return { st: due < today ? 'over' : due === today ? 'today' : due - today <= 7 * DAY ? 'week' : 'ok', due, cal, late: Math.floor((today - due) / DAY) };
   }
   function dailyDue(t) {
     const L = Object.values(store.pmlog || {}).filter((x) => x.task === t.id).sort((a, b) => b.at - a.at)[0];
@@ -1814,8 +1817,8 @@ window.WT_ESP = [
     return { st: due < today ? 'over' : due === today ? 'due' : 'ok', last: L };
   }
   function pmCounts() {
-    const c = { over: 0, week: 0, daily: 0, cal: 0, down: pmDown().length };
-    (store.pmEq || []).forEach((e) => { const d = eqDue(e); if (d.cal) { if (d.st === 'over') c.cal++; return; } if (d.st === 'over') c.over++; else if (d.st === 'week') c.week++; });
+    const c = { over: 0, today: 0, week: 0, daily: 0, cal: 0, down: pmDown().length };
+    (store.pmEq || []).forEach((e) => { const d = eqDue(e); if (d.cal) { if (d.st === 'over') c.cal++; return; } if (d.st === 'over') c.over++; else if (d.st === 'today') c.today++; else if (d.st === 'week') c.week++; });
     pmDaily().forEach((t) => { const s = dailyDue(t).st; if (s === 'over' || s === 'due') c.daily++; });
     return c;
   }
@@ -1850,11 +1853,12 @@ window.WT_ESP = [
     let h = '<div class="head"><div><h1>Maintenance (PM)</h1><p class="muted">Every machine and gage in the shop, from the maintenance database (' + E.length + ' items, ' + (store.pmWo || []).length + ' work orders). Tap ✓ Done when PM is finished, ⚠ Problem when something is wrong. Shop schedule 4×10 Mon–Thu.</p></div><button class="btn sm" data-a="pmReload">↻ Refresh</button></div>';
     if (store.pmErr) h += '<div class="banner warn"><div><b>Could not load the maintenance database.</b> ' + esc(store.pmErr) + '</div></div>';
     else if (!store.pmEq) h += '<div class="banner info"><div>Loading machines…</div></div>';
-    h += '<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px"><span class="pill ' + (c.daily ? 'warn' : 'ok') + '">Daily checks ' + c.daily + '</span><span class="pill ' + (c.over ? 'bad' : 'ok') + '">PM overdue ' + c.over + '</span><span class="pill">Due this week ' + c.week + '</span><span class="pill ' + (c.cal ? 'warn' : 'ok') + '">Calibration overdue ' + c.cal + '</span><span class="pill ' + (c.down ? 'bad' : 'ok') + '">Machines down ' + c.down + '</span></div>';
+    h += '<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px"><span class="pill ' + (c.daily ? 'warn' : 'ok') + '">Daily checks ' + c.daily + '</span><span class="pill ' + (c.today ? 'warn' : 'ok') + '">Machine PM today ' + c.today + '</span><span class="pill ' + (c.over ? 'bad' : 'ok') + '">Overdue ' + c.over + '</span><span class="pill">Due this week ' + c.week + '</span><span class="pill ' + (c.cal ? 'warn' : 'ok') + '">Calibration overdue ' + c.cal + '</span><span class="pill ' + (c.down ? 'bad' : 'ok') + '">Machines down ' + c.down + '</span></div>';
     const D = pmDown();
     if (D.length) h += '<div class="panel" style="border-color:var(--bad)"><h2>Machines down / needs repair</h2>' + D.map((x) => '<div class="row" style="justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding:6px 0"><div><b>' + esc(x.eq) + '</b><div class="small">' + esc(x.note || '') + '</div><div class="small muted">' + esc(nm(x.by)) + ' · ' + esc(fTime(x.at)) + '</div>' + (x.photo ? '<button class="jn-img" data-a="jnView" data-src="' + esc(x.photo) + '"><img src="' + esc(x.photo) + '" alt="Photo of ' + esc(x.eq) + '" loading="lazy"></button>' : '') + '</div>' + (ui.user ? '<button class="btn sm primary" data-a="pmFixed" data-v="' + esc(x.id) + '">✓ Fixed</button>' : '') + '</div>').join('') + '</div>';
-    h += '<div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">' + tb('now', 'Due now', c.daily + c.over) + tb('week', 'This week', c.week) + tb('eq', 'All machines') + tb('cal', 'Calibration', c.cal) + tb('log', 'Work orders') + tb('parts', 'Spare parts') + '</div>';
+    h += '<div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">' + tb('now', 'Today', c.daily + c.today + c.over) + tb('plan', 'Julio’s schedule') + tb('week', 'This week', c.week) + tb('eq', 'All machines') + tb('cal', 'Calibration', c.cal) + tb('log', 'Work orders') + tb('parts', 'Spare parts') + '</div>';
     if (tab === 'log') return h + pmLogHtml();
+    if (tab === 'plan') return h + pmPlanHtml();
     if (tab === 'parts') return h + pmPartsHtml(can);
     if (tab === 'now') {
       const groups = {}; pmDaily().forEach((t) => { const d = dailyDue(t); if (d.st === 'over' || d.st === 'due') (groups[t.g] = groups[t.g] || []).push(Object.assign({ t }, d)); });
@@ -1869,7 +1873,7 @@ window.WT_ESP = [
       if (!Object.keys(groups).length) h += '<div class="banner ok"><div><b>Daily checks done for today.</b></div></div>';
     }
     let L = E.filter((e) => !(eqDue(e).cal) === (tab !== 'cal'));
-    if (tab === 'now') L = L.filter((e) => eqDue(e).st === 'over').sort((a, b) => eqDue(b).late - eqDue(a).late);
+    if (tab === 'now') L = L.filter((e) => ['over', 'today'].indexOf(eqDue(e).st) >= 0).sort((a, b) => eqDue(b).late - eqDue(a).late || String(a.area).localeCompare(String(b.area)));
     else if (tab === 'week') L = L.filter((e) => eqDue(e).st === 'week').sort((a, b) => eqDue(a).due - eqDue(b).due);
     else if (tab === 'cal') L = L.filter((e) => e.status === 'active').sort((a, b) => (eqDue(a).due || 9e15) - (eqDue(b).due || 9e15));
     else {
@@ -1877,8 +1881,9 @@ window.WT_ESP = [
       h += '<div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:8px"><input id="pm-q" placeholder="Search machine, #, type, maker…" value="' + esc(ui.pmQ || '') + '" style="flex:1;min-width:200px"><button class="btn sm" data-a="pmFind">Search</button>' + ['', ...areas, 'inactive'].map((a) => '<button class="btn sm ' + (af === a ? 'sel' : '') + '" data-a="pmArea" data-v="' + esc(a) + '">' + esc(a || 'All') + '</button>').join('') + '</div>';
       const q = String(ui.pmQ || '').toLowerCase();
       L = E.filter((e) => (af === 'inactive' ? e.status !== 'active' : e.status === 'active' && (!af || e.area === af)) && (!q || [e.name, e.equip_id, e.type, e.manufacturer, e.model, e.serial_number].join(' ').toLowerCase().indexOf(q) >= 0));
+      if (q && L.some((e) => String(e.equip_id).toLowerCase() === q)) L = L.filter((e) => String(e.equip_id).toLowerCase() === q);
     }
-    if (tab === 'now' && L.length) h += '<section class="sec"><div class="ghead"><h2>Machine PM overdue — most overdue first</h2></div>';
+    if (tab === 'now' && L.length) h += '<section class="sec"><div class="ghead"><h2>Machine PM for today' + (c.over ? ' (+ ' + c.over + ' overdue, first)' : '') + '</h2></div>';
     if (tab !== 'now' && !L.length && store.pmEq) h += '<div class="empty">Nothing here.</div>';
     const lim = ui.pmMore ? 2000 : 60;
     h += L.slice(0, lim).map((e) => eqCard(e, tab)).join('');
@@ -1886,6 +1891,17 @@ window.WT_ESP = [
     if (tab === 'now' && L.length) h += '</section>';
     if (tab === 'eq' && pmLead()) h += '<div class="panel"><h3>Add a machine</h3><div class="grid2"><label>Equipment # (tag)<input id="pm-nid" placeholder="e.g. 529"></label><label>Name<input id="pm-nname" placeholder="e.g. Pleater, Rotary"></label><label>Area<input id="pm-narea" placeholder="Production / Filtration / Shop"></label><label>PM every (days)<input id="pm-nfreq" type="number" value="30"></label></div><button class="btn primary" data-a="pmAdd">Add machine</button></div>';
     return h;
+  }
+  function pmPlanHtml() { // next 4 weeks of machine PM, one list per work day (Mon–Thu)
+    const E = (store.pmEq || []).filter((e) => e.status === 'active' && e.maint_type !== 'calibration'), by = {}, today = day0(Date.now()), end = today + 28 * DAY;
+    E.forEach((e) => { const d = eqDue(e); if (!d.due || d.due > end) return; const k = Math.max(d.due, workDay(today)); (by[k] = by[k] || []).push(e); });
+    const days = Object.keys(by).map(Number).sort((a, b) => a - b);
+    if (!days.length) return '<div class="empty">Nothing scheduled in the next 4 weeks.</div>';
+    return '<p class="small muted">Julio’s machine PM, a few each day (Mon–Thu), most important machines first. When a PM is done its next date moves out automatically. Daily shop checks are on the Today tab.</p>' + days.map((k) => {
+      const L = by[k].sort((a, b) => String(a.area).localeCompare(String(b.area)) || String(a.name).localeCompare(String(b.name)));
+      return '<section class="sec"><div class="ghead"><h2>' + (k === today ? 'Today · ' : '') + esc(new Date(k).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })) + ' — ' + L.length + ' machine' + (L.length === 1 ? '' : 's') + '</h2></div><div class="tbl-wrap"><table><tr><th>#</th><th>Machine</th><th>Area</th><th>Every</th><th>Last PM</th><th></th></tr>' +
+        L.map((e) => '<tr><td class="mono">' + esc(e.equip_id) + '</td><td><b>' + esc(e.name) + '</b>' + (pmTasksOf(e).length ? '<div class="small muted">' + pmTasksOf(e).slice(0, 4).map(esc).join(' · ') + '</div>' : '') + '</td><td>' + esc(e.area || '') + '</td><td>' + esc(e.pm_freq_days ? (e.pm_freq_days >= 700 ? '2 yrs' : e.pm_freq_days >= 170 ? '6 mo' : e.pm_freq_days >= 85 ? '3 mo' : 'month') : '') + '</td><td>' + esc(e.last_pm_date ? fDay(pD(e.last_pm_date)) : '—') + '</td><td>' + (ui.user && k <= today + 7 * DAY ? '<button class="btn sm primary" data-a="pmGo" data-v="' + esc(e.equip_id) + '">✓ Done</button>' : '') + '</td></tr>').join('') + '</table></div></section>';
+    }).join('');
   }
   function pmLogHtml() {
     const q = String(ui.pmQ || '').toLowerCase(), E = {}; (store.pmEq || []).forEach((e) => { E[e.equip_id] = e; });
@@ -1925,6 +1941,7 @@ window.WT_ESP = [
     if (d.a === 'pmReload') { await pmLoad(true); return toast('Updated'); }
     if (d.a === 'pmCancel') { pmClear(); return render(); }
     if (!need()) return;
+    if (d.a === 'pmGo') { pmClear(); ui.pmTab = 'eq'; ui.pmQ = d.v; ui.pmArea = ''; ui.pmOpen = 'e' + d.v; ui.pmProb = false; return render(); }
     if (d.a === 'pmOpen') { pmClear(); ui.pmOpen = d.v; ui.pmProb = !!d.p; return render(); }
     const note = (($('#pm-note') || {}).value || '').trim(), down = !!($('#pm-down') || {}).checked;
     if ((d.a === 'pmSaveEq' || d.a === 'pmSaveDaily') && down && !note) return toast('Say what is wrong with the machine.', 'bad');
