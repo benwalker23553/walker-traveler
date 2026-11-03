@@ -1841,6 +1841,7 @@ window.WT_ESP = [
       r += (T.length ? '<div style="margin-top:8px"><b>Checklist</b>' + T.map((t, k) => '<label class="row" style="gap:8px"><input type="checkbox" id="pm-c' + k + '" checked> ' + esc(t) + '</label>').join('') + '</div>' : '') +
         '<div class="grid2" style="margin-top:8px"><label>Parts used (optional)<input id="pm-parts" placeholder="e.g. 2 seals P/N 345 SNA"></label><label>Supervisor (optional)<input id="pm-sup" placeholder="e.g. Ricky"></label></div>' +
         '<label>What was done / what you found<textarea id="pm-note" placeholder="' + (d.cal ? 'Calibrated, within spec' : 'e.g. Checked, oiled, greased') + '"></textarea></label>' +
+        (e.rebuild_freq_days ? '<label class="row" style="gap:8px"><input id="pm-rb" type="checkbox"' + (ui.pmRb ? ' checked' : '') + '> <b>Bi-annual rebuild done</b> (seals / cups / O-rings replaced)</label>' : '') +
         '<label class="row" style="gap:8px"><input id="pm-down" type="checkbox"' + (ui.pmProb ? ' checked' : '') + '> <b>Problem: machine is down or needs repair</b> (phone alert to supervisors)</label>' +
         '<div class="row" style="gap:8px;flex-wrap:wrap;margin-top:6px"><label class="btn" style="cursor:pointer">📷 Add photo<input id="pm-photo" type="file" accept="image/*" capture="environment" hidden></label><span id="pm-status" class="small muted">' + (ui.pmPhoto ? 'Photo attached ✓' : '') + '</span><button class="btn primary" data-a="pmSaveEq" data-v="' + esc(e.equip_id) + '">Save work order</button><button class="btn" data-a="pmCancel">Cancel</button></div>';
     }
@@ -1856,9 +1857,10 @@ window.WT_ESP = [
     h += '<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px"><span class="pill ' + (c.daily ? 'warn' : 'ok') + '">Daily checks ' + c.daily + '</span><span class="pill ' + (c.today ? 'warn' : 'ok') + '">Machine PM today ' + c.today + '</span><span class="pill ' + (c.over ? 'bad' : 'ok') + '">Overdue ' + c.over + '</span><span class="pill">Due this week ' + c.week + '</span><span class="pill ' + (c.cal ? 'warn' : 'ok') + '">Calibration overdue ' + c.cal + '</span><span class="pill ' + (c.down ? 'bad' : 'ok') + '">Machines down ' + c.down + '</span></div>';
     const D = pmDown();
     if (D.length) h += '<div class="panel" style="border-color:var(--bad)"><h2>Machines down / needs repair</h2>' + D.map((x) => '<div class="row" style="justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding:6px 0"><div><b>' + esc(x.eq) + '</b><div class="small">' + esc(x.note || '') + '</div><div class="small muted">' + esc(nm(x.by)) + ' · ' + esc(fTime(x.at)) + '</div>' + (x.photo ? '<button class="jn-img" data-a="jnView" data-src="' + esc(x.photo) + '"><img src="' + esc(x.photo) + '" alt="Photo of ' + esc(x.eq) + '" loading="lazy"></button>' : '') + '</div>' + (ui.user ? '<button class="btn sm primary" data-a="pmFixed" data-v="' + esc(x.id) + '">✓ Fixed</button>' : '') + '</div>').join('') + '</div>';
-    h += '<div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">' + tb('now', 'Today', c.daily + c.today + c.over) + tb('plan', 'PM schedule') + tb('week', 'This week', c.week) + tb('eq', 'All machines') + tb('cal', 'Calibration', c.cal) + tb('log', 'Work orders') + tb('parts', 'Spare parts') + '</div>';
+    h += '<div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">' + tb('now', 'Today', c.daily + c.today + c.over) + tb('plan', 'PM schedule') + tb('rb', 'Bi-annual service', pmRbCount()) + tb('week', 'This week', c.week) + tb('eq', 'All machines') + tb('cal', 'Calibration', c.cal) + tb('log', 'Work orders') + tb('parts', 'Spare parts') + '</div>';
     if (tab === 'log') return h + pmLogHtml();
     if (tab === 'plan') return h + pmPlanHtml();
+    if (tab === 'rb') return h + pmRbHtml();
     if (tab === 'parts') return h + pmPartsHtml(can);
     if (tab === 'now') {
       const groups = {}; pmDaily().forEach((t) => { const d = dailyDue(t); if (d.st === 'over' || d.st === 'due') (groups[t.g] = groups[t.g] || []).push(Object.assign({ t }, d)); });
@@ -1896,6 +1898,17 @@ window.WT_ESP = [
   const pmWhoOf = () => (ui.pmWho != null ? ui.pmWho : ui.user && /^(julio|michael)$/.test(ui.user.id) ? ui.user.id : '');
   const pmWhoName = (w) => (w ? (person(w) ? person(w).name : w.charAt(0).toUpperCase() + w.slice(1)) : '');
   const pmWhoBar = () => { const w = pmWhoOf(), P = Array.from(new Set((store.pmEq || []).map((e) => e.assigned_to).filter(Boolean))).sort(); return P.length ? '<div class="row" style="gap:6px;margin-bottom:8px"><span class="small muted">Show:</span>' + [''].concat(P).map((x) => '<button class="btn sm ' + (w === x ? 'sel' : '') + '" data-a="pmWho" data-v="' + esc(x) + '">' + esc(x ? pmWhoName(x) : 'Everyone') + '</button>').join('') + '</div>' : ''; };
+  function rbDue(e) { if (!e.rebuild_freq_days) return null; const today = day0(Date.now()); if (!e.last_rebuild_date) return { st: 'never', due: today }; const due = workDay(pD(e.last_rebuild_date) + e.rebuild_freq_days * DAY); return { st: due < today ? 'over' : due - today <= 30 * DAY ? 'soon' : 'done', due, last: pD(e.last_rebuild_date) }; }
+  const pmRbCount = () => (store.pmEq || []).filter((e) => e.status === 'active' && rbDue(e) && ['never', 'over'].indexOf(rbDue(e).st) >= 0).length;
+  function pmRbHtml() { // bi-annual pump / dispenser rebuild (seals, cups, O-rings) — separate from the monthly PM
+    const W0 = pmWhoOf(), L = (store.pmEq || []).filter((e) => e.status === 'active' && rbDue(e) && (!W0 || e.assigned_to === W0)).map((e) => Object.assign({ e }, rbDue(e)));
+    const ord = { never: 0, over: 1, soon: 2, done: 3 }; L.sort((a, b) => ord[a.st] - ord[b.st] || a.due - b.due || String(a.e.name).localeCompare(String(b.e.name)));
+    const lab = { never: '<b style="color:var(--bad)">NOT DONE — no rebuild on record</b>', over: '<b style="color:var(--bad)">NOT DONE — overdue</b>', soon: '<b style="color:var(--warn)">Due soon</b>', done: '<b style="color:var(--ok)">Done</b>' };
+    const n = (k) => L.filter((x) => x.st === k).length;
+    return pmWhoBar() + '<p class="small muted">Every 6 months: rebuild urethane / oil pumps, dispensers and foam machines — seals, cups, O-rings, regulator. Separate from the monthly PM. When you finish one, tap ✓ Done and tick “Bi-annual rebuild done”.</p>' +
+      '<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px"><span class="pill bad">Not done ' + (n('never') + n('over')) + '</span><span class="pill warn">Due within 30 days ' + n('soon') + '</span><span class="pill ok">Done ' + n('done') + '</span></div>' +
+      '<div class="tbl-wrap"><table><tr><th>#</th><th>Machine</th><th>Status</th><th>Last rebuild</th><th>Next due</th><th></th></tr>' + L.map((x) => '<tr' + (x.st === 'never' || x.st === 'over' ? ' style="background:var(--bad-bg)"' : '') + '><td class="mono">' + esc(x.e.equip_id) + '</td><td><b>' + esc(x.e.name) + '</b><div class="small muted">' + esc([x.e.area, x.e.manufacturer].filter(Boolean).join(' · ')) + '</div></td><td>' + lab[x.st] + '</td><td>' + esc(x.last ? fDay(x.last) : '—') + '</td><td>' + esc(x.st === 'never' ? 'Now' : fDay(x.due)) + '</td><td>' + (ui.user ? '<button class="btn sm primary" data-a="pmGoRb" data-v="' + esc(x.e.equip_id) + '">✓ Done</button>' : '') + '</td></tr>').join('') + '</table></div>';
+  }
   function pmPlanHtml() { // next 4 weeks of machine PM, one list per work day (Mon–Thu)
     const W0 = pmWhoOf(), E = (store.pmEq || []).filter((e) => e.status === 'active' && e.maint_type !== 'calibration' && (!W0 || e.assigned_to === W0)), by = {}, today = day0(Date.now()), end = today + 28 * DAY;
     E.forEach((e) => { const d = eqDue(e); if (!d.due || d.due > end) return; const k = Math.max(d.due, workDay(today)); (by[k] = by[k] || []).push(e); });
@@ -1929,8 +1942,8 @@ window.WT_ESP = [
       ui.pmPhoto = path; if ($('#pm-status')) $('#pm-status').textContent = 'Photo attached ✓';
     } catch (e) { if (st) st.textContent = ''; toast('Photo not saved: ' + (e.message || e), 'bad'); }
   }
-  const PMK = ['pm-note', 'pm-parts', 'pm-sup', 'pm-down'];
-  const pmClear = () => { ui.pmOpen = null; ui.pmPhoto = ''; PMK.forEach((k) => { if (ui.keep) delete ui.keep[k]; }); };
+  const PMK = ['pm-note', 'pm-parts', 'pm-sup', 'pm-down', 'pm-rb'];
+  const pmClear = () => { ui.pmOpen = null; ui.pmPhoto = ''; ui.pmRb = false; PMK.forEach((k) => { if (ui.keep) delete ui.keep[k]; }); };
   async function pmDownAdd(eq, note, photo) {
     const id = 'dn' + Date.now().toString(36);
     await pmSet('down', (rows) => rows.push({ id, eq, note, photo: photo || '', by: ui.user.id, at: Date.now(), open: true }));
@@ -1946,6 +1959,7 @@ window.WT_ESP = [
     if (d.a === 'pmReload') { await pmLoad(true); return toast('Updated'); }
     if (d.a === 'pmCancel') { pmClear(); return render(); }
     if (!need()) return;
+    if (d.a === 'pmGoRb') { pmClear(); ui.pmTab = 'eq'; ui.pmQ = d.v; ui.pmArea = ''; ui.pmOpen = 'e' + d.v; ui.pmProb = false; ui.pmRb = true; return render(); }
     if (d.a === 'pmGo') { pmClear(); ui.pmTab = 'eq'; ui.pmQ = d.v; ui.pmArea = ''; ui.pmOpen = 'e' + d.v; ui.pmProb = false; return render(); }
     if (d.a === 'pmOpen') { pmClear(); ui.pmOpen = d.v; ui.pmProb = !!d.p; return render(); }
     const note = (($('#pm-note') || {}).value || '').trim(), down = !!($('#pm-down') || {}).checked;
@@ -1955,8 +1969,9 @@ window.WT_ESP = [
       const T = pmTasksOf(e), chk = T.map((t, k) => ({ task: t, ok: !!($('#pm-c' + k) || {}).checked })); if (ui.pmPhoto) chk.push({ photo: ui.pmPhoto });
       const cal = e.maint_type === 'calibration', done = chk.filter((x) => x.ok).map((x) => x.task);
       const wo = { equip_id: e.equip_id, work_date: ymd(Date.now()), tech: ui.user.name, tasks_done: note || (done.length ? done.join(', ') : cal ? 'Calibration checked' : 'PM completed'), parts_used: (($('#pm-parts') || {}).value || '').trim() || null, supervisor: (($('#pm-sup') || {}).value || '').trim() || null, location: e.area || null, notes: down ? 'PROBLEM — machine down / needs repair. Logged in traveler app.' : 'Logged in traveler app', checklist: chk };
+      const rb = !!($('#pm-rb') || {}).checked; if (rb) { wo.tasks_done = 'Bi-annual rebuild — ' + wo.tasks_done; }
       const r1 = await window.WT_SB.from('pm_work_orders').insert([wo]).select(); if (r1.error) return toast('Not saved: ' + r1.error.message, 'bad');
-      if (!down) { const up = { last_pm_date: wo.work_date, updated_at: new Date().toISOString() }; if (cal) up.cal_due = ymd(Date.now() + (e.pm_freq_days || 365) * DAY); await window.WT_SB.from('pm_equipment').update(up).eq('equip_id', e.equip_id); Object.assign(e, up); }
+      if (!down) { const up = { last_pm_date: wo.work_date, updated_at: new Date().toISOString() }; if (rb) up.last_rebuild_date = wo.work_date; if (cal) up.cal_due = ymd(Date.now() + (e.pm_freq_days || 365) * DAY); await window.WT_SB.from('pm_equipment').update(up).eq('equip_id', e.equip_id); Object.assign(e, up); }
       (store.pmWo = store.pmWo || []).unshift((r1.data && r1.data[0]) || wo);
       if (down) await pmDownAdd(e.name + ' #' + e.equip_id, note, ui.pmPhoto);
       pmClear(); toast(down ? 'Work order saved — machine marked down' : 'Work order saved ✓ · next PM ' + fDay(eqDue(e).due)); return render();
