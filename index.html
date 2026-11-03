@@ -1832,7 +1832,7 @@ window.WT_ESP = [
     const d = eqDue(e), wo = (store.pmWo || []).filter((w) => w.equip_id === e.equip_id), open = ui.pmOpen === 'e' + e.equip_id;
     const lab = d.st === 'over' ? '<b style="color:var(--bad)">' + (d.cal ? 'Calibration overdue' : 'Overdue') + ' ' + d.late + ' day' + (d.late === 1 ? '' : 's') + '</b>' : d.st === 'week' ? '<b style="color:var(--warn)">Due ' + esc(fDay(d.due)) + '</b>' : d.st === 'inactive' ? 'Inactive' : d.due ? 'Next ' + esc(fDay(d.due)) : 'No schedule';
     let r = '<div class="panel" style="margin-bottom:8px"><div class="row" style="justify-content:space-between;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:220px"><b>' + esc(e.name) + '</b> <span class="small muted mono">#' + esc(e.equip_id) + '</span><div class="small muted">' + esc([e.area, e.type !== e.name ? e.type : '', e.manufacturer, e.model].filter(Boolean).join(' · ')) + '</div>' +
-      '<div class="small">' + lab + ' · Last ' + (d.cal ? 'cal' : 'PM') + ': ' + esc(fDay(pD(e.last_pm_date))) + (e.pm_freq_days ? ' · every ' + e.pm_freq_days + ' days' : '') + (wo[0] ? ' · ' + esc(wo[0].tech || '') : '') + '</div></div>' +
+      '<div class="small">' + lab + ' · Last ' + (d.cal ? 'cal' : 'PM') + ': ' + esc(fDay(pD(e.last_pm_date))) + (e.pm_freq_days ? ' · every ' + e.pm_freq_days + ' days' : '') + (wo[0] ? ' · ' + esc(wo[0].tech || '') : '') + (e.assigned_to ? ' · <b>' + esc(pmWhoName(e.assigned_to)) + '</b>' : '') + '</div></div>' +
       '<div class="row" style="gap:6px">' + (ui.user && e.status === 'active' ? '<button class="btn primary" data-a="pmOpen" data-v="e' + esc(e.equip_id) + '">✓ Done</button><button class="btn" data-a="pmOpen" data-v="e' + esc(e.equip_id) + '" data-p="1">⚠ Problem</button>' : '') + '<button class="btn sm" data-a="pmEq" data-v="' + esc(e.equip_id) + '">' + (ui.pmEqOpen === e.equip_id ? 'Hide' : 'History (' + wo.length + ')') + '</button></div></div>';
     if (ui.pmEqOpen === e.equip_id) r += '<div class="small" style="margin-top:6px">' + (e.serial_number ? 'Serial ' + esc(e.serial_number) + ' · ' : '') + (e.location_raw ? esc(e.location_raw) : '') + (e.notes ? '<div>' + esc(e.notes) + '</div>' : '') + (e.cal_notes ? '<div>Calibration: ' + esc(e.cal_notes) + '</div>' : '') + (pmTasksOf(e).length ? '<div><b>PM tasks:</b> ' + pmTasksOf(e).map(esc).join(' · ') + '</div>' : '') + '</div>' +
       (wo.length ? '<div class="tbl-wrap" style="margin-top:6px"><table><tr><th>Date</th><th>Tech</th><th>Work done</th><th>Parts</th><th>Supervisor</th></tr>' + wo.slice(0, 30).map((w) => '<tr><td>' + esc(fDay(pD(w.work_date))) + '</td><td>' + esc(w.tech || '') + '</td><td>' + esc(w.tasks_done || '') + (w.notes ? '<div class="small muted">' + esc(w.notes) + '</div>' : '') + '</td><td>' + esc(w.parts_used || '') + '</td><td>' + esc(w.supervisor || '') + '</td></tr>').join('') + '</table></div>' : '<p class="small muted">No work orders yet.</p>');
@@ -1856,7 +1856,7 @@ window.WT_ESP = [
     h += '<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px"><span class="pill ' + (c.daily ? 'warn' : 'ok') + '">Daily checks ' + c.daily + '</span><span class="pill ' + (c.today ? 'warn' : 'ok') + '">Machine PM today ' + c.today + '</span><span class="pill ' + (c.over ? 'bad' : 'ok') + '">Overdue ' + c.over + '</span><span class="pill">Due this week ' + c.week + '</span><span class="pill ' + (c.cal ? 'warn' : 'ok') + '">Calibration overdue ' + c.cal + '</span><span class="pill ' + (c.down ? 'bad' : 'ok') + '">Machines down ' + c.down + '</span></div>';
     const D = pmDown();
     if (D.length) h += '<div class="panel" style="border-color:var(--bad)"><h2>Machines down / needs repair</h2>' + D.map((x) => '<div class="row" style="justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding:6px 0"><div><b>' + esc(x.eq) + '</b><div class="small">' + esc(x.note || '') + '</div><div class="small muted">' + esc(nm(x.by)) + ' · ' + esc(fTime(x.at)) + '</div>' + (x.photo ? '<button class="jn-img" data-a="jnView" data-src="' + esc(x.photo) + '"><img src="' + esc(x.photo) + '" alt="Photo of ' + esc(x.eq) + '" loading="lazy"></button>' : '') + '</div>' + (ui.user ? '<button class="btn sm primary" data-a="pmFixed" data-v="' + esc(x.id) + '">✓ Fixed</button>' : '') + '</div>').join('') + '</div>';
-    h += '<div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">' + tb('now', 'Today', c.daily + c.today + c.over) + tb('plan', 'Julio’s schedule') + tb('week', 'This week', c.week) + tb('eq', 'All machines') + tb('cal', 'Calibration', c.cal) + tb('log', 'Work orders') + tb('parts', 'Spare parts') + '</div>';
+    h += '<div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">' + tb('now', 'Today', c.daily + c.today + c.over) + tb('plan', 'PM schedule') + tb('week', 'This week', c.week) + tb('eq', 'All machines') + tb('cal', 'Calibration', c.cal) + tb('log', 'Work orders') + tb('parts', 'Spare parts') + '</div>';
     if (tab === 'log') return h + pmLogHtml();
     if (tab === 'plan') return h + pmPlanHtml();
     if (tab === 'parts') return h + pmPartsHtml(can);
@@ -1873,7 +1873,7 @@ window.WT_ESP = [
       if (!Object.keys(groups).length) h += '<div class="banner ok"><div><b>Daily checks done for today.</b></div></div>';
     }
     let L = E.filter((e) => !(eqDue(e).cal) === (tab !== 'cal'));
-    if (tab === 'now') L = L.filter((e) => ['over', 'today'].indexOf(eqDue(e).st) >= 0).sort((a, b) => eqDue(b).late - eqDue(a).late || String(a.area).localeCompare(String(b.area)));
+    if (tab === 'now') L = L.filter((e) => ['over', 'today'].indexOf(eqDue(e).st) >= 0 && (!pmWhoOf() || e.assigned_to === pmWhoOf())).sort((a, b) => eqDue(b).late - eqDue(a).late || String(a.area).localeCompare(String(b.area)));
     else if (tab === 'week') L = L.filter((e) => eqDue(e).st === 'week').sort((a, b) => eqDue(a).due - eqDue(b).due);
     else if (tab === 'cal') L = L.filter((e) => e.status === 'active').sort((a, b) => (eqDue(a).due || 9e15) - (eqDue(b).due || 9e15));
     else {
@@ -1883,7 +1883,8 @@ window.WT_ESP = [
       L = E.filter((e) => (af === 'inactive' ? e.status !== 'active' : e.status === 'active' && (!af || e.area === af)) && (!q || [e.name, e.equip_id, e.type, e.manufacturer, e.model, e.serial_number].join(' ').toLowerCase().indexOf(q) >= 0));
       if (q && L.some((e) => String(e.equip_id).toLowerCase() === q)) L = L.filter((e) => String(e.equip_id).toLowerCase() === q);
     }
-    if (tab === 'now' && L.length) h += '<section class="sec"><div class="ghead"><h2>Machine PM for today' + (c.over ? ' (+ ' + c.over + ' overdue, first)' : '') + '</h2></div>';
+    if (tab === 'now') h += pmWhoBar();
+    if (tab === 'now' && L.length) h += '<section class="sec"><div class="ghead"><h2>Machine PM for today' + (pmWhoOf() ? ' · ' + esc(pmWhoName(pmWhoOf())) : '') + (c.over ? ' (+ ' + c.over + ' overdue, first)' : '') + '</h2></div>';
     if (tab !== 'now' && !L.length && store.pmEq) h += '<div class="empty">Nothing here.</div>';
     const lim = ui.pmMore ? 2000 : 60;
     h += L.slice(0, lim).map((e) => eqCard(e, tab)).join('');
@@ -1892,15 +1893,18 @@ window.WT_ESP = [
     if (tab === 'eq' && pmLead()) h += '<div class="panel"><h3>Add a machine</h3><div class="grid2"><label>Equipment # (tag)<input id="pm-nid" placeholder="e.g. 529"></label><label>Name<input id="pm-nname" placeholder="e.g. Pleater, Rotary"></label><label>Area<input id="pm-narea" placeholder="Production / Filtration / Shop"></label><label>PM every (days)<input id="pm-nfreq" type="number" value="30"></label></div><button class="btn primary" data-a="pmAdd">Add machine</button></div>';
     return h;
   }
+  const pmWhoOf = () => (ui.pmWho != null ? ui.pmWho : ui.user && /^(julio|michael)$/.test(ui.user.id) ? ui.user.id : '');
+  const pmWhoName = (w) => (w ? (person(w) ? person(w).name : w.charAt(0).toUpperCase() + w.slice(1)) : '');
+  const pmWhoBar = () => { const w = pmWhoOf(), P = Array.from(new Set((store.pmEq || []).map((e) => e.assigned_to).filter(Boolean))).sort(); return P.length ? '<div class="row" style="gap:6px;margin-bottom:8px"><span class="small muted">Show:</span>' + [''].concat(P).map((x) => '<button class="btn sm ' + (w === x ? 'sel' : '') + '" data-a="pmWho" data-v="' + esc(x) + '">' + esc(x ? pmWhoName(x) : 'Everyone') + '</button>').join('') + '</div>' : ''; };
   function pmPlanHtml() { // next 4 weeks of machine PM, one list per work day (Mon–Thu)
-    const E = (store.pmEq || []).filter((e) => e.status === 'active' && e.maint_type !== 'calibration'), by = {}, today = day0(Date.now()), end = today + 28 * DAY;
+    const W0 = pmWhoOf(), E = (store.pmEq || []).filter((e) => e.status === 'active' && e.maint_type !== 'calibration' && (!W0 || e.assigned_to === W0)), by = {}, today = day0(Date.now()), end = today + 28 * DAY;
     E.forEach((e) => { const d = eqDue(e); if (!d.due || d.due > end) return; const k = Math.max(d.due, workDay(today)); (by[k] = by[k] || []).push(e); });
     const days = Object.keys(by).map(Number).sort((a, b) => a - b);
-    if (!days.length) return '<div class="empty">Nothing scheduled in the next 4 weeks.</div>';
-    return '<p class="small muted">Julio’s machine PM, a few each day (Mon–Thu), most important machines first. When a PM is done its next date moves out automatically. Daily shop checks are on the Today tab.</p>' + days.map((k) => {
+    if (!days.length) return pmWhoBar() + '<div class="empty">Nothing scheduled in the next 4 weeks.</div>';
+    return pmWhoBar() + '<p class="small muted">Machine PM for Julio and Michael, a few each day (Mon–Thu), most important machines first. When a PM is done its next date moves out automatically. Daily shop checks are on the Today tab.</p>' + days.map((k) => {
       const L = by[k].sort((a, b) => String(a.area).localeCompare(String(b.area)) || String(a.name).localeCompare(String(b.name)));
       return '<section class="sec"><div class="ghead"><h2>' + (k === today ? 'Today · ' : '') + esc(new Date(k).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })) + ' — ' + L.length + ' machine' + (L.length === 1 ? '' : 's') + '</h2></div><div class="tbl-wrap"><table><tr><th>#</th><th>Machine</th><th>Area</th><th>Every</th><th>Last PM</th><th></th></tr>' +
-        L.map((e) => '<tr><td class="mono">' + esc(e.equip_id) + '</td><td><b>' + esc(e.name) + '</b>' + (pmTasksOf(e).length ? '<div class="small muted">' + pmTasksOf(e).slice(0, 4).map(esc).join(' · ') + '</div>' : '') + '</td><td>' + esc(e.area || '') + '</td><td>' + esc(e.pm_freq_days ? (e.pm_freq_days >= 700 ? '2 yrs' : e.pm_freq_days >= 170 ? '6 mo' : e.pm_freq_days >= 85 ? '3 mo' : 'month') : '') + '</td><td>' + esc(e.last_pm_date ? fDay(pD(e.last_pm_date)) : '—') + '</td><td>' + (ui.user && k <= today + 7 * DAY ? '<button class="btn sm primary" data-a="pmGo" data-v="' + esc(e.equip_id) + '">✓ Done</button>' : '') + '</td></tr>').join('') + '</table></div></section>';
+        L.map((e) => '<tr><td class="mono">' + esc(e.equip_id) + '</td><td><b>' + esc(e.name) + '</b>' + (pmTasksOf(e).length ? '<div class="small muted">' + pmTasksOf(e).slice(0, 4).map(esc).join(' · ') + '</div>' : '') + '</td><td>' + esc(e.area || '') + '</td><td>' + esc(pmWhoName(e.assigned_to)) + '</td><td>' + esc(e.pm_freq_days ? (e.pm_freq_days >= 700 ? '2 yrs' : e.pm_freq_days >= 170 ? '6 mo' : e.pm_freq_days >= 85 ? '3 mo' : 'month') : '') + '</td><td>' + esc(e.last_pm_date ? fDay(pD(e.last_pm_date)) : '—') + '</td><td>' + (ui.user && k <= today + 7 * DAY ? '<button class="btn sm primary" data-a="pmGo" data-v="' + esc(e.equip_id) + '">✓ Done</button>' : '') + '</td></tr>').join('') + '</table></div></section>';
     }).join('');
   }
   function pmLogHtml() {
@@ -1936,6 +1940,7 @@ window.WT_ESP = [
     if (d.a === 'pmTab') { ui.pmTab = d.v; ui.pmMore = false; pmClear(); return render(); }
     if (d.a === 'pmFind') { ui.pmQ = ($('#pm-q') || {}).value || ''; return render(); }
     if (d.a === 'pmArea') { ui.pmArea = d.v; return render(); }
+    if (d.a === 'pmWho') { ui.pmWho = d.v; return render(); }
     if (d.a === 'pmMore') { ui.pmMore = true; return render(); }
     if (d.a === 'pmEq') { ui.pmEqOpen = ui.pmEqOpen === d.v ? null : d.v; return render(); }
     if (d.a === 'pmReload') { await pmLoad(true); return toast('Updated'); }
