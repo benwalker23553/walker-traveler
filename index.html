@@ -1369,7 +1369,7 @@ window.WT_ESP = [
       const m = {}; s.docs.forEach((d) => { const j = d.data(); if (j && j.id) m[j.id] = j; });
       Object.keys(store.queue).forEach((id) => { m[id] = store.queue[id].job || store.queue[id]; });
       store.jobs = m; store.loaded = true; if (ui.openRlOnLoad && !ui.modal) { ui.openRlOnLoad = false; setTimeout(() => openModal({ type: 'rlList' }), 600); } if (ui.openJobOnLoad && m[ui.openJobOnLoad]) { const oj = ui.openJobOnLoad; ui.openJobOnLoad = null; try { history.replaceState(null, '', location.pathname); } catch (e) { /* ok */ } openJob(oj); } render(); setTimeout(endOfDay, 1500);
-    }, () => { store.mode = 'local'; loadLocal(); store.loaded = true; render(); });
+    }, () => { if (window.WT_SB) { store.loaded = true; render(); setTimeout(() => { try { location.reload(); } catch (e) { /* ok */ } }, 8000); return; } store.mode = 'local'; loadLocal(); store.loaded = true; render(); });
     db.collection('logs').onSnapshot((s) => { s.docs.forEach((d) => { const x = d.data(); if (/_x$/.test(d.id)) { (store.logx = store.logx || {})[d.id.slice(0, -2)] = x; return; } store.logs[d.id] = (x && x.rows) || []; if (d.id === 'final' && x) store.finMeta = { at: x.at, by: x.by, file: x.file }; }); render(); }, () => {});
     db.collection('routings').onSnapshot((s) => { s.docs.forEach((d) => { const r = d.data(); if (r && r.id && !W.routing(r.id)) W.ROUTINGS.push(W.clone(r)); }); render(); }, () => {});
     db.collection('sage').onSnapshot((s) => { s.docs.forEach((d) => { if (d.id === 'bom') { const x = d.data(); store.sageBom = (x && x.bom) || {}; store.sageAt = x && x.at; } }); render(); }, () => {});
@@ -2860,6 +2860,7 @@ window.WT_ESP = [
     if (only && !(only === 'qa' ? W.canDispose(p) : W.isApprover(p))) { toast(p.name + ' is not set up to do that.', 'bad'); return null; }
     if (!hasPin(p)) { toast(p.name + ' has no PIN yet. Tap Sign in at the top once to create it.', 'bad'); return null; }
     if (SRV()) { if (m.pinOk !== m.who + ':' + m.pin) { m.pin = ''; renderModal(); toast('Wrong PIN.', 'bad'); return null; } }
+    else if (window.WT_SB) { m.pin = ''; renderModal(); toast('This device lost its link to the shop record. Reloading — then try again.', 'bad'); setTimeout(() => location.reload(), 2500); return null; }
     else if (p.pin !== m.pin) { m.pin = ''; renderModal(); toast('Wrong PIN.', 'bad'); return null; }
     return p;
   }
@@ -2987,6 +2988,7 @@ window.WT_ESP = [
           if (!r.finToken) { closeModal(); return toast('Your account is not set up to see prices or costs.', 'bad'); }
           if (ui.finTok) rpc('fin_lock', { p_token: ui.finTok }).catch(() => {}); ui.finTok = r.finToken; ui.user = Object.assign({}, ui.user, { role: r.role, fin: true }); closeModal(); finLoad(); }).catch(() => { m.busy = false; toast('Could not check the PIN. Check the connection.', 'bad'); }); return; }
       case 'login': { const lp = person(m.who); if (!lp) return toast('Tap your name.', 'bad');
+        if (window.WT_SB && !SRV()) { m.pin = ''; m.first = ''; renderModal(); toast('This device lost its link to the shop record. Reloading — then try your PIN again.', 'bad'); setTimeout(() => location.reload(), 2500); return; }
         if (SRV()) {
           if ((m.pin || '').length !== 4) return toast('Enter 4 digits.', 'bad');
           if (!hasPin(lp)) { if (!m.first) { m.first = m.pin; m.pin = ''; return renderModal(); } if (m.first !== m.pin) { m.first = ''; m.pin = ''; renderModal(); return toast('Those did not match. Start again.', 'bad'); } }
