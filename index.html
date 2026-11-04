@@ -1835,17 +1835,18 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const lab = d.st === 'over' ? '<b style="color:var(--bad)">' + (d.cal ? 'Calibration overdue' : 'Overdue') + ' ' + d.late + ' day' + (d.late === 1 ? '' : 's') + '</b>' : d.st === 'week' ? '<b style="color:var(--warn)">Due ' + esc(fDay(d.due)) + '</b>' : d.st === 'inactive' ? (e.status === 'idle' ? '<b>Idle — no service needed</b>' : 'Inactive') : d.due ? 'Next ' + esc(fDay(d.due)) : 'No schedule';
     let r = '<div class="panel" style="margin-bottom:8px"><div class="row" style="justify-content:space-between;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:220px"><b>' + esc(e.name) + '</b> <span class="small muted mono">#' + esc(e.equip_id) + '</span><div class="small muted">' + esc([e.shop_area || e.area, e.location, e.type !== e.name ? e.type : '', e.manufacturer, e.model].filter(Boolean).join(' · ')) + '</div>' + (e.usage ? '<div class="small"><b style="color:' + (e.usage === 'DAILY' ? 'var(--bad)' : 'inherit') + '">' + esc({ DAILY: 'Used daily — can\'t break down', WEEKLY: 'Used weekly', MONTHLY: 'Used monthly', RARELY: 'Rarely used — PM every 2 years', NEVER: 'Not used', GONE: 'Gone — not in the shop' }[e.usage] || e.usage) + '</b>' + (e.walk_note ? ' · ' + esc(e.walk_note) : '') + '</div>' : '') +
       '<div class="small">' + lab + ' · Last ' + (d.cal ? 'cal' : 'PM') + ': ' + esc(fDay(pD(e.last_pm_date))) + (e.pm_freq_days ? ' · every ' + e.pm_freq_days + ' days' : '') + (wo[0] ? ' · ' + esc(wo[0].tech || '') : '') + (e.assigned_to ? ' · <b>' + esc(pmWhoName(e.assigned_to)) + '</b>' : '') + '</div></div>' +
-      '<div class="row" style="gap:6px">' + (ui.user && e.status === 'active' ? '<button class="btn primary" data-a="pmOpen" data-v="e' + esc(e.equip_id) + '">✓ Done</button><button class="btn" data-a="pmOpen" data-v="e' + esc(e.equip_id) + '" data-p="1">⚠ Problem</button>' : '') + '<button class="btn sm" data-a="pmEq" data-v="' + esc(e.equip_id) + '">' + (ui.pmEqOpen === e.equip_id ? 'Hide' : 'History (' + wo.length + ')') + '</button></div></div>';
+      '<div class="row" style="gap:6px">' + (ui.user && e.status === 'active' ? (e.last_pm_date === ymd(Date.now()) ? '<span class="pill ok" style="font-size:15px;padding:8px 12px">✓ Done today' + (wo[0] && wo[0].work_date === ymd(Date.now()) ? ' · ' + esc(wo[0].tech || '') : '') + '</span><button class="btn sm" data-a="pmOpen" data-v="e' + esc(e.equip_id) + '">+ Note</button>' : '<button class="btn primary" style="font-size:17px;padding:12px 18px" data-a="pmQuick" data-v="' + esc(e.equip_id) + '">✓ Checked — OK</button><button class="btn" data-a="pmOpen" data-v="e' + esc(e.equip_id) + '">✎ Done + what I did</button>') + '<button class="btn" data-a="pmOpen" data-v="e' + esc(e.equip_id) + '" data-p="1">⚠ Problem</button>' : '') + '<button class="btn sm" data-a="pmEq" data-v="' + esc(e.equip_id) + '">' + (ui.pmEqOpen === e.equip_id ? 'Hide' : 'History (' + wo.length + ')') + '</button></div></div>';
     if (ui.pmEqOpen === e.equip_id) r += '<div class="small" style="margin-top:6px">' + (e.serial_number ? 'Serial ' + esc(e.serial_number) + ' · ' : '') + (e.location_raw ? esc(e.location_raw) : '') + (e.notes ? '<div>' + esc(e.notes) + '</div>' : '') + (e.cal_notes ? '<div>Calibration: ' + esc(e.cal_notes) + '</div>' : '') + (pmTasksOf(e).length ? '<div><b>PM tasks:</b> ' + pmTasksOf(e).map(esc).join(' · ') + '</div>' : '') + '</div>' +
       (wo.length ? '<div class="tbl-wrap" style="margin-top:6px"><table><tr><th>Date</th><th>Tech</th><th>Work done</th><th>Parts</th><th>Supervisor</th></tr>' + wo.slice(0, 30).map((w) => '<tr><td>' + esc(fDay(pD(w.work_date))) + '</td><td>' + esc(w.tech || '') + '</td><td>' + esc(w.tasks_done || '') + (w.notes ? '<div class="small muted">' + esc(w.notes) + '</div>' : '') + '</td><td>' + esc(w.parts_used || '') + '</td><td>' + esc(w.supervisor || '') + '</td></tr>').join('') + '</table></div>' : '<p class="small muted">No work orders yet.</p>');
     if (open) {
       const T = pmTasksOf(e);
       r += (T.length ? '<div style="margin-top:8px"><b>Checklist</b>' + T.map((t, k) => '<label class="row" style="gap:8px"><input type="checkbox" id="pm-c' + k + '" checked> ' + esc(t) + '</label>').join('') + '</div>' : '') +
         '<div class="grid2" style="margin-top:8px"><label>Parts used (optional)<input id="pm-parts" placeholder="e.g. 2 seals P/N 345 SNA"></label><label>Supervisor (optional)<input id="pm-sup" placeholder="e.g. Ricky"></label></div>' +
-        '<label>What was done / what you found<textarea id="pm-note" placeholder="' + (d.cal ? 'Calibrated, within spec' : 'e.g. Checked, oiled, greased') + '"></textarea></label>' +
+        '<div style="margin-top:8px"><b>Tap what you did</b><div class="row" style="gap:6px;flex-wrap:wrap;margin-top:4px">' + (d.cal ? ['Calibrated — in spec', 'Out of spec — adjusted', 'Sent out for cal'] : ['Inspected', 'Oiled / greased', 'Cleaned', 'Filters changed', 'Belts / hoses checked', 'Fluids topped off', 'Tightened bolts', 'Electrical checked', 'Air leaks checked', 'Safety guards OK', 'Seals / O-rings replaced', 'Tested — runs OK']).map((x) => '<button type="button" class="btn sm" style="padding:10px 12px" data-a="pmChip" data-v="' + esc(x) + '">' + esc(x) + '</button>').join('') + '</div></div>' +
+        '<label>What was done / what you found<textarea id="pm-note" placeholder="Tap above, or type here"></textarea></label>' +
         (e.rebuild_freq_days ? '<label class="row" style="gap:8px"><input id="pm-rb" type="checkbox"' + (ui.pmRb ? ' checked' : '') + '> <b>Bi-annual rebuild done</b> (seals / cups / O-rings replaced)</label>' : '') +
         '<label class="row" style="gap:8px"><input id="pm-down" type="checkbox"' + (ui.pmProb ? ' checked' : '') + '> <b>Problem: machine is down or needs repair</b> (phone alert to supervisors)</label>' +
-        '<div class="row" style="gap:8px;flex-wrap:wrap;margin-top:6px"><label class="btn" style="cursor:pointer">📷 Add photo<input id="pm-photo" type="file" accept="image/*" capture="environment" hidden></label><span id="pm-status" class="small muted">' + (ui.pmPhoto ? 'Photo attached ✓' : '') + '</span><button class="btn primary" data-a="pmSaveEq" data-v="' + esc(e.equip_id) + '">Save work order</button><button class="btn" data-a="pmCancel">Cancel</button></div>';
+        '<div class="row" style="gap:8px;flex-wrap:wrap;margin-top:6px"><label class="btn" style="cursor:pointer">📷 Add photo<input id="pm-photo" type="file" accept="image/*" capture="environment" hidden></label><span id="pm-status" class="small muted">' + (ui.pmPhoto ? 'Photo attached ✓' : '') + '</span><button class="btn primary" style="font-size:17px;padding:12px 18px" data-a="pmSaveEq" data-v="' + esc(e.equip_id) + '">✓ Save sign-off</button><button class="btn" data-a="pmCancel">Cancel</button></div>';
     }
     return r + '</div>';
   }
@@ -1853,7 +1854,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     pmLoad();
     const tab = ui.pmTab || 'now', c = pmCounts(), can = pmMine(), E = store.pmEq || [];
     const tb = (k, label, n) => '<button class="btn sm ' + (tab === k ? 'sel' : '') + '" data-a="pmTab" data-v="' + k + '">' + label + (n ? ' (' + n + ')' : '') + '</button>';
-    let h = '<div class="head"><div><h1>Maintenance (PM)</h1><p class="muted">Every machine and gage in the shop, from the maintenance database (' + E.length + ' items, ' + (store.pmWo || []).length + ' work orders). Tap ✓ Done when PM is finished, ⚠ Problem when something is wrong. Shop schedule 4×10 Mon–Thu.</p></div><button class="btn sm" data-a="pmReload">↻ Refresh</button></div>';
+    let h = '<div class="head"><div><h1>Maintenance (PM)</h1><p class="muted">Every machine and gage in the shop, from the maintenance database (' + E.length + ' items, ' + (store.pmWo || []).length + ' work orders). Tap <b>✓ Checked — OK</b> to sign off in one tap, <b>✎ Done + what I did</b> to pick what was done, ⚠ Problem when something is wrong. Shop schedule 4×10 Mon–Thu.</p></div><button class="btn sm" data-a="pmReload">↻ Refresh</button></div>';
     if (store.pmErr) h += '<div class="banner warn"><div><b>Could not load the maintenance database.</b> ' + esc(store.pmErr) + '</div></div>';
     else if (!store.pmEq) h += '<div class="banner info"><div>Loading machines…</div></div>';
     h += '<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px"><span class="pill ' + (c.daily ? 'warn' : 'ok') + '">Daily checks ' + c.daily + '</span><span class="pill ' + (c.today ? 'warn' : 'ok') + '">Machine PM today ' + c.today + '</span><span class="pill ' + (c.over ? 'bad' : 'ok') + '">Overdue ' + c.over + '</span><span class="pill">Due this week ' + c.week + '</span><span class="pill ' + (c.cal ? 'warn' : 'ok') + '">Calibration overdue ' + c.cal + '</span><span class="pill ' + (c.down ? 'bad' : 'ok') + '">Machines down ' + c.down + '</span></div>';
@@ -1864,6 +1865,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (tab === 'plan') return h + pmPlanHtml();
     if (tab === 'rb') return h + pmRbHtml();
     if (tab === 'parts') return h + pmPartsHtml(can);
+    let dailyH = ''; const h0 = h.length;
     if (tab === 'now') {
       const groups = {}; pmDaily().forEach((t) => { const d = dailyDue(t); if (d.st === 'over' || d.st === 'due') (groups[t.g] = groups[t.g] || []).push(Object.assign({ t }, d)); });
       Object.keys(groups).forEach((g) => {
@@ -1876,6 +1878,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       });
       if (!Object.keys(groups).length) h += '<div class="banner ok"><div><b>Daily checks done for today.</b></div></div>';
     }
+    if (tab === 'now') { dailyH = h.slice(h0); h = h.slice(0, h0); }
     let L = E.filter((e) => !(eqDue(e).cal) === (tab !== 'cal'));
     if (tab === 'now') L = L.filter((e) => ['over', 'today'].indexOf(eqDue(e).st) >= 0 && (!pmWhoOf() || e.assigned_to === pmWhoOf())).sort((a, b) => eqDue(b).late - eqDue(a).late || String(a.area).localeCompare(String(b.area)));
     else if (tab === 'week') L = L.filter((e) => eqDue(e).st === 'week').sort((a, b) => eqDue(a).due - eqDue(b).due);
@@ -1894,6 +1897,8 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     h += L.slice(0, lim).map((e) => eqCard(e, tab)).join('');
     if (L.length > lim) h += '<button class="btn" data-a="pmMore">Show all ' + L.length + '</button>';
     if (tab === 'now' && L.length) h += '</section>';
+    if (tab === 'now') { const td = ymd(Date.now()), DT = E.filter((e) => e.last_pm_date === td && (!pmWhoOf() || e.assigned_to === pmWhoOf())); if (DT.length) h += '<section class="sec"><div class="ghead"><h2>✓ Signed off today (' + DT.length + ')</h2></div>' + DT.map((e) => { const w = (store.pmWo || []).find((x) => x.equip_id === e.equip_id); return '<div class="row" style="justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding:6px 0"><div><b>' + esc(e.name) + '</b> <span class="small muted mono">#' + esc(e.equip_id) + '</span><div class="small">' + esc(w ? (w.tasks_done || '') + ' · ' + (w.tech || '') : '') + '</div></div><span class="pill ok">✓ Done</span></div>'; }).join('') + '</section>'; else if (!L.length && store.pmEq) h += '<div class="banner ok"><div><b>No machine PM due today.</b></div></div>'; }
+    if (tab === 'now') h += dailyH;
     if (tab === 'eq' && pmLead()) h += '<div class="panel"><h3>Add a machine</h3><div class="grid2"><label>Equipment # (tag)<input id="pm-nid" placeholder="e.g. 529"></label><label>Name<input id="pm-nname" placeholder="e.g. Pleater, Rotary"></label><label>Area<input id="pm-narea" placeholder="Production / Filtration / Shop"></label><label>PM every (days)<input id="pm-nfreq" type="number" value="30"></label></div><button class="btn primary" data-a="pmAdd">Add machine</button></div>';
     return h;
   }
@@ -1960,18 +1965,20 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (d.a === 'pmEq') { ui.pmEqOpen = ui.pmEqOpen === d.v ? null : d.v; return render(); }
     if (d.a === 'pmReload') { await pmLoad(true); return toast('Updated'); }
     if (d.a === 'pmCancel') { pmClear(); return render(); }
+    if (d.a === 'pmChip') { const ta = $('#pm-note'); if (!ta) return; const parts = ta.value.split(/,\s*/).map((x) => x.trim()).filter(Boolean), i = parts.indexOf(d.v); if (i >= 0) parts.splice(i, 1); else parts.push(d.v); ta.value = parts.join(', '); (ui.keep = ui.keep || {})['pm-note'] = ta.value; document.querySelectorAll('[data-a="pmChip"]').forEach((b) => b.classList.toggle('primary', parts.indexOf(b.dataset.v) >= 0)); return; }
     if (!need()) return;
     if (d.a === 'pmGoRb') { pmClear(); ui.pmTab = 'eq'; ui.pmQ = d.v; ui.pmArea = ''; ui.pmOpen = 'e' + d.v; ui.pmProb = false; ui.pmRb = true; return render(); }
     if (d.a === 'pmGo') { pmClear(); ui.pmTab = 'eq'; ui.pmQ = d.v; ui.pmArea = ''; ui.pmOpen = 'e' + d.v; ui.pmProb = false; return render(); }
     if (d.a === 'pmOpen') { pmClear(); ui.pmOpen = d.v; ui.pmProb = !!d.p; return render(); }
-    const note = (($('#pm-note') || {}).value || '').trim(), down = !!($('#pm-down') || {}).checked;
+    const quick = d.a === 'pmQuick'; if (quick) d = Object.assign({}, d, { a: 'pmSaveEq' });
+    const note = quick ? 'Checked — OK, no problems' : (($('#pm-note') || {}).value || '').trim(), down = !quick && !!($('#pm-down') || {}).checked;
     if ((d.a === 'pmSaveEq' || d.a === 'pmSaveDaily') && down && !note) return toast('Say what is wrong with the machine.', 'bad');
     if (d.a === 'pmSaveEq') {
       const e = (store.pmEq || []).find((x) => x.equip_id === d.v); if (!e || !window.WT_SB) return toast('Maintenance database not loaded.', 'bad');
-      const T = pmTasksOf(e), chk = T.map((t, k) => ({ task: t, ok: !!($('#pm-c' + k) || {}).checked })); if (ui.pmPhoto) chk.push({ photo: ui.pmPhoto });
+      const T = pmTasksOf(e), chk = T.map((t, k) => ({ task: t, ok: quick || !!($('#pm-c' + k) || {}).checked })); if (!quick && ui.pmPhoto) chk.push({ photo: ui.pmPhoto });
       const cal = e.maint_type === 'calibration', done = chk.filter((x) => x.ok).map((x) => x.task);
-      const wo = { equip_id: e.equip_id, work_date: ymd(Date.now()), tech: ui.user.name, tasks_done: note || (done.length ? done.join(', ') : cal ? 'Calibration checked' : 'PM completed'), parts_used: (($('#pm-parts') || {}).value || '').trim() || null, supervisor: (($('#pm-sup') || {}).value || '').trim() || null, location: e.area || null, notes: down ? 'PROBLEM — machine down / needs repair. Logged in traveler app.' : 'Logged in traveler app', checklist: chk };
-      const rb = !!($('#pm-rb') || {}).checked; if (rb) { wo.tasks_done = 'Bi-annual rebuild — ' + wo.tasks_done; }
+      const wo = { equip_id: e.equip_id, work_date: ymd(Date.now()), tech: ui.user.name, tasks_done: note || (done.length ? done.join(', ') : cal ? 'Calibration checked' : 'PM completed'), parts_used: quick ? null : (($('#pm-parts') || {}).value || '').trim() || null, supervisor: quick ? null : (($('#pm-sup') || {}).value || '').trim() || null, location: e.area || null, notes: down ? 'PROBLEM — machine down / needs repair. Logged in traveler app.' : 'Logged in traveler app', checklist: chk };
+      const rb = !quick && !!($('#pm-rb') || {}).checked; if (rb) { wo.tasks_done = 'Bi-annual rebuild — ' + wo.tasks_done; }
       const r1 = await window.WT_SB.from('pm_work_orders').insert([wo]).select(); if (r1.error) return toast('Not saved: ' + r1.error.message, 'bad');
       if (!down) { const up = { last_pm_date: wo.work_date, updated_at: new Date().toISOString() }; if (rb) up.last_rebuild_date = wo.work_date; if (cal) up.cal_due = ymd(Date.now() + (e.pm_freq_days || 365) * DAY); await window.WT_SB.from('pm_equipment').update(up).eq('equip_id', e.equip_id); Object.assign(e, up); }
       (store.pmWo = store.pmWo || []).unshift((r1.data && r1.data[0]) || wo);
