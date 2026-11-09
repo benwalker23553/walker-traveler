@@ -2360,7 +2360,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     }).catch(() => { store.masterN = -1; });
   }
   const dwN = (r) => (r.series === 'cnc' ? 1 + (r.cncSetup || []).length : r.docs.length || (r.master && store.dwg && store.dwg[r.dw] ? store.dwg[r.dw].n : 0));
-  const SHARD = {}, PRINTS_ONLY = { '1002698': 'UPLOAD-1002698' }, ALIAS = { '102911': '1002911' }, PR = {};
+  const SHARD = {}, PRINTS_ONLY = { '1002698': 'UPLOAD-1002698' }, ALIAS = { '102911': '1002911', 'KWI-4700QT-1': 'KWI-4700' }, PR = {};
   function printsFor(slug) { PR[slug] = PR[slug] || { master: true, docs: [], dw: slug }; ensureDocs(PR[slug]); return PR[slug]; }
   function ensureDocs(r) {
     if (!r || !r.master || r.docs.length || r.dwLoading || !store.dwg || !store.dwg[r.dw]) return;
