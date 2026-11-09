@@ -123,7 +123,8 @@ p { margin: 0; }
 .oprail { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
 .opchip { flex: 0 0 auto; min-width: 104px; min-height: 60px; text-align: left; border: 1.5px solid var(--line); background: var(--panel); border-radius: var(--r); padding: 6px 10px; display: flex; flex-direction: column; }
 .opchip b { font-family: var(--f-mono); font-size: 1.05rem; } .opchip span { font-size: .74rem; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
-.opchip.cur { border-color: var(--navy); border-width: 3px; } .opchip.s-done { background: var(--ok-bg); } .opchip.s-hold { background: var(--bad-bg); border-color: var(--bad); }
+.opchip.cur { border-color: var(--navy); border-width: 3px; }
+.opchip { max-width: 210px; } .opchip span:nth-of-type(1) { text-transform: none; letter-spacing: 0; font-size: .82rem; line-height: 1.2; white-space: normal; color: var(--ink); } .opchip.s-done { background: var(--ok-bg); } .opchip.s-hold { background: var(--bad-bg); border-color: var(--bad); }
 .tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 2px solid var(--navy); }
 .tabs button { min-height: 48px; padding: 4px 16px; border: 0; background: none; font-family: var(--f-display); font-size: 1.2rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--ink2); border-radius: var(--r) var(--r) 0 0; white-space: nowrap; }
 .tabs button.on { background: var(--navy); color: var(--on-navy); }
@@ -946,6 +947,15 @@ window.WT_ESP = [
         op = guard(job, i, ctx); if (op.st !== 'setup') fail('Setup is not running.');
         touch(job, i, ctx); op.st = 'setup_done'; op.setup = { by: ctx.u.id, at: ctx.at, vals: p.vals || {} }; seg(op, null, ctx);
         log(job, ctx, 'Setup finished', 'Op ' + op.n + (p.vals && Object.keys(p.vals).length ? ' · ' + Object.keys(p.vals).map((k) => k + ': ' + p.vals[k]).join(', ') : '')); break;
+      case 'startStep': {
+        // Final assembly / packaging: like the paper Form 9-3 — operator does the step, then an inspector signs it. No setup or first article.
+        op = guard(job, i, ctx); if (['ready', 'setup', 'setup_done'].indexOf(op.st) < 0) fail('This step is already started.');
+        if (!(job.final || isFinal(routing(job.rid)))) fail('Use Start setup on this traveler.');
+        if (job.blocked) fail('Not ready to run: ' + job.blocked.reason + '.');
+        touch(job, i, ctx); seg(op, null, ctx); if (!op.setup) op.setup = { by: ctx.u.id, at: ctx.at, vals: {}, none: true };
+        op.firstWaived = true; op.midWaived = true; op.st = 'running'; seg(op, 'run', ctx);
+        log(job, ctx, 'Step started', 'Op ' + op.n + ' · final assembly: operator does the step, inspector signs it'); break;
+      }
       case 'startFirst':
         op = guard(job, i, ctx);
         if (op.st !== 'setup_done' && op.st !== 'ready') fail('Finish setup before the first article.');
@@ -1028,7 +1038,12 @@ window.WT_ESP = [
         if (p.result === 'pass') {
           if (c.type === 'first') { op.st = 'authorized'; seg(op, null, ctx); }
           if (c.type === 'mid') op.midOk = true;
-          if (c.type === 'final') { op.good = op.pend.good; op.scrap += op.pend.scrap; op.short = op.pend.short; op.shortReason = op.pend.shortReason; op.pend = null; op.st = 'closed'; op.closedAt = ctx.at; seg(op, null, ctx); if (unmoved(job, i) === 0) op.st = 'done'; complete(job, ctx); }
+          if (c.type === 'final') { op.good = op.pend.good; op.scrap += op.pend.scrap; op.short = op.pend.short; op.shortReason = op.pend.shortReason; op.pend = null; op.st = 'closed'; op.closedAt = ctx.at; seg(op, null, ctx);
+            { const nx = job.ops[i + 1], q = unmoved(job, i);
+              if ((job.final || isFinal(routing(job.rid))) && nx && q > 0 && nx.station === op.station && !openHolds(job, op.n).length) {
+                const lot = { id: 'C' + (job.lots.length + 1), from: i, n: op.n, qty: q, to: op.station, expect: finalDest(job, i), st: 'received', by: ctx.u.id, at: ctx.at, direct: false, reason: '', recvBy: ctx.u.id, recvAt: ctx.at, recv: q, counted: q, auto: true };
+                job.lots.push(lot); log(job, ctx, 'Parts moved', lot.id + ' · ' + q + ' pcs from op ' + op.n + ' to op ' + nx.n + ' (same station)'); arrive(job, lot, ctx); } }
+            if (unmoved(job, i) === 0) op.st = 'done'; complete(job, ctx); }
           log(job, ctx, label + ' approved', 'Op ' + op.n + ' · checked ' + c.checked + (c.meas ? ' · ' + c.meas : ''));
         } else {
           if (!p.reason) fail('Pick the reason it failed.');
@@ -1079,12 +1094,13 @@ window.WT_ESP = [
         if (!p.dest) fail('Pick where the parts are going.');
         const next = job.ops[i + 1], expect = finalDest(job, i);
         if (p.dest !== expect && !p.reason && !(!next && (routing(job.rid) || {}).anyDest)) fail('The next step is at ' + station(expect).name + '. Pick a reason for sending them elsewhere.');
-        const same = (next && p.dest === op.station && next.station === op.station) || (!next && p.dest === op.station);
-        const lot = { id: 'C' + (job.lots.length + 1), from: i, n: op.n, qty: q, to: p.dest, expect, st: same ? 'received' : (p.direct ? 'delivered' : 'transit'), by: ctx.u.id, at: ctx.at, direct: !!p.direct, reason: p.reason || '' };
+        // One-step hand-off: the person moving the parts records the count and who they gave them to. They are ready at the next area right away — no separate receive.
+        const same = !p.transit || (next && p.dest === op.station && next.station === op.station) || (!next && p.dest === op.station);
+        const lot = { id: 'C' + (job.lots.length + 1), from: i, n: op.n, qty: q, to: p.dest, expect, st: same ? 'received' : (p.direct ? 'delivered' : 'transit'), by: ctx.u.id, at: ctx.at, direct: !!p.direct, reason: p.reason || '', handTo: p.handTo || '' };
         if (early) lot.early = true;
         job.lots.push(lot);
-        log(job, ctx, early ? 'Parts sent ahead' : 'Parts moved', lot.id + ' · ' + q + ' pcs from op ' + op.n + ' to ' + station(p.dest).name + (p.direct ? ' (delivered directly)' : '') + (p.reason ? ' · ' + p.reason : ''));
-        if (same) { lot.recvBy = ctx.u.id; lot.recvAt = ctx.at; lot.recv = q; lot.counted = q; arrive(job, lot, ctx); }
+        log(job, ctx, early ? 'Handed off ahead' : 'Handed off', lot.id + ' · ' + q + ' pcs from op ' + op.n + ' to ' + station(p.dest).name + (p.handTo ? ' · given to ' + (p.handName || p.handTo) : '') + (p.reason ? ' · ' + p.reason : ''));
+        if (same) { lot.recvBy = p.handTo || ctx.u.id; lot.recvAt = ctx.at; lot.recv = q; lot.counted = q; lot.oneStep = true; arrive(job, lot, ctx); }
         if (!early && unmoved(job, i) === 0) op.st = 'done';
         break;
       }
@@ -1198,8 +1214,8 @@ window.WT_ESP = [
     if (openHolds(job, op.n).length) return 'Supervisor: record disposition';
     if (op.paused) return 'Resume';
     switch (op.st) {
-      case 'ready': return job.blocked ? 'Not ready: ' + job.blocked.reason : 'Start setup';
-      case 'setup': return 'Finish setup';
+      case 'ready': return job.blocked ? 'Not ready: ' + job.blocked.reason : (job.final || isFinal(routing(job.rid))) ? 'Start step' : 'Start setup';
+      case 'setup': return (job.final || isFinal(routing(job.rid))) ? 'Start step' : 'Finish setup';
       case 'setup_done': return 'Start first article';
       case 'first_piece': return 'Request first-article approval';
       case 'fp_wait': return 'Supervisor: sign first article';
@@ -2398,25 +2414,28 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (o.checks) h += '<div><h3>Before pouring</h3><ul class="clean">' + o.checks.map((c) => '<li>' + esc(c) + '</li>').join('') + '</ul></div>';
     return h;
   }
+  // Short label for a final-assembly step chip, from the traveler's own words (first sentence, ~32 chars)
+  function stepShort(t) { let x = String(t || '').split(/[.;]/)[0].trim(); x = x.charAt(0).toUpperCase() + x.slice(1).toLowerCase(); return x.length > 34 ? x.slice(0, 32).replace(/\s+\S*$/, '') + '…' : x; }
   function actions(j, i) {
     const op = j.ops[i], id = esc(j.id), d = ' data-job="' + id + '" data-i="' + i + '"';
     const holds = W.openHolds(j, op.n);
     const A = (a, label, cls) => '<button class="btn ' + (cls || 'primary') + '" data-a="' + a + '"' + d + '>' + label + '</button>';
     const M = (m, label, cls) => '<button class="btn ' + (cls || 'primary') + '" data-m="' + m + '"' + d + '>' + label + '</button>';
     let main = '', msg = '', sec = '';
-    const active = op.st !== 'pending' && op.st !== 'done';
+    const active = op.st !== 'pending' && op.st !== 'done', FA = j.final || W.isFinal(W.routing(j.rid));
     if (holds.length) { msg = 'On hold. Nothing moves until a supervisor records a disposition.'; main = '<button class="btn primary stop" data-m="dispose" data-job="' + id + '" data-hold="' + holds[0].id + '">Record disposition</button>'; }
     else if (op.paused) { msg = op.paused.auto ? 'Clocked out at the end of the shift. Sign in with your PIN and tap Start again.' : 'Paused: ' + esc(op.paused.reason) + ' · ' + fDur(Date.now() - op.paused.at); main = A('resume', op.paused.auto ? 'Start again' : 'Resume', 'primary go'); }
     else switch (op.st) {
       case 'pending': { const inc = j.lots.filter((l) => l.from === i - 1 && (l.st === 'transit' || l.st === 'delivered'));
         msg = inc.length ? inc.reduce((a, l) => a + l.qty, 0) + ' pcs are on the way from op ' + esc(j.ops[i - 1].n) + '. Count them and tap Receive to start this step.' : 'Parts for this operation have not been received at ' + esc(W.station(op.station).name) + ' yet.';
         main = inc.map((l) => l.to === op.station ? '<button class="btn primary go" data-m="receive" data-job="' + id + '" data-lot="' + esc(l.id) + '">Receive ' + esc(l.id) + ' · ' + l.qty + ' pcs</button>' : '<button class="btn primary" data-m="reroute" data-job="' + id + '" data-lot="' + esc(l.id) + '">' + esc(l.id) + ' went to ' + esc(W.station(l.to).name) + ' — send it to ' + esc(W.station(op.station).name) + '</button>').join(''); break; }
-      case 'ready':
+      case 'ready': case 'setup': case 'setup_done':
+        if (FA && !j.blocked && !holds.length && !op.paused) { msg = op.qtyIn + ' pcs here. Do this step, then tap Finish and have the inspector sign it.'; main = A('startStep', '▶ Start this step', 'primary go'); sec = M('block', 'Can’t start', 'sm'); break; }
+        if (op.st === 'setup') { msg = 'Setup running · ' + fDur(W.dur(op, 'setup', Date.now())); main = M('setup', 'Finish setup'); break; }
+        if (op.st === 'setup_done') { msg = 'Setup done. Make the first article for approval.'; main = A('startFirst', 'Start first article', 'primary go'); break; }
         if (j.blocked) { msg = 'Not ready to run: ' + esc(j.blocked.reason) + '.'; main = '<button class="btn primary" data-a="unblock" data-job="' + id + '">' + (j.blocked.auto ? 'Supervisor: start without receipt' : 'Mark ready') + '</button>'; }
         else { msg = op.qtyIn + ' pcs here and ready.'; main = A('startSetup', 'Start setup', 'primary go') + A('startFirst', 'No setup needed — start first article', ''); sec = M('block', 'Can’t start', 'sm'); }
         break;
-      case 'setup': msg = 'Setup running · ' + fDur(W.dur(op, 'setup', Date.now())); main = M('setup', 'Finish setup'); break;
-      case 'setup_done': msg = 'Setup done. Make the first article for approval.'; main = A('startFirst', 'Start first article', 'primary go'); break;
       case 'first_piece': msg = 'Make the first article, then call a supervisor.'; main = A('reqFirst', 'Request first-article approval'); break;
       case 'fp_wait': msg = 'Batch is locked until a supervisor signs the first article.'; main = M('sign-first', '✍ Supervisor: sign first article'); break;
       case 'authorized': msg = 'First article approved. Batch is authorized.'; main = A('startBatch', 'Start batch', 'primary go'); break;
@@ -2426,7 +2445,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
           if (W.sendable(j, i) > 0 && !op.paused && nx) { msg += ' Done with some? Send them on so ' + esc(W.station(W.finalDest(j, i)).name) + ' can start while you keep running.'; main += M('move', '➜ Move some to op ' + esc(nx.n) + ' (' + esc(W.station(W.finalDest(j, i)).name) + ')', 'primary go'); } }
         main += M('finish', 'Finish operation', 'primary');
         break;
-      case 'fin_wait': msg = 'Counts submitted. Parts stay here until a supervisor signs the operation closed.'; main = M('sign-final', '✍ Supervisor: closing signature'); break;
+      case 'fin_wait': msg = FA ? 'Step done. The inspector checks it and signs.' : 'Counts submitted. Parts stay here until a supervisor signs the operation closed.'; main = M('sign-final', FA ? '✍ Inspector: sign off this step' : '✍ Supervisor: closing signature'); break;
       case 'closed': msg = W.unmoved(j, i) + ' approved pcs waiting to move.'; main = M('move', 'Move parts', 'primary go'); sec = M('correct', 'Correct count', 'sm'); break;
       case 'done': msg = op.paper ? 'Done on paper before this traveler went live. Not signed on the tablet.' : 'Operation closed and parts moved.'; break;
     }
@@ -2610,7 +2629,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         : '<div class="banner warn"><div><b>Shipping release needed.</b> Marty or QA enters the customer PO # and Sales Order #. Required before the closing signature.</div><button class="btn sm primary" data-m="ship" data-job="' + esc(j.id) + '">Enter PO / Sales Order</button></div>') : '') +
       (j.parent && store.jobs[j.parent] ? '<p class="small">Component for <button class="btn sm" data-open="' + esc(j.parent) + '">Shop Order ' + esc(store.jobs[j.parent].so) + ' · ' + esc(store.jobs[j.parent].pn) + '</button></p>' : '') +
       (j.needs || []).map((n) => { const k = store.jobs[n.id]; return '<p class="small"><b>Needs ' + esc(n.label) + ' before op ' + j.ops[n.i].n + ':</b> ' + (k ? (k.st === 'complete' ? '✔ received' : esc(W.where(k))) : 'job not found') + (n.waived ? ' · started without receipt by ' + esc(nm(n.waived.by)) : '') + ' <button class="btn sm" data-open="' + esc(n.id) + '">Shop Order ' + esc(n.so) + '</button></p>'; }).join('') + '</div></div>';
-    h += '<div class="oprail">' + j.ops.map((op, k) => '<button class="opchip ' + (k === i ? 'cur ' : '') + (op.st === 'done' ? 's-done ' : '') + (W.openHolds(j, op.n).length ? 's-hold ' : '') + (r.ops[k] && rk(r, r.ops[k]) ? 'rk-' + rk(r, r.ops[k]) : '') + '" data-op="' + k + '"><b>' + op.n + '</b><span>' + esc(W.station(op.station).name) + '</span><span>' + esc(W.openHolds(j, op.n).length ? '■ Hold' : op.st === 'done' ? '✔ Done' : op.paused ? 'Paused' : W.ST_LABEL[op.st]) + '</span></button>').join('') + '</div>';
+    h += '<div class="oprail">' + j.ops.map((op, k) => '<button class="opchip ' + (k === i ? 'cur ' : '') + (op.st === 'done' ? 's-done ' : '') + (W.openHolds(j, op.n).length ? 's-hold ' : '') + (r.ops[k] && rk(r, r.ops[k]) ? 'rk-' + rk(r, r.ops[k]) : '') + '" data-op="' + k + '"><b>' + op.n + '</b><span>' + esc(r.ops[k] && r.ops[k].text ? stepShort(r.ops[k].text) + ((j.final || W.isFinal(r)) ? '' : ' · ' + W.station(op.station).name) : W.station(op.station).name) + '</span><span>' + esc(W.openHolds(j, op.n).length ? '■ Hold' : op.st === 'done' ? '✔ Done' : op.paused ? 'Paused' : W.ST_LABEL[op.st]) + '</span></button>').join('') + '</div>';
     h += '<div class="tabs" role="tablist">' + [['work', 'Operation'], ['docs', 'Prints (' + dwN(r) + ')'], ['record', 'Record']].map((t) => '<button role="tab" class="' + (ui.tab === t[0] ? 'on' : '') + '" data-tab="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>';
     return h + (ui.tab === 'docs' ? docsTab(j, r) : ui.tab === 'record' ? recordTab(j, r) : workTab(j, r, i));
   }
@@ -2965,9 +2984,9 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
           (early ? '<h3>How many are done and going now?</h3><div class="tiles">' + [10, 25, 50, 100, Math.floor(left / 2), left].filter((v, k, a) => v >= 1 && v <= left && a.indexOf(v) === k).sort((a, b) => a - b).map((v) => '<button class="btn ' + (String(m.qty) === String(v) ? 'sel' : '') + '" data-set="qty" data-v="' + v + '"><span>' + (v === left ? 'All ' + v : v) + '</span><small>' + (v === left ? 'everything made so far' : 'pcs') + '</small></button>').join('') + '</div>' : '') +
           '<div class="grid2">' + inp('qty', early ? 'Or type the count' : 'How many pieces are moving?', m, 'type="number" inputmode="numeric" min="1" max="' + left + '"') + inp('boxes', 'How many boxes or containers?', m, 'type="number" inputmode="numeric" min="1"') + '</div><p class="small muted">Each box gets its own number and label. Pieces are split evenly across the boxes.' + (early ? ' You keep running here — finish the operation later as usual.' : '') + '</p>' +
           (m.dest && m.dest !== expect ? '<h3>Why not ' + esc(W.station(expect).name) + '?</h3>' + tiles('reason', ['No room at the next area', 'For rework', 'Customer or stock', 'Told by supervisor'], m) : '') +
-          (m.dest && m.dest !== op.station ? '<label class="check"><input type="checkbox" data-f="direct"' + (m.direct ? ' checked' : '') + '> I am delivering them myself right now</label>' : '') +
+          (m.dest && m.dest !== op.station ? '<p class="small muted">One step: the parts are ready to work at ' + esc(W.station(m.dest).name) + ' as soon as you tap ' + (early ? 'Send them' : 'Record move') + '. Nobody has to receive them.</p>' : '') +
           (m.dest ? (() => { const sn = W.station(m.dest).name.toLowerCase(), fl = W.station(m.dest).floor, ppl = assignList().slice().sort((a, b) => (String(b.area || '').toLowerCase() === sn) - (String(a.area || '').toLowerCase() === sn) || (W.sideOf(m.dest) === (b.side || '') ) - (W.sideOf(m.dest) === (a.side || '')));
-            return '<label>Hand off to (optional) — it shows as YOU on their tablet, first in line at ' + esc(W.station(m.dest).name) + '<select data-f="handTo" class="field"><option value="">Anyone at ' + esc(W.station(m.dest).name) + '</option>' + ppl.map((x) => '<option value="' + esc(x.id) + '"' + (m.handTo === x.id ? ' selected' : '') + '>' + esc(x.name) + (x.area ? ' — ' + esc(x.area) : '') + '</option>').join('') + '</select></label>'; })() : '') + foot(early ? 'Send them' : 'Record move', 'go'); break;
+            return '<label>Gave them to (optional) — it shows as YOU on their tablet, first in line at ' + esc(W.station(m.dest).name) + '<select data-f="handTo" class="field"><option value="">Anyone at ' + esc(W.station(m.dest).name) + '</option>' + ppl.map((x) => '<option value="' + esc(x.id) + '"' + (m.handTo === x.id ? ' selected' : '') + '>' + esc(x.name) + (x.area ? ' — ' + esc(x.area) : '') + '</option>').join('') + '</select></label>'; })() : '') + foot(early ? 'Send them' : 'Record move', 'go'); break;
       }
       case 'receive': { const l = j.lots.find((x) => x.id === m.lot); h = '<h2>Receive container ' + l.id + '</h2><p><span class="mono">' + esc(j.pn) + '</span> · Shop Order ' + esc(j.so) + ' · sent as <b>' + l.qty + ' pcs</b> by ' + esc(nm(l.by)) + '.</p>' + inp('count', 'Count received', m, 'type="number" inputmode="numeric" min="0"') + '<p class="small muted">A different count is recorded and opens a hold for a supervisor to settle.</p>' + foot('Receive', 'go'); break; }
       case 'reroute': { const l = j.lots.find((x) => x.id === m.lot); h = '<h2>Send container ' + l.id + ' where?</h2><p>' + l.qty + ' pcs of <span class="mono">' + esc(j.pn) + '</span>. The next step is at <b>' + esc(W.station(l.expect).name) + '</b>.</p><div class="tiles">' + W.STATIONS.map((s) => '<button class="btn ' + (m.dest === s.id ? 'sel' : '') + '" data-set="dest" data-v="' + s.id + '"><span>' + esc(s.name) + '</span><small>' + (s.id === l.expect ? 'Next step' : '') + '</small></button>').join('') + '</div>' + foot('Redirect'); break; }
@@ -2978,7 +2997,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       case 'priority': h = '<h2>Rush · Shop Order ' + esc(j.so) + '</h2><p class="muted">Jobs run in due-date order. ASAP jumps the line.</p><label class="check"><input type="checkbox" data-f="rush"' + (m.rush ? ' checked' : '') + '> ASAP — goes to the top of every list on every tablet</label>' + inp('reason', 'Reason for the change', m) + foot('Save'); break;
       case 'paper': { const r = (store.logs[m.floor] || []).find((x) => x.t === m.t) || {}, rts = routingsFor(r.pn), open = r.s === 'O';
         const f = (l, v) => '<div><b>' + (v === '' || v == null ? '—' : esc(v)) + '</b><span>' + l + '</span></div>';
-        h = '<h2>Traveler #' + esc(r.t) + ' · paper</h2><p><span class="mono" style="font-size:1.3rem">' + esc(r.pn) + '</span> ' + esc(r.d) + '</p><div class="kv">' + f('Status', open ? 'Open' : 'Closed') + f('Floor', m.floor === 'metal' ? 'Metal' : m.floor === 'final' ? 'Final assembly' : 'Filter') + (m.floor === 'final' ? f('PO #', r.po) + f('Sales Order #', r.so) : '') + f('Qty planned', r.q) + f('Qty made', r.m) + f('Issued', sDate(ts(r.i))) + f('Due', sDate(ts(r.u))) + f('Closed', sDate(ts(r.c))) + f('Operator', r.o) + (floorAt(r.t) ? f('On the floor · count ' + wipDate(), floorAt(r.t)) : '') + '</div>' + (r.n ? '<p><b>Notes on the log:</b> ' + esc(r.n) + '</p>' : '') +
+        h = '<h2>Traveler #' + esc(r.t) + ' · paper</h2><p><span class="mono" style="font-size:1.3rem">' + esc(r.pn) + '</span> ' + esc(r.d) + '</p><div class="kv">' + f('Status', open ? 'Open' : 'Closed') + f('Floor', m.floor === 'metal' ? 'Metal' : m.floor === 'final' ? 'Final assembly' : 'Filter') + (m.floor === 'final' ? f('PO #', r.po) + f('Sales Order #', r.so) : '') + f('Qty planned', r.q) + f('Qty made', r.m) + f('Issued', sDate(ts(r.i))) + f('Due', sDate(ts(r.u))) + f('Closed', sDate(ts(r.c))) + f('Operator', r.o) + (floorAt(r.t) ? f('On the floor · count ' + wipDate(), floorAt(r.t)) : '') + '</div>' + (r.w ? '<p class="small"><b>' + (open ? 'Open' : 'Closed') + ' because:</b> ' + esc(r.w) + '</p>' : '') + (r.n ? '<p><b>Notes on the log:</b> ' + esc(r.n) + '</p>' : '') +
           (rts.length ? (rts.close ? '<div class="banner warn"><div><b>No exact match for ' + esc(r.pn) + '.</b> This is the closest master traveler in your folder. Check it is the right one before going live.</div></div>' : '') + '<h3>Master traveler' + (rts.length > 1 ? 's' : '') + ' on file</h3>' + rts.map((rt) => '<div class="banner info"><div><b>' + esc(kindOf(rt)) + '</b><br><span class="small">' + (rt.file ? esc(rt.file) + ' · ' : '') + rt.ops.length + ' operations · traveler rev ' + esc(rt.travRev) + (rt.travDate ? ' (' + esc(rt.travDate) + ')' : '') + ' · starts at ' + esc(W.station(rt.master ? mapStation(rt.ops[0].mach[0], rt.ops[0].text, m.floor, rt.kind) : rt.ops[0].station).name) + '</span></div><span class="row"><button class="btn sm" data-master="' + esc(rt.id) + '">Steps, prints and original traveler</button>' + '</span></div>' + (open ? (() => { const si = m.start && m.start.split('~')[0] === rt.id ? Number(m.start.split('~')[1]) : 0; return '<h3>Where is this traveler right now?</h3><p class="small muted">Tap the operation it is at. Earlier operations are marked done on paper.</p><div class="tiles">' + rt.ops.map((o, k) => '<button class="btn sm ' + (k === si ? 'sel' : '') + '" data-set="start" data-v="' + esc(rt.id) + '~' + k + '"><span>Op ' + esc(o.n) + '</span><small>' + esc(W.station(rt.master ? mapStation(o.mach[0], o.text, m.floor, rt.kind) : o.station).name) + ' · ' + esc(String(o.text || '').slice(0, 46)) + '</small></button>').join('') + '</div>' + inp('qtyNow', 'Pieces at this operation', m, 'type="number" inputmode="numeric" min="1"') + '<button class="btn primary go" style="min-height:64px;font-size:1.3rem" data-a="adopt" data-t="' + esc(r.t) + '" data-floor="' + m.floor + '" data-rid="' + esc(rt.id) + '" data-start="' + si + '">GO LIVE ON TABLET</button>'; })() : '')).join('') + (open ? '' : '<p class="muted">Closed on paper.</p>')
             : '<p class="muted">' + (store.masterN ? 'No master traveler found for this part number.' : 'Loading master travelers…') + '</p>') + (PRINTS_ONLY[key(r.pn)] ? (() => { const pr = printsFor(PRINTS_ONLY[key(r.pn)]); return '<h3>Prints on file</h3>' + (pr.docs.length ? pr.docs.map((d) => '<img src="' + esc(d.f) + '" alt="' + esc(d.t) + '" style="width:100%;border:1px solid var(--line);background:#fff">').join('') : '<p class="muted">Loading prints…</p>') + '<p class="small muted">This part has a print but no traveler of its own yet.</p>'; })() : '') + '<button class="btn" data-close>Close</button>'; break; }
       case 'master': { wide = true; const rt = W.routing(m.rid); ensureDocs(rt); const sup = ui.user && W.isApprover(ui.user), canIss = ui.user && W.canDispose(ui.user);
@@ -3111,7 +3130,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       case 'move': { const nb = Math.max(1, Math.floor(Number(m.boxes) || 1)), q = Math.floor(Number(m.qty)); let j2 = store.jobs[m.job];
         if (!(q >= 1)) return toast('Enter how many pieces are moving.', 'bad'); if (nb > q) return toast('More boxes than pieces.', 'bad'); if (nb > 60) return toast('60 boxes at most in one move.', 'bad');
         const base = Math.floor(q / nb), rem = q - base * nb, ids = [], at = Date.now(), ops = [];
-        try { for (let k = 0; k < nb; k++) { const mp = { i: m.i, qty: base + (k < rem ? 1 : 0), dest: m.dest, direct: m.direct, reason: m.reason }, mc = { u: ui.user, at, cfg: store.cfg }; ops.push(['move', mp, mc]); j2 = W.act(j2, 'move', mp, mc); ids.push(j2.lots[j2.lots.length - 1].id); } }
+        try { for (let k = 0; k < nb; k++) { const mp = { i: m.i, qty: base + (k < rem ? 1 : 0), dest: m.dest, reason: m.reason, handTo: m.handTo || '', handName: m.handTo ? nm(m.handTo) : '' }, mc = { u: ui.user, at, cfg: store.cfg }; ops.push(['move', mp, mc]); j2 = W.act(j2, 'move', mp, mc); ids.push(j2.lots[j2.lots.length - 1].id); } }
         catch (e) { if (e.user) return toast(e.message, 'bad'); throw e; }
         { const jid = m.job, want = ids.join(','); save(j2, ops, (out) => { const real = out.lots.slice(-nb).map((l) => l.id); if (real.join(',') !== want) { if (ui.modal && ui.modal.type === 'labels' && ui.modal.job === jid) { ui.modal.lots = real; renderModal(); } toast('Box numbers changed because another tablet moved parts at the same time. Print these labels.', 'bad'); } }); }
         if (m.handTo) { assignJob(j2, m.handTo, m.dest); toast('Handed off to ' + nm(m.handTo) + ' at ' + W.station(m.dest).name); }
@@ -3337,8 +3356,14 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   }
   setInterval(endOfDay, 60000);
   function need() { if (ui.user) return true; openModal({ type: 'login', who: null, pin: '' }); toast('Sign in first.'); return false; }
+  // Final assembly: the PO # and Sales Order # come from the Final Assembly Traveler Log
+  function shipFromLog(j) {
+    if (!j || !(j.final || j.floor === 'final') || W.shipOk(j)) return;
+    const lr = (store.logs.final || []).find((x) => String(x.t) === String(j.so)); if (!lr || !String(lr.po || '').trim() || !String(lr.so || '').trim()) return;
+    const nj = W.clone(j), at = Date.now(); nj.ship = { po: String(lr.po).trim(), sales: String(lr.so).trim(), by: 'log', at }; nj.log.push({ at, by: 'system', a: 'Shipping release', d: 'PO ' + nj.ship.po + ' · Sales Order ' + nj.ship.sales + ' · from the Final Assembly Traveler Log' }); save(nj);
+  }
   function openJob(id, i) {
-    const j = store.jobs[id]; if (!j) return;
+    const j = store.jobs[id]; if (!j) return; shipFromLog(j);
     let k = i != null ? Number(i) : -1;
     if (k < 0) k = j.ops.findIndex((o, x) => W.bucket(j, x) && inView(o.station));
     if (k < 0) k = j.ops.findIndex((o, x) => W.bucket(j, x));
@@ -3499,7 +3524,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       if (d.a === 'adopt') {
         const r = (store.logs[d.floor] || []).find((x) => x.t === d.t), rt = r && W.routing(d.rid);
         if (!rt) return toast('That master traveler is not loaded yet.', 'bad');
-        try { const j = W.newJob({ rid: rt.id, so: r.t, qty: Number(r.q) || 0, due: r.u, pri: jobs().filter((x) => x.st !== 'complete').length + 1 }, { u: ui.user, at: Date.now() });
+        try { const j = W.newJob({ rid: rt.id, so: r.t, qty: Number(r.q) || 0, due: r.u, pri: jobs().filter((x) => x.st !== 'complete').length + 1, ship: d.floor === 'final' && r.po && r.so ? { po: r.po, sales: r.so } : null }, { u: ui.user, at: Date.now() });
           if (rt.master) j.ops.forEach((o, i) => { o.station = mapStation(rt.ops[i].mach[0], rt.ops[i].text, d.floor, rt.kind); });
           if (!j.name || j.name === rt.kind) j.name = r.d || j.name;
           if (r.pn && (!j.pn || j.pn === 'N/A' || key(j.pn) !== key(r.pn))) j.pn = r.pn;
