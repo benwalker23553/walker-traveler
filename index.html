@@ -1363,11 +1363,20 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     let r = ES[t];
     if (r == null) { const nums = []; const k = t.replace(/\d+(?:[.,:]\d+)*/g, (x) => { nums.push(x); return '#'; }); if (k !== t && ES[k] != null) { let q = 0; r = ES[k].replace(/#/g, () => nums[q++]); } }
     if (r == null) for (const pr of ESP) { const mm = t.match(pr[0]); if (mm) { r = pr[1].replace(/\$(\d)/g, (z, d) => { const g = mm[Number(d)] || ''; const e = ES[g.trim()]; return e != null ? e : g; }); break; } }
+    if (r == null && STEP_ES) r = trStep(t);
     if (r == null) { if (window.__miss) window.__miss.add(t); return s; }
     return s.replace(t, r);
   }
+  // Traveler step text (from the master travelers) in Spanish: sentence by sentence from es_steps.json; numbers are kept as written
+  let STEP_ES = null, stepEsAsk = false;
+  function loadStepEs() { if (STEP_ES || stepEsAsk || LANG !== 'es') return; stepEsAsk = true; fetch('es_steps.json').then((r) => r.json()).then((x) => { STEP_ES = x; try { render(); } catch (e) { /* ok */ } }).catch(() => { setTimeout(() => { stepEsAsk = false; }, 300000); }); }
+  function trStep(t) {
+    if (!STEP_ES) return null; let any = false;
+    const out = t.replace(/\s+/g, ' ').split(/(?<=[.;])\s+/).map((p) => { if (!/[A-Za-z]/.test(p)) return p; const nums = [], k = p.trim().toUpperCase().replace(/\d+(?:[.,\/:-]\d+)*/g, (x) => { nums.push(x); return '§'; }); const e = STEP_ES[k] != null ? STEP_ES[k] : STEP_ES[k + '.'] != null ? STEP_ES[k + '.'] : STEP_ES[k.replace(/[.;]$/, '')]; if (e == null) return p; any = true; let q = 0; return e.replace(/§/g, () => (nums[q++] != null ? nums[q - 1] : '')); });
+    return any ? out.join(' ') : null;
+  }
   function trDom(root) {
-    if (LANG !== 'es' || !root) return;
+    if (LANG !== 'es' || !root) return; loadStepEs();
     const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.parentElement && n.parentElement.closest('.notr,.mono,script,style,.viewer,textarea,.lbl') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
     const L = []; while (w.nextNode()) L.push(w.currentNode);
     L.forEach((n) => { const v = trS(n.nodeValue); if (v !== n.nodeValue) n.nodeValue = v; });
@@ -2415,7 +2424,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     return h;
   }
   // Short label for a final-assembly step chip, from the traveler's own words (first sentence, ~32 chars)
-  function stepShort(t) { let x = String(t || '').split(/[.;]/)[0].trim(); x = x.charAt(0).toUpperCase() + x.slice(1).toLowerCase(); return x.length > 34 ? x.slice(0, 32).replace(/\s+\S*$/, '') + '…' : x; }
+  function stepShort(t) { const es = LANG === 'es' ? trStep(String(t || '')) : null; let x = String(es || t || '').split(/[.;]/)[0].trim(); x = x.charAt(0).toUpperCase() + x.slice(1).toLowerCase(); return x.length > 34 ? x.slice(0, 32).replace(/\s+\S*$/, '') + '…' : x; }
   function actions(j, i) {
     const op = j.ops[i], id = esc(j.id), d = ' data-job="' + id + '" data-i="' + i + '"';
     const holds = W.openHolds(j, op.n);
