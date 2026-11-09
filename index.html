@@ -2579,7 +2579,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const ks = []; const add = (v) => { const k = pKey(v); if (k.length >= 4 && P[k] && ks.indexOf(k) < 0) ks.push(k); };
     [j && j.pn, r.pn, r.wpn, String(r.file || '').split(' ')[0]].forEach(add);
     const txt = [hdr(r, 'material')].concat(r.ops.map((o) => o.text + ' ' + (o.dwg || ''))).join(' ');
-    (txt.match(/\b\d{7}\b|\b\d{2,3}-\d{4}(?:-\d{1,2})?\b|\b\d[A-Z]-\d{4}\b/g) || []).forEach(add);
+    (txt.toUpperCase().match(/\b(?:[A-Z]{2,4}\d{3,5}[A-Z]?|\d{7}|\d{2,3}-\d{4}(?:-\d{1,2})?|\d[A-Z]-\d{4})\b/g) || []).forEach(add);
     return ks.map((k) => Object.assign({ key: k }, P[k]));
   }
   const PDFR = {};
