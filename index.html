@@ -130,6 +130,8 @@ p { margin: 0; }
 .tabs button.on { background: var(--navy); color: var(--on-navy); }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .instr { font-size: 1.3rem; line-height: 1.45; font-weight: 500; max-width: 68ch; }
+.steps { margin: 10px 0 12px; padding-left: 1.6em; max-width: 70ch; } .steps li { font-size: 1.3rem; line-height: 1.4; font-weight: 500; margin: 0 0 10px; padding-left: 4px; }
+.steps li::marker { font-weight: 700; color: var(--navy); } .steps .l1 { display: block; } .steps .l2 { display: block; font-size: .95rem; font-weight: 400; color: var(--ink2); margin-top: 2px; } .steps .l2.es { font-style: italic; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { font-family: var(--f-mono); font-size: .9rem; border: 1.5px solid var(--ink2); border-radius: 4px; padding: 2px 8px; }
 .cp { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -1286,7 +1288,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage unavailable */ } } };
 
-  const ui = { station: 'all', user: null, view: 'station', jobId: null, opI: 0, tab: 'work', mtab: 'release', lsort: 'part', lfilt: 'active', lfloor: 'both', back: 'station', doc: 0, zoom: 100, modal: null, touched: Date.now(), fin: null, finTok: null, finErr: '' };
+  const ui = { stepEs: (() => { try { return localStorage.getItem('wt-stepes') === '1'; } catch (e) { return false; } })(), station: 'all', user: null, view: 'station', jobId: null, opI: 0, tab: 'work', mtab: 'release', lsort: 'part', lfilt: 'active', lfloor: 'both', back: 'station', doc: 0, zoom: 100, modal: null, touched: Date.now(), fin: null, finTok: null, finErr: '' };
   const store = { logs: {}, jobs: {}, cfg: W.clone(W.DEFAULT_CFG), mode: 'starting', loaded: false, queue: {}, busy: {}, redlines: {}, offline: false, readonly: false, db: null, sample: null, downloads: null };
 
   /* ---------- formatting ---------- */
@@ -1369,11 +1371,29 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   }
   // Traveler step text (from the master travelers) in Spanish: sentence by sentence from es_steps.json; numbers are kept as written
   let STEP_ES = null, stepEsAsk = false;
-  function loadStepEs() { if (STEP_ES || stepEsAsk || LANG !== 'es') return; stepEsAsk = true; fetch('es_steps.json').then((r) => r.json()).then((x) => { STEP_ES = x; try { render(); } catch (e) { /* ok */ } }).catch(() => { setTimeout(() => { stepEsAsk = false; }, 300000); }); }
+  function loadStepEs(force) { if (STEP_ES || stepEsAsk || (LANG !== 'es' && !force && !(window.__wtui && window.__wtui.stepEs))) return; stepEsAsk = true; fetch('es_steps.json').then((r) => r.json()).then((x) => { STEP_ES = x; try { render(); } catch (e) { /* ok */ } }).catch(() => { setTimeout(() => { stepEsAsk = false; }, 300000); }); }
   function trStep(t) {
     if (!STEP_ES) return null; let any = false;
     const out = t.replace(/\s+/g, ' ').split(/(?<=[.;])\s+/).map((p) => { if (!/[A-Za-z]/.test(p)) return p; const nums = [], k = p.trim().toUpperCase().replace(/\d+(?:[.,\/:-]\d+)*/g, (x) => { nums.push(x); return '§'; }); const e = STEP_ES[k] != null ? STEP_ES[k] : STEP_ES[k + '.'] != null ? STEP_ES[k + '.'] : STEP_ES[k.replace(/[.;]$/, '')]; if (e == null) return p; any = true; let q = 0; return e.replace(/§/g, () => (nums[q++] != null ? nums[q - 1] : '')); });
     return any ? out.join(' ') : null;
+  }
+  // Easy-read steps: one line per sentence, normal case (codes and part numbers stay as written), Spanish under each line when asked
+  const KEEP_UP = /^(I\.?D\.?|O\.?D\.?|DWG|SOP|PO|QC|QA|CAT|PSI|RPM|TIG|MIG|CNC|UV|NPT|PVC|SS|P\/N|N\/A|FA|OK|ID|OD|LH|RH|ISO|FIFO|MSDS|SDS|PPE|USA)$/;
+  function niceEn(p) {
+    let q = 0; return p.toLowerCase().replace(/[“"‘'][^“”"‘’']*[”"’']|[A-Za-z0-9#\/.\-]+/g, (w, at) => {
+      const orig = p.substr(at, w.length);
+      if (/^[“"‘']/.test(w)) return orig; // quoted label words stay as printed
+      if (/\d|#/.test(orig) || KEEP_UP.test(orig.replace(/[.,;:]+$/, '')) || /^[A-Z]{1,3}\d/.test(orig)) return orig;
+      if (/^(caterpillar|cummins|deere|john|penske|walker|grover|loctite|teflon|scotch-brite|nordson|graco|miller|lincoln)$/.test(w)) { q++; return w.charAt(0).toUpperCase() + w.slice(1); }
+      return q++ === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w;
+    });
+  }
+  function stepLines(text) {
+    return String(text || '').trim().replace(/\s+/g, ' ').split(/(?<=[.;])\s+/).filter((p) => p.trim()).map((p) => ({ en: /[a-z]/.test(p) ? p : niceEn(p), es: STEP_ES ? trStep(p) : null }));
+  }
+  function stepsHtml(text, wantEs) {
+    const L = stepLines(text), es = wantEs && STEP_ES;
+    return '<ol class="steps notr">' + L.map((x) => '<li>' + (LANG === 'es' && x.es ? '<span class="l1">' + esc(x.es) + '</span><span class="l2">' + esc(x.en) + '</span>' : '<span class="l1">' + esc(x.en) + '</span>' + (es && x.es ? '<span class="l2 es">' + esc(x.es) + '</span>' : '')) + '</li>').join('') + '</ol>';
   }
   function trDom(root) {
     if (LANG !== 'es' || !root) return; loadStepEs();
@@ -2424,7 +2444,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     return h;
   }
   // Short label for a final-assembly step chip, from the traveler's own words (first sentence, ~32 chars)
-  function stepShort(t) { const es = LANG === 'es' ? trStep(String(t || '')) : null; let x = String(es || t || '').split(/[.;]/)[0].trim(); x = x.charAt(0).toUpperCase() + x.slice(1).toLowerCase(); return x.length > 34 ? x.slice(0, 32).replace(/\s+\S*$/, '') + '…' : x; }
+  function stepShort(t) { const es = LANG === 'es' ? trStep(String(t || '')) : null; let x = String(es || t || '').split(/[.;](?:\s|$)/)[0].trim(); x = x.charAt(0).toUpperCase() + x.slice(1).toLowerCase(); return x.length > 34 ? x.slice(0, 32).replace(/\s+\S*$/, '') + '…' : x; }
   function actions(j, i) {
     const op = j.ops[i], id = esc(j.id), d = ' data-job="' + id + '" data-i="' + i + '"';
     const holds = W.openHolds(j, op.n);
@@ -2531,7 +2551,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     holds.forEach((x) => { h += '<div class="banner bad"><div><b>■ HOLD ' + x.id + ' · ' + esc(x.reason) + (x.sup && x.sup.name ? ' · ' + esc(x.sup.name) + (x.sup.ref ? ' (' + esc(x.sup.ref) + ')' : '') : '') + ' · ' + x.qty + ' pcs</b><br><span class="small">Opened by ' + esc(nm(x.by)) + ' · ' + esc(fTime(x.at)) + (x.note ? ' · ' + esc(x.note) : '') + '. Tag the parts and submit to Material Review for disposition.</span></div></div>'; });
     h += '<div class="chips">' + o.mach.map((m) => '<span class="chip">' + esc(m) + '</span>').join('') + (o.dwg ? '<span class="chip">DWG ' + esc(o.dwg) + '</span>' : '') + '</div>';
     const ls2 = liveStep(j.rid, op.n, o.text, j), ed = ls2.how === 'job' ? ls2.x : null;
-    { const esT = LANG === 'es' ? trStep(ls2.text) : null; h += '<p class="instr notr">' + esc(esT || ls2.text) + '</p>' + (esT ? '<p class="small muted notr">English: ' + esc(ls2.text) + '</p>' : ''); } h += (ed ? '<p class="small"><b>Changed for this job</b> by ' + esc(nm(ed.by)) + ' · ' + esc(fTime(ed.at)) + '. Master traveler: <span class="notr">' + esc(o.text) + '</span></p>' : '') +
+    if (ui.stepEs) loadStepEs(true); h += stepsHtml(ls2.text, ui.stepEs) + (LANG === 'es' ? '' : '<button class="btn sm" data-a="stepEs" style="width:auto;align-self:flex-start">' + (ui.stepEs ? 'Hide Spanish' : 'Ver en español') + '</button>'); h += (ed ? '<p class="small"><b>Changed for this job</b> by ' + esc(nm(ed.by)) + ' · ' + esc(fTime(ed.at)) + '. Master traveler: <span class="notr">' + esc(o.text) + '</span></p>' : '') +
       (ls2.how === 'redline' ? '<p class="small"><b>Changed by ' + esc(ls2.x.id) + (ls2.x.qaBy ? ' · signed ' + esc(nm(ls2.x.qaBy)) + ' + ' + esc(nm(ls2.x.okBy)) : '') + '</b> · ' + esc(ls2.x.reason) + ' · approved by ' + esc(nm(ls2.x.okBy)) + ' ' + esc(fTime(ls2.x.okAt)) + '. Was: <span class="notr">' + esc(o.text) + '</span></p>' : '');
     rlPending().filter((x) => x.rid === j.rid && x.n === op.n).forEach((x) => { h += rlCard(x); });
     if (ui.user && W.isApprover(ui.user)) h += '<button class="btn sm" data-m="editStep" data-job="' + esc(j.id) + '" data-i="' + i + '" style="align-self:flex-start">✎ Edit this step for this job</button>';
@@ -3426,6 +3446,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (d.a === 'issueFrom') { const rt = W.routing(d.rid); ui.view = 'manage'; ui.mtab = 'release'; ui.relQ = rt.pn; ui.relRid = rt.id; closeModal(); render(); window.scrollTo(0, 0); return; }
     if (d.paper) { $('#results').hidden = true; { const pr = (store.logs[d.floor] || []).find((x) => x.t === d.paper) || {}; return openModal({ type: 'paper', t: d.paper, floor: d.floor, start: '', qtyNow: pr.q || '' }); } }
     if (d.lfilt) { ui.lfilt = d.lfilt; return render(); }
+    if (d.a === 'stepEs') { ui.stepEs = !ui.stepEs; try { localStorage.setItem('wt-stepes', ui.stepEs ? '1' : ''); } catch (e) { /* ok */ } if (ui.stepEs && !STEP_ES) { stepEsAsk = false; loadStepEs(true); } return render(); }
     if (t.id === 'b-lang') { LANG = LANG === 'es' ? 'en' : 'es'; try { localStorage.setItem('wt-lang', LANG); } catch (e) { /* this tablet only */ } document.documentElement.lang = LANG; render(); renderModal(); return; }
     if (t.id === 'b-full') { const de = document.documentElement, no = () => toast('Full screen is not available in this view. Open the link in Chrome to use it.', 'bad');
       try { if (!de.requestFullscreen) no(); else (document.fullscreenElement ? document.exitFullscreen() : de.requestFullscreen()).catch(no); } catch (er) { no(); } return; }
