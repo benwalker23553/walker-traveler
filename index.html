@@ -1852,10 +1852,10 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (ui.view === 'pm' || ui.view === 'cal' || ui.view === 'home') render();
   }
   const workDay = (t) => { let d = day0(t); while ([5, 6, 0].indexOf(new Date(d).getDay()) >= 0) d += DAY; return d; }; // shop runs 4x10 Mon–Thu
-  function eqDue(e) { // maintenance machines: last PM + every N days, never earlier than the planned day (due_date). Calibration gages: cal due date.
+  function eqDue(e) { // maintenance machines: the planned day (due_date) from the 12-month schedule; once serviced after it, last PM + every N days. Calibration gages: cal due date.
     const cal = e.maint_type === 'calibration';
     let due = cal && e.cal_due ? pD(e.cal_due) : e.last_pm_date && e.pm_freq_days ? pD(e.last_pm_date) + e.pm_freq_days * DAY : 0;
-    if (!cal && e.due_date && pD(e.due_date) > due) due = pD(e.due_date);
+    if (!cal && e.due_date && (!e.last_pm_date || pD(e.due_date) > pD(e.last_pm_date))) due = pD(e.due_date); // planned day from the 12-month schedule wins until the machine is serviced
     if (due && !cal) due = workDay(due);
     if (e.status !== 'active') return { st: 'inactive', due, cal };
     if (!due) return { st: 'unknown', due, cal };
