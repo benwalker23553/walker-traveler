@@ -2558,7 +2558,6 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   const IS_WV = /; wv\)|\bwv\b.*Chrome|Android.*Version\/[\d.]+.*Chrome/i.test(navigator.userAgent || '');
   function photoBtn(kind, label, attrs, cls) {
     const idA = kind === 'fx' ? 'fx-photo' : kind === 'pm' ? 'pm-photo' : 'jn-photo';
-    if (IS_WV) return '<label class="btn' + (cls ? ' ' + cls : '') + '" style="cursor:pointer">' + label + '<input id="' + idA + '" type="file" accept="image/*" capture="environment" hidden' + attrs + '></label>';
     return '<button class="btn' + (cls ? ' ' + cls : '') + '" data-a="camOpen" data-kind="' + kind + '"' + attrs + '>' + label + '</button>';
   }
   function camClose() { if (CAM && CAM.stream) CAM.stream.getTracks().forEach((t) => t.stop()); CAM = null; const el = $('#cam'); if (el) el.remove(); }
@@ -2569,15 +2568,30 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const idA = ds.kind === 'fx' ? 'fx-photo' : ds.kind === 'pm' ? 'pm-photo' : 'jn-photo', da = ds.kind === 'fx' ? ' data-rid="' + esc(ds.rid) + '" data-n="' + esc(ds.n) + '" data-pn="' + esc(ds.pn) + '" data-fx="' + esc(ds.fx || '') + '"' : ' data-job="' + esc(ds.job) + '" data-op="' + esc(ds.op) + '"';
     el.innerHTML = '<video id="cam-v" autoplay playsinline muted style="max-width:100%;max-height:70vh;background:#111;border-radius:8px"></video><p id="cam-msg" style="color:#fff;margin:0;text-align:center">' + (ds.kind === 'fx' ? 'Point at the fixture and tap Take photo.' : 'Point at the part and tap Take photo.') + '</p>' +
       '<div class="row" style="gap:10px;flex-wrap:wrap;justify-content:center"><button class="btn primary go" style="min-height:64px;font-size:1.3rem;min-width:220px" data-a="camShot">📸 Take photo</button>' +
-      '<label class="btn" style="cursor:pointer">Pick from files<input id="' + idA + '" type="file" accept="image/*" hidden' + da + '></label><button class="btn" data-a="camClose">Cancel</button></div>';
+      '<label class="btn" style="cursor:pointer;min-height:64px;font-size:1.1rem">📷 Camera app<input id="' + idA + '" type="file" accept="image/*" capture="environment" hidden' + da + '></label>' +
+      '<label class="btn" style="cursor:pointer;min-height:64px">🖼 Pick from files<input id="' + idA + '" type="file" accept="image/*" hidden' + da + '></label><button class="btn" data-a="camClose">Cancel</button></div>' +
+      '<p id="cam-diag" style="color:#888;font-size:11px;margin:0;text-align:center"></p>';
     document.body.appendChild(el);
+    el.addEventListener('click', (ev) => {
+      const lb = ev.target.closest && ev.target.closest('label'); if (!lb) return;
+      let left = false; const gone = () => { left = true; }; window.addEventListener('blur', gone, { once: true }); document.addEventListener('visibilitychange', gone, { once: true });
+      setTimeout(() => { if (left || !$('#cam')) return; const m = $('#cam-msg'); if (m) m.innerHTML = '<b>This tablet did not open the camera app.</b><br>The kiosk app is blocking file upload / camera. Turn those on in its settings.'; camDiag('picker-no-open'); }, 3000);
+    });
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('no camera API');
       CAM.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
       const v = $('#cam-v'); if (v) { v.srcObject = CAM.stream; await v.play().catch(() => {}); }
+      camDiag('live-ok');
     } catch (e) {
-      const m = $('#cam-msg'); if (m) m.innerHTML = '<b>The camera is blocked on this tablet.</b><br>In the kiosk / browser app settings turn on <b>camera access</b> (and file upload), or tap Pick from files.';
+      const m = $('#cam-msg'); if (m) m.innerHTML = '<b>Live camera is blocked here (' + esc((e && e.name) || 'error') + ').</b><br>Tap <b>📷 Camera app</b> below. If nothing opens, the kiosk app needs <b>camera</b> and <b>file upload</b> turned on.';
+      camDiag('live-fail:' + ((e && (e.name + ' ' + e.message)) || e));
     }
+  }
+  // Records what each device can do with the camera, so a tablet that fails can be diagnosed from the office.
+  function camDiag(res) {
+    const ua = navigator.userAgent || '', d = $('#cam-diag');
+    if (d) d.textContent = (IS_WV ? 'WebView' : 'Browser') + ' · ' + (window.isSecureContext ? 'secure' : 'NOT secure') + ' · ' + res + ' · ' + ua.replace(/^Mozilla\/5\.0 /, '').slice(0, 90);
+    try { if (store.mode === 'shared' && ui.user) store.db.doc('diag/cam-' + Date.now().toString(36)).set({ at: Date.now(), by: ui.user.id, ua, wv: IS_WV, secure: !!window.isSecureContext, md: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia), res: String(res).slice(0, 200) }); } catch (e) {}
   }
   function camShot() {
     const v = $('#cam-v'); if (!CAM || !v || !v.videoWidth) return toast('Camera not ready yet — wait a second, or tap Pick from files.', 'bad');
