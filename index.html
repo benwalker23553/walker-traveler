@@ -2379,7 +2379,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       store.masterN = arr.length; applyRisk(); applyAreas(); render();
     }).catch(() => { store.masterN = -1; });
   }
-  const dwN = (r) => (r.stack ? (stackPrint(r) ? 1 : ((stackRef(r) || {}).docs || []).filter((d) => !/^Traveler/.test(d.t || '')).length) : r.series === 'cnc' ? 1 + (r.cncSetup || []).length : r.docs.length || (r.master && store.dwg && store.dwg[r.dw] ? store.dwg[r.dw].n : 0));
+  const dwN = (r) => (r.stack ? (stackOwn(r) ? stackOwn(r).docs.length : 0) + (stackPrint(r) ? 1 : ((stackRef(r) || {}).docs || []).filter((d) => !/^Traveler/.test(d.t || '')).length) : r.series === 'cnc' ? 1 + (r.cncSetup || []).length : r.docs.length || (r.master && store.dwg && store.dwg[r.dw] ? store.dwg[r.dw].n : 0));
   const SHARD = {}, PRINTS_ONLY = { '1002698': 'UPLOAD-1002698' }, ALIAS = { '102911': '1002911', 'KWI-4700QT-1': 'KWI-4700' }, PR = {};
   function printsFor(slug) { PR[slug] = PR[slug] || { master: true, docs: [], dw: slug }; ensureDocs(PR[slug]); return PR[slug]; }
   function ensureDocs(r) {
@@ -2698,9 +2698,12 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   // Stack: the filter it plugs into — its released print plus the drawing pages from the filter master — shown for reference
   // Only the filter's own released print — not the filter's traveler pages or its component prints (inserts, clips)
   function stackPrint(r) { const P = store.prints || {}, k = pKey(r && r.pn); return k && P[k] ? P[k] : null; }
+  // The stack's own drawing (a drawing bundle named on the stack routing as stackDw), shown first
+  function stackOwn(r) { return r && r.stackDw && store.dwg && store.dwg[r.stackDw] ? printsFor(r.stackDw) : null; }
   function stackRef(r) { if (!r || !r.stack) return null; const f = r.refFilter ? routingsFor(r.pn).find((x) => x.master && (x.file === r.refFilter || x.id === r.refFilter || x.id === 'M:' + r.refFilter)) || routingsFor(r.pn).find((x) => x.master) : routingsFor(r.pn).find((x) => x.master); if (f) ensureDocs(f); return f || null; }
   function docsTab(j, r) {
-    if (r && r.stack) { const sp = stackPrint(r); if (sp) return curPrintsHtml(Object.assign({}, r, { ops: [], material: '', wpn: '', file: '' }), null); const f = stackRef(r), cur = '';
+    if (r && r.stack) { const so = stackOwn(r), own = so ? '<div class="panel"><h2>Stack drawing</h2>' + (so.docs.length ? so.docs.map((d) => '<img src="' + esc(d.f) + '" alt="Stack drawing" style="width:100%;border:1px solid var(--line);background:#fff">').join('') : '<p class="muted">Loading the stack drawing…</p>') + '</div>' : ''; const sp = stackPrint(r);
+      if (own) return own + (sp ? curPrintsHtml(Object.assign({}, r, { ops: [], material: '', wpn: '', file: '' }), null) : ''); if (sp) return curPrintsHtml(Object.assign({}, r, { ops: [], material: '', wpn: '', file: '' }), null); const f = stackRef(r), cur = '';
       if (f) f.docs = f.docs.filter((d) => !/^Traveler/.test(d.t || '')); return cur + (f && f.docs.length ? '<h3 style="margin-top:12px">Reference: drawing pages from ' + esc(f.file || f.id) + '</h3>' + f.docs.map((d) => '<img src="' + esc(d.f) + '" alt="' + esc(d.t || 'filter drawing') + '" style="width:100%;border:1px solid var(--line);background:#fff;margin-top:6px">').join('') : f && f.dwLoading ? '<p class="muted">Loading the filter drawing…</p>' : '') || '<div class="banner info"><div><b>Machined stack.</b> No drawing for this stack, and the filter drawing is not on the tablet yet.</div></div>'; }
     const cd = cncDocs(r); if (cd) return sageParts(j ? j.pn : r && r.pn) + cd + curPrintsHtml(r, j);
     const sp = sageParts(j ? j.pn : r && r.pn);
