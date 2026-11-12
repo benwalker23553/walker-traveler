@@ -1056,6 +1056,19 @@ window.WT_ESP = [
         }
         break;
       }
+      case 'fromStock': {
+        // Finished parts already on the shelf: take them from stock instead of making them. Counts toward the job; anything left still runs.
+        op = guard(job, i, ctx); if (['ready', 'setup', 'setup_done', 'first_piece', 'fp_wait', 'authorized', 'running'].indexOf(op.st) < 0) fail('Pull from stock while the operation is open, before it is finished.');
+        const left = op.qtyIn - op.scrap - moved(job, i), q = Math.floor(Number(p.qty));
+        if (!(q >= 1)) fail('Enter how many you took from stock.'); if (q > left) fail('Only ' + left + ' pcs are still to make at this operation.');
+        touch(job, i, ctx); op.qtyIn -= q; op.fromStock = (op.fromStock || 0) + q; job.fromStock = (job.fromStock || 0) + q;
+        log(job, ctx, 'Pulled from stock', q + ' pcs taken from stock at op ' + op.n + ' instead of making them' + (p.note ? ' · ' + p.note : '') + '. Still to make: ' + (left - q) + '.');
+        if (op.qtyIn - op.scrap - moved(job, i) <= 0 && !inbound(job, i) && !job.ops.slice(i + 1).some((o) => o.qtyIn > 0 || (o.st !== 'pending' && o.st !== 'done'))) {
+          seg(op, null, ctx); for (let k = i; k < job.ops.length; k++) { job.ops[k].st = 'done'; if (k > i) job.ops[k].stock = true; }
+          if (!job.lots.some((l) => l.st !== 'received')) { job.st = 'complete'; job.doneAt = ctx.at; log(job, ctx, 'Job complete', job.fromStock + ' pcs from stock' + (job.ops.some((o) => o.good) ? '' : ', none made')); }
+        }
+        break;
+      }
       case 'extra': {
         // More parts made than scheduled (e.g. extra cut from bar stock). Raises the count at this op and the job total, logged with who and why.
         op = guard(job, i, ctx); if (['ready', 'setup', 'setup_done', 'first_piece', 'fp_wait', 'authorized', 'running'].indexOf(op.st) < 0) fail('Add extra parts while the operation is open, before it is finished.');
@@ -2507,7 +2520,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     }
     if (active && !holds.length && !op.paused && ['setup', 'first_piece', 'running'].indexOf(op.st) >= 0) sec += M('pause', 'Pause', 'sm');
     if (!holds.length && !op.paused && ['first_piece', 'authorized', 'running'].indexOf(op.st) >= 0) sec += M('scrap', 'Log bad parts', 'sm');
-    if (!holds.length && ['ready', 'setup', 'setup_done', 'first_piece', 'fp_wait', 'authorized', 'running'].indexOf(op.st) >= 0) sec += M('extra', '+ Made extra', 'sm');
+    if (!holds.length && ['ready', 'setup', 'setup_done', 'first_piece', 'fp_wait', 'authorized', 'running'].indexOf(op.st) >= 0) sec += M('extra', '+ Made extra', 'sm') + M('fromStock', '📦 Pull from stock', 'sm');
     if (active) sec += M('hold', 'Raise hold', 'sm');
     if (op.st !== 'pending' && i > 0) j.lots.filter((l) => l.from === i - 1 && (l.st === 'transit' || l.st === 'delivered')).forEach((l) => { sec += '<button class="btn sm" data-m="receive" data-job="' + id + '" data-lot="' + esc(l.id) + '">Receive ' + esc(l.id) + ' · ' + l.qty + ' pcs</button>'; });
     if (['ready', 'setup', 'setup_done'].indexOf(op.st) >= 0 && !holds.length) sec += M('skip', '⤼ Skip this step', 'sm');
@@ -3039,6 +3052,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       }
       case 'pause': h = '<h2>Pause · why?</h2>' + tiles('reason', W.PAUSE_REASONS, m) + '<button class="btn" data-close>Cancel</button>'; break;
       case 'block': h = '<h2>Can’t start · why?</h2>' + tiles('reason', W.BLOCK_REASONS, m) + '<button class="btn" data-close>Cancel</button>'; break;
+      case 'fromStock': { const left = op.qtyIn - op.scrap - W.moved(j, m.i); h = '<h2>Pull from stock · op ' + op.n + '</h2><p class="muted">' + left + ' pcs still to make here. Took finished parts off the shelf instead? Enter how many — they count toward this job. If that covers all of them, the job closes.</p><div class="tiles">' + [left].concat([1, 2, 5, 10].filter((x) => x < left)).map((x) => '<button class="btn sm' + (Number(m.qty) === x ? ' sel' : '') + '" data-set="qty" data-v="' + x + '">' + (x === left ? 'All ' + x : x) + '</button>').join('') + '</div>' + inp('qty', 'How many from stock?', m, 'type="number" inputmode="numeric" min="1"') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Optional — e.g. shelf / bin">' + esc(m.note || '') + '</textarea></label>' + foot('Took ' + (Number(m.qty) > 0 ? Math.floor(Number(m.qty)) + ' ' : '') + 'from stock'); break; }
       case 'extra': h = '<h2>Made extra · op ' + op.n + '</h2><p class="muted">Scheduled ' + esc(String(j.qty - (j.extra || 0))) + ', ' + op.qtyIn + ' at this op now. Enter how many MORE were made and they are added to this op and the job total.</p>' + tiles('reason', ['Extra cut from bar / raw stock', 'Customer asked for more', 'Stock / spares', 'Other'], m) + inp('qty', 'How many more?', m, 'type="number" inputmode="numeric" min="1"') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Optional">' + esc(m.note || '') + '</textarea></label>' + foot('Add ' + (Number(m.qty) > 0 ? Math.floor(Number(m.qty)) + ' ' : '') + 'extra'); break;
       case 'scrap': h = '<h2>Log bad parts · op ' + op.n + '</h2><p class="muted">Use this any time during the run. Bad parts from a supplier? Pick Supplier part bad. They are counted as scrap and already included when you finish the operation.' + (op.scrap ? ' Logged so far: ' + op.scrap + '.' : '') + '</p>' + tiles('reason', W.HOLD_REASONS, m) + supF(m) + inp('qty', 'How many are bad?', m, 'type="number" inputmode="numeric" min="1"') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Log bad parts'); break;
       case 'hold': h = '<h2>Raise a hold · op ' + op.n + '</h2><p class="muted">Use this when parts can\'t be used yet, including bad parts from a supplier before or during the job. Tag the parts and set them aside. Quality decides: return to supplier, rework, use as is or scrap.</p>' + tiles('reason', W.HOLD_REASONS, m) + supF(m) + inp('qty', 'Quantity affected', m, 'type="number" inputmode="numeric" min="1"') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Put on hold', 'stop'); break;
@@ -3155,6 +3169,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       }
       case 'mid': ok = run(m.job, 'reqMid', { i: m.i, count: m.count }); break;
       case 'finish': ok = run(m.job, 'finish', { i: m.i, good: m.good === '' ? NaN : m.good, scrap: m.scrap, shortReason: m.shortReason, note: m.note }); break;
+      case 'fromStock': ok = run(m.job, 'fromStock', { i: m.i, qty: m.qty, note: m.note }); if (ok) toast('Pulled from stock'); break;
       case 'extra': ok = run(m.job, 'extra', { i: m.i, reason: m.reason, qty: m.qty, note: m.note }); if (ok) toast('Extra parts added'); break;
       case 'scrap': ok = run(m.job, 'scrap', { i: m.i, reason: m.reason, qty: m.qty, note: m.note, supName: m.supName, supRef: m.supRef }); if (ok) toast('Bad parts logged'); break;
       case 'hold': ok = run(m.job, 'hold', { i: m.i, reason: m.reason, qty: m.qty, note: m.note, supName: m.supName, supRef: m.supRef }); break;
