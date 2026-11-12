@@ -2575,7 +2575,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     el.addEventListener('click', (ev) => {
       const lb = ev.target.closest && ev.target.closest('label'); if (!lb) return;
       let left = false; const gone = () => { left = true; }; window.addEventListener('blur', gone, { once: true }); document.addEventListener('visibilitychange', gone, { once: true });
-      setTimeout(() => { if (left || !$('#cam')) return; const m = $('#cam-msg'); if (m) m.innerHTML = '<b>This tablet did not open the camera app.</b><br>The kiosk app is blocking file upload / camera. Turn those on in its settings.'; camDiag('picker-no-open'); }, 3000);
+      setTimeout(() => { if (left || !$('#cam')) return; const m = $('#cam-msg'); if (m) m.innerHTML = '<b>This tablet did not open the camera app.</b><br>The kiosk app is blocking file upload / camera. Turn those on in its settings.'; camDiag('picker-no-open'); if (CAM) camFallback(CAM.ds); }, 3000);
     });
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('no camera API');
@@ -2585,6 +2585,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     } catch (e) {
       const m = $('#cam-msg'); if (m) m.innerHTML = '<b>Live camera is blocked here (' + esc((e && e.name) || 'error') + ').</b><br>Tap <b>📷 Camera app</b> below. If nothing opens, the kiosk app needs <b>camera</b> and <b>file upload</b> turned on.';
       camDiag('live-fail:' + ((e && (e.name + ' ' + e.message)) || e));
+      camFallback(ds);
     }
   }
   // Records what each device can do with the camera, so a tablet that fails can be diagnosed from the office.
@@ -2592,6 +2593,17 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const ua = navigator.userAgent || '', d = $('#cam-diag');
     if (d) d.textContent = (IS_WV ? 'WebView' : 'Browser') + ' · ' + (window.isSecureContext ? 'secure' : 'NOT secure') + ' · ' + res + ' · ' + ua.replace(/^Mozilla\/5\.0 /, '').slice(0, 90);
     try { if (store.mode === 'shared' && ui.user) store.db.doc('diag/cam-' + Date.now().toString(36)).set({ at: Date.now(), by: ui.user.id, ua, wv: IS_WV, secure: !!window.isSecureContext, md: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia), res: String(res).slice(0, 200) }); } catch (e) {}
+  }
+  // This tablet's app refuses the camera: offer Chrome on the tablet, or a phone via QR code (both open this same traveler).
+  function camFallback(ds) {
+    const el = $('#cam'); if (!el || $('#cam-fb')) return;
+    const jid = ds.job || ui.jobId || '', url = location.origin + location.pathname + (jid ? '#job=' + encodeURIComponent(jid) : '');
+    const intent = 'intent://' + location.host + location.pathname + (jid ? '?job=' + encodeURIComponent(jid) : '') + '#Intent;scheme=https;package=com.android.chrome;end';
+    const fb = document.createElement('div'); fb.id = 'cam-fb'; fb.style.cssText = 'background:#fff;color:#000;border-radius:10px;padding:12px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:720px';
+    fb.innerHTML = '<div id="cam-qr" style="width:150px;height:150px"></div><div style="max-width:420px"><b style="font-size:1.1rem">Take the photo with your phone</b><br>Scan this code with your phone camera, sign in, and tap 📷 on this same traveler. The photo shows up here.<br><a class="btn" style="margin-top:8px;display:inline-block" href="' + esc(intent) + '">Open this traveler in Chrome</a></div>';
+    el.appendChild(fb);
+    try { if (window.QRCode) new window.QRCode($('#cam-qr'), { text: url, width: 150, height: 150 }); } catch (e) {}
+    const lb = (el.querySelectorAll('label') || []); lb.forEach((l) => { if (/Camera app/.test(l.textContent)) l.style.display = IS_WV ? 'none' : ''; });
   }
   function camShot() {
     const v = $('#cam-v'); if (!CAM || !v || !v.videoWidth) return toast('Camera not ready yet — wait a second, or tap Pick from files.', 'bad');
@@ -3758,6 +3770,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   ui.station = okSt(hs) ? hs : okSt(saved) ? saved : 'all';
   ui.view = 'home';
   if (/^rl=/.test(hs)) ui.openRlOnLoad = true;
+  const qJob = new URLSearchParams(location.search).get('job'); if (qJob && !/^job=/.test(hs)) { ui.station = okSt(saved) ? saved : 'all'; ui.openJobOnLoad = qJob; }
   if (/^job=/.test(hs)) { ui.station = okSt(saved) ? saved : 'all'; ui.openJobOnLoad = decodeURIComponent(hs.slice(4)); }
   if (hs === 'tv') { ui.tv = true; ui.view = 'board'; document.body.classList.add('tv'); }
   init(); loadMaster();
