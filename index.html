@@ -1016,7 +1016,7 @@ window.WT_ESP = [
         if (inbound(job, i)) fail('Op ' + job.ops[i - 1].n + ' is still sending parts here. Finish and receive those first, then close this one.');
         const sent = moved(job, i); if (good < sent) fail(sent + ' pcs were already sent ahead, so the good count cannot be less than ' + sent + '.');
         const short = op.qtyIn - good - scrap - op.scrap;
-        if (short < 0) fail('Counts add up to ' + (good + scrap + op.scrap) + ' but only ' + op.qtyIn + ' came in. Recount, or raise a hold for the mismatch.');
+        if (short < 0) fail('Counts add up to ' + (good + scrap + op.scrap) + ' but only ' + op.qtyIn + ' came in. Made extra? Close this, tap “+ Made extra” and add ' + (-short) + '. Otherwise recount.');
         if (short > 0 && !p.shortReason) fail(short + ' pcs are not accounted for. Pick what happened to them.');
         touch(job, i, ctx); op.pend = { good, scrap, short, shortReason: short > 0 ? p.shortReason : '' };
         op.st = 'fin_wait'; op.checks.push({ type: 'final', reqBy: ctx.u.id, reqAt: ctx.at, count: good, note: p.note || '' }); seg(op, 'wait_approval', ctx);
@@ -1055,6 +1055,13 @@ window.WT_ESP = [
           log(job, ctx, label + ' FAILED — hold opened', 'Op ' + op.n + ' · ' + p.reason + ' · ' + q + ' pcs');
         }
         break;
+      }
+      case 'extra': {
+        // More parts made than scheduled (e.g. extra cut from bar stock). Raises the count at this op and the job total, logged with who and why.
+        op = guard(job, i, ctx); if (['ready', 'setup', 'setup_done', 'first_piece', 'fp_wait', 'authorized', 'running'].indexOf(op.st) < 0) fail('Add extra parts while the operation is open, before it is finished.');
+        const q = Math.floor(Number(p.qty)); if (!(q >= 1) || q > 100000) fail('Enter how many extra were made.'); if (!p.reason) fail('Pick why there are extra.');
+        touch(job, i, ctx); op.qtyIn += q; op.extra = (op.extra || 0) + q; job.qty = (Number(job.qty) || 0) + q; job.extra = (job.extra || 0) + q;
+        log(job, ctx, 'Extra parts added', 'Op ' + op.n + ' · +' + q + ' pcs (now ' + op.qtyIn + ' at this op, job total ' + job.qty + ') · ' + p.reason + (p.note ? ' · ' + p.note : '')); break;
       }
       case 'scrap': {
         op = guard(job, i, ctx); if (['first_piece', 'authorized', 'running'].indexOf(op.st) < 0) fail('Bad parts are logged while the operation is running.');
@@ -2480,6 +2487,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     }
     if (active && !holds.length && !op.paused && ['setup', 'first_piece', 'running'].indexOf(op.st) >= 0) sec += M('pause', 'Pause', 'sm');
     if (!holds.length && !op.paused && ['first_piece', 'authorized', 'running'].indexOf(op.st) >= 0) sec += M('scrap', 'Log bad parts', 'sm');
+    if (!holds.length && ['ready', 'setup', 'setup_done', 'first_piece', 'fp_wait', 'authorized', 'running'].indexOf(op.st) >= 0) sec += M('extra', '+ Made extra', 'sm');
     if (active) sec += M('hold', 'Raise hold', 'sm');
     if (op.st !== 'pending' && i > 0) j.lots.filter((l) => l.from === i - 1 && (l.st === 'transit' || l.st === 'delivered')).forEach((l) => { sec += '<button class="btn sm" data-m="receive" data-job="' + id + '" data-lot="' + esc(l.id) + '">Receive ' + esc(l.id) + ' · ' + l.qty + ' pcs</button>'; });
     if (['ready', 'setup', 'setup_done'].indexOf(op.st) >= 0 && !holds.length) sec += M('skip', '⤼ Skip this step', 'sm');
@@ -2985,6 +2993,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       }
       case 'pause': h = '<h2>Pause · why?</h2>' + tiles('reason', W.PAUSE_REASONS, m) + '<button class="btn" data-close>Cancel</button>'; break;
       case 'block': h = '<h2>Can’t start · why?</h2>' + tiles('reason', W.BLOCK_REASONS, m) + '<button class="btn" data-close>Cancel</button>'; break;
+      case 'extra': h = '<h2>Made extra · op ' + op.n + '</h2><p class="muted">Scheduled ' + esc(String(j.qty - (j.extra || 0))) + ', ' + op.qtyIn + ' at this op now. Enter how many MORE were made and they are added to this op and the job total.</p>' + tiles('reason', ['Extra cut from bar / raw stock', 'Customer asked for more', 'Stock / spares', 'Other'], m) + inp('qty', 'How many more?', m, 'type="number" inputmode="numeric" min="1"') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Optional">' + esc(m.note || '') + '</textarea></label>' + foot('Add ' + (Number(m.qty) > 0 ? Math.floor(Number(m.qty)) + ' ' : '') + 'extra'); break;
       case 'scrap': h = '<h2>Log bad parts · op ' + op.n + '</h2><p class="muted">Use this any time during the run. Bad parts from a supplier? Pick Supplier part bad. They are counted as scrap and already included when you finish the operation.' + (op.scrap ? ' Logged so far: ' + op.scrap + '.' : '') + '</p>' + tiles('reason', W.HOLD_REASONS, m) + supF(m) + inp('qty', 'How many are bad?', m, 'type="number" inputmode="numeric" min="1"') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Log bad parts'); break;
       case 'hold': h = '<h2>Raise a hold · op ' + op.n + '</h2><p class="muted">Use this when parts can\'t be used yet, including bad parts from a supplier before or during the job. Tag the parts and set them aside. Quality decides: return to supplier, rework, use as is or scrap.</p>' + tiles('reason', W.HOLD_REASONS, m) + supF(m) + inp('qty', 'Quantity affected', m, 'type="number" inputmode="numeric" min="1"') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Put on hold', 'stop'); break;
       case 'editStep': h = '<h2>Edit step · op ' + op.n + '</h2><p class="muted">Changes this job only. The master traveler stays the same. The change and the old text go in the record.</p><label>Instruction<textarea data-f="text" id="m-text" style="min-height:160px">' + esc(m.text || '') + '</textarea></label>' + inp('reason', 'Reason for the change', m) + foot('Save change'); break;
@@ -3100,6 +3109,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       }
       case 'mid': ok = run(m.job, 'reqMid', { i: m.i, count: m.count }); break;
       case 'finish': ok = run(m.job, 'finish', { i: m.i, good: m.good === '' ? NaN : m.good, scrap: m.scrap, shortReason: m.shortReason, note: m.note }); break;
+      case 'extra': ok = run(m.job, 'extra', { i: m.i, reason: m.reason, qty: m.qty, note: m.note }); if (ok) toast('Extra parts added'); break;
       case 'scrap': ok = run(m.job, 'scrap', { i: m.i, reason: m.reason, qty: m.qty, note: m.note, supName: m.supName, supRef: m.supRef }); if (ok) toast('Bad parts logged'); break;
       case 'hold': ok = run(m.job, 'hold', { i: m.i, reason: m.reason, qty: m.qty, note: m.note, supName: m.supName, supRef: m.supRef }); break;
       case 'flag': ok = run(m.job, 'flag', { i: m.i, text: m.text }); if (ok) toast('Sent for review'); break;
