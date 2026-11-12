@@ -2379,7 +2379,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       store.masterN = arr.length; applyRisk(); applyAreas(); render();
     }).catch(() => { store.masterN = -1; });
   }
-  const dwN = (r) => (r.series === 'cnc' ? 1 + (r.cncSetup || []).length : r.docs.length || (r.master && store.dwg && store.dwg[r.dw] ? store.dwg[r.dw].n : 0));
+  const dwN = (r) => (r.stack ? printsFor2(r).length + ((stackRef(r) || {}).docs || []).length : r.series === 'cnc' ? 1 + (r.cncSetup || []).length : r.docs.length || (r.master && store.dwg && store.dwg[r.dw] ? store.dwg[r.dw].n : 0));
   const SHARD = {}, PRINTS_ONLY = { '1002698': 'UPLOAD-1002698' }, ALIAS = { '102911': '1002911', 'KWI-4700QT-1': 'KWI-4700' }, PR = {};
   function printsFor(slug) { PR[slug] = PR[slug] || { master: true, docs: [], dw: slug }; ensureDocs(PR[slug]); return PR[slug]; }
   function ensureDocs(r) {
@@ -2687,7 +2687,10 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const L = [{ t: 'CNC master traveler · ' + r.pn, path: r.cncPdf }].concat(r.cncSetup || []);
     return '<div class="panel"><h2>CNC traveler and setup sheets</h2><p class="small muted">From Joseph / Justin’s Traveler CNC folder (F: drive). Read only.</p>' + L.map((x, k) => { const pg = pdfPages(x.path); return '<details' + (k === 0 && L.length === 1 ? ' open' : k === 1 ? ' open' : '') + '><summary><b>' + esc(x.t) + '</b></summary>' + (pg ? (pg.length ? pg.map((u) => '<img src="' + u + '" alt="' + esc(x.t) + '" style="width:100%;border:1px solid var(--line);margin:6px 0">').join('') : '<p class="small muted">Not on the tablet yet — it arrives with the next hourly update.</p>') : '<p class="small muted">Loading…</p>') + '</details>'; }).join('') + '</div>';
   }
+  // Stack: the filter it plugs into — its released print plus the drawing pages from the filter master — shown for reference
+  function stackRef(r) { if (!r || !r.stack) return null; const f = r.refFilter ? routingsFor(r.pn).find((x) => x.master && (x.file === r.refFilter || x.id === r.refFilter || x.id === 'M:' + r.refFilter)) || routingsFor(r.pn).find((x) => x.master) : routingsFor(r.pn).find((x) => x.master); if (f) ensureDocs(f); return f || null; }
   function docsTab(j, r) {
+    if (r && r.stack) { const f = stackRef(r), cur = curPrintsHtml(r, j); return cur + (f && f.docs.length ? '<h3 style="margin-top:12px">Reference: drawing pages from ' + esc(f.file || f.id) + '</h3>' + f.docs.map((d) => '<img src="' + esc(d.f) + '" alt="' + esc(d.t || 'filter drawing') + '" style="width:100%;border:1px solid var(--line);background:#fff;margin-top:6px">').join('') : f && f.dwLoading ? '<p class="muted">Loading the filter drawing…</p>' : '') || '<div class="banner info"><div><b>Machined stack.</b> No drawing for this stack, and the filter drawing is not on the tablet yet.</div></div>'; }
     const cd = cncDocs(r); if (cd) return sageParts(j ? j.pn : r && r.pn) + cd + curPrintsHtml(r, j);
     const sp = sageParts(j ? j.pn : r && r.pn);
     const cur = curPrintsHtml(r, j); if (cur) return sp + cur + '<h3 style="margin-top:12px">Pages from the master traveler file</h3>' + docsTab0(j, r);
