@@ -1916,7 +1916,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         '<label>What was done / what you found<textarea id="pm-note" placeholder="Tap above, or type here"></textarea></label>' +
         (e.rebuild_freq_days ? '<label class="row" style="gap:8px"><input id="pm-rb" type="checkbox"' + (ui.pmRb ? ' checked' : '') + '> <b>Bi-annual rebuild done</b> (seals / cups / O-rings replaced)</label>' : '') +
         '<label class="row" style="gap:8px"><input id="pm-down" type="checkbox"' + (ui.pmProb ? ' checked' : '') + '> <b>Problem: machine is down or needs repair</b> (phone alert to supervisors)</label>' +
-        '<div class="row" style="gap:8px;flex-wrap:wrap;margin-top:6px"><button class="btn" data-a="camOpen" data-kind="pm">📷 Add photo</button><span id="pm-status" class="small muted">' + (ui.pmPhoto ? 'Photo attached ✓' : '') + '</span><button class="btn primary" style="font-size:17px;padding:12px 18px" data-a="pmSaveEq" data-v="' + esc(e.equip_id) + '">✓ Save sign-off</button><button class="btn" data-a="pmCancel">Cancel</button></div>';
+        '<div class="row" style="gap:8px;flex-wrap:wrap;margin-top:6px">' + photoBtn('pm', '📷 Add photo', '') + '<span id="pm-status" class="small muted">' + (ui.pmPhoto ? 'Photo attached ✓' : '') + '</span><button class="btn primary" style="font-size:17px;padding:12px 18px" data-a="pmSaveEq" data-v="' + esc(e.equip_id) + '">✓ Save sign-off</button><button class="btn" data-a="pmCancel">Cancel</button></div>';
     }
     return r + '</div>';
   }
@@ -1948,7 +1948,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         h += '<section class="sec"><div class="ghead" style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h2>' + esc(g) + '</h2>' + (ui.user && groups[g].length > 1 ? '<button class="btn sm primary" data-a="pmGroup" data-v="' + esc(g) + '">✓ All ' + groups[g].length + ' done — no problems</button>' : '') + '</div>' + groups[g].map((x) => {
           const t = x.t; let r = '<div class="panel" style="margin-bottom:8px"><div class="row" style="justify-content:space-between;gap:8px;flex-wrap:wrap"><div><b>' + esc(t.eq) + '</b><div>' + esc(t.task) + '</div><div class="small muted">Daily · ' + esc(pmWhoName(pmDailyWho(t))) + ' · ' + (x.last ? 'Last ' + esc(fTime(x.last.at)) + ' · ' + esc(nm(x.last.by)) : 'not logged yet') + '</div></div>' +
             (ui.user ? '<div class="row" style="gap:6px"><button class="btn primary" data-a="pmOpen" data-v="d' + esc(t.id) + '">✓ Done</button><button class="btn" data-a="pmOpen" data-v="d' + esc(t.id) + '" data-p="1">⚠ Problem</button></div>' : '') + '</div>';
-          if (ui.pmOpen === 'd' + t.id) r += '<label>Notes (optional)<textarea id="pm-note"></textarea></label><label class="row" style="gap:8px"><input id="pm-down" type="checkbox"' + (ui.pmProb ? ' checked' : '') + '> <b>Problem: machine is down or needs repair</b> (phone alert to supervisors)</label><div class="row" style="gap:8px;flex-wrap:wrap;margin-top:6px"><button class="btn" data-a="camOpen" data-kind="pm">📷 Add photo</button><span id="pm-status" class="small muted">' + (ui.pmPhoto ? 'Photo attached ✓' : '') + '</span><button class="btn primary" data-a="pmSaveDaily" data-v="' + esc(t.id) + '">Save</button><button class="btn" data-a="pmCancel">Cancel</button></div>';
+          if (ui.pmOpen === 'd' + t.id) r += '<label>Notes (optional)<textarea id="pm-note"></textarea></label><label class="row" style="gap:8px"><input id="pm-down" type="checkbox"' + (ui.pmProb ? ' checked' : '') + '> <b>Problem: machine is down or needs repair</b> (phone alert to supervisors)</label><div class="row" style="gap:8px;flex-wrap:wrap;margin-top:6px">' + photoBtn('pm', '📷 Add photo', '') + '<span id="pm-status" class="small muted">' + (ui.pmPhoto ? 'Photo attached ✓' : '') + '</span><button class="btn primary" data-a="pmSaveDaily" data-v="' + esc(t.id) + '">Save</button><button class="btn" data-a="pmCancel">Cancel</button></div>';
           return r + '</div>';
         }).join('') + '</section>';
       });
@@ -2546,13 +2546,21 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   const fxGuess = (t) => { const m = /\b(?:FIXTURE|FIX\.?)\s*#?\s*([A-Z]{0,3}-?\d{2,5})|\b(FX-?\d{2,5})\b/i.exec(String(t || '')); return m ? (m[1] || m[2]).toUpperCase() : ''; };
   function fixtureBlock(j, r, o) {
     const fx = (store.fixtures || {})[fxKey(j.rid, o.n)], sup = ui.user && (W.isApprover(ui.user) || ui.user.role === 'manager'), guess = fxGuess(liveStep(j.rid, o.n, o.text, j).text);
-    const add = ui.user ? '<button class="btn sm" data-a="camOpen" data-kind="fx" data-rid="' + esc(j.rid) + '" data-n="' + esc(o.n) + '" data-pn="' + esc(j.pn) + '" data-fx="' + esc((fx && fx.fx) || guess) + '">📷 ' + (fx ? 'Replace fixture photo' : 'Take fixture photo') + '</button>' : '';
+    const add = ui.user ? photoBtn('fx', '📷 ' + (fx ? 'Replace fixture photo' : 'Take fixture photo'), ' data-rid="' + esc(j.rid) + '" data-n="' + esc(o.n) + '" data-pn="' + esc(j.pn) + '" data-fx="' + esc((fx && fx.fx) || guess) + '"', 'sm') : '';
     if (!fx) return '<div class="fxbox empty"><div><b>Fixture' + (guess ? ' ' + esc(guess) : '') + '</b><br><span class="small muted">No photo yet. Find the right fixture and take a picture — every ' + esc(j.pn) + ' traveler will show it here at op ' + esc(o.n) + '.</span></div>' + add + '</div>';
     return '<div class="fxbox' + (fx.ok ? '' : ' warn') + '"><button class="jn-img" data-a="jnView" data-src="' + esc(fx.path) + '"><img src="' + esc(fx.path) + '" alt="Fixture for op ' + esc(o.n) + '"></button><div><b>Use this fixture' + (fx.fx ? ': ' + esc(fx.fx) : '') + '</b><br><span class="small">Photo by ' + esc(nm(fx.by)) + ' ' + esc(fTime(fx.at)) + (fx.ok ? ' · confirmed by ' + esc(nm(fx.ok.by)) : '') + '</span>' +
       (fx.ok ? '' : '<br><span class="pill warn">Not confirmed yet — check with your supervisor</span>') + '<div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">' + (!fx.ok && sup ? '<button class="btn sm go" data-a="fxOk" data-k="' + esc(fxKey(j.rid, o.n)) + '">✔ Right fixture</button>' : '') + add + '</div></div></div>';
   }
   /* ---------- in-app camera: works inside the tablet's locked kiosk app, where a file picker / camera intent often does nothing ---------- */
   let CAM = null;
+  // Tablets run the app inside an Android WebView: there the native picker with capture opens the tablet camera (this is what worked before).
+  // A desktop browser often has no capture picker, so it gets the in-app webcam window instead.
+  const IS_WV = /; wv\)|\bwv\b.*Chrome|Android.*Version\/[\d.]+.*Chrome/i.test(navigator.userAgent || '');
+  function photoBtn(kind, label, attrs, cls) {
+    const idA = kind === 'fx' ? 'fx-photo' : kind === 'pm' ? 'pm-photo' : 'jn-photo';
+    if (IS_WV) return '<label class="btn' + (cls ? ' ' + cls : '') + '" style="cursor:pointer">' + label + '<input id="' + idA + '" type="file" accept="image/*" capture="environment" hidden' + attrs + '></label>';
+    return '<button class="btn' + (cls ? ' ' + cls : '') + '" data-a="camOpen" data-kind="' + kind + '"' + attrs + '>' + label + '</button>';
+  }
   function camClose() { if (CAM && CAM.stream) CAM.stream.getTracks().forEach((t) => t.stop()); CAM = null; const el = $('#cam'); if (el) el.remove(); }
   async function camOpen(ds) {
     if (!need()) return; camClose(); CAM = { ds: Object.assign({}, ds) };
@@ -2594,7 +2602,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   function notesPanel(j, op) {
     const N = (j.notes || []).slice().reverse();
     return '<div class="panel"><h2>Notes and photos</h2>' +
-      (ui.user ? '<label>Add a note<textarea id="jn-text" placeholder="Type, or tap the microphone on the keyboard and speak"></textarea></label><div class="row" style="flex-wrap:wrap;gap:8px"><button class="btn" data-a="camOpen" data-kind="jn" data-job="' + esc(j.id) + '" data-op="' + esc(op.n) + '">📷 Add photo</button><button class="btn primary" data-a="jnSave" data-job="' + esc(j.id) + '" data-op="' + esc(op.n) + '">Save note</button><span id="jn-status" class="small muted"></span></div>' : '<p class="small muted">Sign in to add notes or photos.</p>') +
+      (ui.user ? '<label>Add a note<textarea id="jn-text" placeholder="Type, or tap the microphone on the keyboard and speak"></textarea></label><div class="row" style="flex-wrap:wrap;gap:8px">' + photoBtn('jn', '📷 Add photo', ' data-job="' + esc(j.id) + '" data-op="' + esc(op.n) + '"') + '<button class="btn primary" data-a="jnSave" data-job="' + esc(j.id) + '" data-op="' + esc(op.n) + '">Save note</button><span id="jn-status" class="small muted"></span></div>' : '<p class="small muted">Sign in to add notes or photos.</p>') +
       (N.length ? '<div class="jn-list">' + N.map((n) => '<div class="jn"><div class="small muted"><b>' + esc(nm(n.by)) + '</b> · ' + esc(fTime(n.at)) + (n.op ? ' · op ' + esc(n.op) : '') + '</div>' + (n.text ? '<div>' + esc(n.text) + '</div>' : '') + (n.photo ? '<button class="jn-img" data-a="jnView" data-src="' + esc(n.photo) + '"><img src="' + esc(n.photo) + '" alt="Photo from ' + esc(nm(n.by)) + '" loading="lazy"></button>' : '') + '</div>').join('') + '</div>' : '<p class="small muted">No notes or photos yet.</p>') + '</div>';
   }
   function shrinkPhoto(file) {
