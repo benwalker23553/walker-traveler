@@ -1346,7 +1346,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (ui.user) { const u = person(ui.user.id); if (!u) signOutUser(); else ui.user = Object.assign({}, u); }
     else restoreMine();
   }
-  function restoreMine() { if (ui.user) return; const mp = myPhone(), u = mp && person(mp.id); if (u) { ui.user = Object.assign({}, u); ui.touched = Date.now(); ui.signedAt = Date.now(); } }
+  function restoreMine() { if (ui.user || ui.tv) return; const mp = myPhone(), u = mp && person(mp.id); if (u) { ui.user = Object.assign({}, u); ui.touched = Date.now(); ui.signedAt = Date.now(); } }
   async function loadStaff() { if (!SRV()) return; try { const r = await rpc('staff_roster'); if (Array.isArray(r) && r.length) { store.staff = r; applyStaff(); render(); if (ui.modal) renderModal(); } } catch (e) { /* offline: keep the last list */ } }
   function finEnd() { const t = ui.finTok; ui.finTok = null; ui.fin = null; ui.finErr = ''; if (t && SRV()) rpc('fin_lock', { p_token: t }).catch(() => {}); }
   /* A supervisor's own phone (alerts turned on there) stays signed in for 12 hours after their PIN, so tapping an alert never asks again. Shared tablets still lock when idle. */
@@ -3489,7 +3489,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (!ui.user && store.loaded) restoreMine();
     const main = $('#main'); if (!main) return;
     const act = document.activeElement, actId = act && main.contains(act) ? act.id : '', caret = actId && act.selectionStart != null ? [act.selectionStart, act.selectionEnd] : null;
-    if (ui.tv) { ui.view = 'board'; ui.modal = null; }
+    if (ui.tv) { ui.view = 'board'; ui.modal = null; ui.user = null; }
     const y = window.scrollY;
     main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'prio' ? renderPrio() : ui.view === 'board' ? renderBoard() : ui.view === 'xl' ? renderXl() : (ui.view === 'pm' || ui.view === 'cal') ? renderPM() : ui.view === 'ops' ? renderOps() : ui.view === 'mine' ? renderMine() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
     if (ui.keep) Object.keys(ui.keep).forEach((id) => { const e = document.getElementById(id); if (!e) return; if (e.type === 'checkbox') e.checked = !!ui.keep[id]; else if (e.type !== 'file') e.value = ui.keep[id]; });
@@ -3831,7 +3831,11 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   if (/^rl=/.test(hs)) ui.openRlOnLoad = true;
   const qJob = new URLSearchParams(location.search).get('job'); if (qJob && !/^job=/.test(hs)) { ui.station = okSt(saved) ? saved : 'all'; ui.openJobOnLoad = qJob; }
   if (/^job=/.test(hs)) { ui.station = okSt(saved) ? saved : 'all'; ui.openJobOnLoad = decodeURIComponent(hs.slice(4)); }
-  if (/^tv(=|$)/.test(hs)) { ui.tv = true; ui.view = 'board'; document.body.classList.add('tv'); let tl = hs.slice(3); if (!tl) { try { tl = localStorage.getItem('wt-tvlane') || ''; } catch (e) {} } if (tl && tl !== 'all') ui.tvLane = decodeURIComponent(tl); else if (!tl) ui.tvPick = true; }
+  if (/^tv(=|$)/.test(hs)) { // TV: nobody signed in, screen kept awake, page refreshed every hour so it runs all day
+    const wl = () => { try { if (navigator.wakeLock && document.visibilityState === 'visible') navigator.wakeLock.request('screen').catch(() => {}); } catch (e) {} };
+    wl(); document.addEventListener('visibilitychange', wl);
+    const t0 = Date.now(); setInterval(() => { if (Date.now() - t0 > 60 * 60 * 1000 && navigator.onLine !== false) location.reload(); }, 60000);
+    ui.tv = true; ui.view = 'board'; document.body.classList.add('tv'); let tl = hs.slice(3); if (!tl) { try { tl = localStorage.getItem('wt-tvlane') || ''; } catch (e) {} } if (tl && tl !== 'all') ui.tvLane = decodeURIComponent(tl); else if (!tl) ui.tvPick = true; }
   init(); loadMaster();
 })();
 
