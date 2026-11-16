@@ -1833,7 +1833,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       lib: () => tile('data-nav="library"', 'Traveler library', 'Read or fix any master traveler', null),
       imp: () => tile('data-nav="improve"', 'Improve · analytics', 'Late jobs, time, people, suppliers', prompts().length, prompts().length ? 'warn' : ''),
       xl: () => (ui.user && (ui.user.role === 'manager' || W.isApprover(ui.user) || W.canDispose(ui.user)) ? tile('data-nav="xl"', 'Traveler logs', 'The Excel logs — same columns, updated hourly', null) : ''),
-      cal: () => (ui.user && (ui.user.id === 'marety' || ui.user.role === 'manager' || ui.user.role === 'qa') ? (pmLoad(), tile('data-nav="cal"', 'Calibration (gages)', 'Marty B. · gages, calipers, test equipment', pmCounts().cal, pmCounts().cal ? 'warn' : '')) : ''),
+      cal: () => (ui.user && (ui.user.id === 'marety' || ui.user.role === 'manager' || ui.user.role === 'qa') ? (pmLoad(), tile('data-nav="cal"', 'Calibration records', 'Marty B. · gage records and calibration history', '', '')) : ''),
       pm: () => { pmLoad(); const c = pmCounts(), n = c.over + c.today + c.daily + c.down; return tile('data-nav="pm"', 'Maintenance (PM)', c.down ? c.down + ' machine' + (c.down > 1 ? 's' : '') + ' down · PM list' : 'Every machine · PM due · work orders', n, c.down ? 'bad' : n ? 'warn' : ''); },
       where: () => tile('data-nav="floor"', 'Where is everything', 'Parts in each area right now', null),
       manage: () => tile('data-nav="manage" data-mtab="' + (mgr ? 'release' : 'holds') + '"', 'Manage', mgr ? 'Holds, numbers, people, rules' : 'Holds and numbers', null),
@@ -1925,12 +1925,21 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     pmLoad();
     const CAL = ui.view === 'cal', tab = CAL ? (ui.pmTab === 'log' ? 'log' : 'cal') : (ui.pmTab === 'cal' ? 'now' : ui.pmTab || 'now'), c = pmCounts(), can = pmMine(), E = store.pmEq || [];
     const tb = (k, label, n) => '<button class="btn sm ' + (tab === k ? 'sel' : '') + '" data-a="pmTab" data-v="' + k + '">' + label + (n ? ' (' + n + ')' : '') + '</button>';
-    let h = CAL ? '<div class="head"><div><h1>Calibration (gages)</h1><p class="muted">Gages, calipers and test equipment. <b>Marty B.</b> is responsible. Kept separate from machine maintenance. Tap ✓ Calibrated when a gage is done.</p></div><button class="btn sm" data-a="pmReload">↻ Refresh</button></div>' : '<div class="head"><div><h1>Maintenance (PM)</h1><p class="muted">Every machine in the shop, from the maintenance database (' + E.filter((e) => e.maint_type !== 'calibration').length + ' machines, ' + (store.pmWo || []).length + ' work orders). Tap <b>✓ Checked — OK</b> to sign off in one tap, <b>✎ Done + what I did</b> to pick what was done, ⚠ Problem when something is wrong. Shop schedule 4×10 Mon–Thu.</p></div><button class="btn sm" data-a="pmReload">↻ Refresh</button></div>';
+    let h = CAL ? '<div class="head"><div><h1>Calibration records</h1><p class="muted">Record of every gage, caliper and test instrument and its calibration history. <b>Marty B.</b> keeps these records. Not part of machine maintenance — nothing here is a to-do.</p></div><button class="btn sm" data-a="pmReload">↻ Refresh</button></div>' : '<div class="head"><div><h1>Maintenance (PM)</h1><p class="muted">Every machine in the shop, from the maintenance database (' + E.filter((e) => e.maint_type !== 'calibration').length + ' machines, ' + (store.pmWo || []).length + ' work orders). Tap <b>✓ Checked — OK</b> to sign off in one tap, <b>✎ Done + what I did</b> to pick what was done, ⚠ Problem when something is wrong. Shop schedule 4×10 Mon–Thu.</p></div><button class="btn sm" data-a="pmReload">↻ Refresh</button></div>';
     if (CAL) {
-      h += '<div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">' + tb('cal', 'Calibration due', c.cal) + tb('log', 'Calibration log') + '</div>';
+      h += '<div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">' + tb('cal', 'Gage records') + tb('log', 'Calibration history') + '</div>';
       if (tab === 'log') return h + pmLogHtml(true);
-      const LC = E.filter((e) => e.maint_type === 'calibration' && e.status === 'active').sort((a, b) => (eqDue(a).due || 9e15) - (eqDue(b).due || 9e15));
-      return h + (!store.pmEq ? '' : LC.length ? LC.slice(0, ui.pmMore ? 2000 : 80).map((e) => eqCard(e, 'cal')).join('') + (LC.length > 80 && !ui.pmMore ? '<button class="btn" data-a="pmMore">Show all ' + LC.length + '</button>' : '') : '<div class="empty">No gages on file.</div>');
+      if (!store.pmEq) return h + '<div class="banner info"><div>Loading records…</div></div>';
+      const q = String(ui.pmQ || '').toLowerCase(), WO = {}; (store.pmWo || []).forEach((w) => { const x = WO[w.equip_id]; if (!x || String(w.work_date) > String(x.work_date)) WO[w.equip_id] = w; });
+      const LC = E.filter((e) => e.maint_type === 'calibration' && (ui.pmShowRet || e.status === 'active')).filter((e) => !q || [e.equip_id, e.name, e.serial_number, e.location_raw, e.location].join(' ').toLowerCase().indexOf(q) >= 0)
+        .sort((a, b) => (parseInt(a.equip_id, 10) || 0) - (parseInt(b.equip_id, 10) || 0));
+      const ret = E.filter((e) => e.maint_type === 'calibration' && e.status !== 'active').length;
+      h += '<div class="row" style="gap:8px;margin-bottom:8px;flex-wrap:wrap"><input id="pm-q" placeholder="Search gage #, name, serial…" value="' + esc(ui.pmQ || '') + '" style="flex:1;min-width:200px"><button class="btn sm" data-a="pmFind">Search</button>' + (ret ? '<button class="btn sm' + (ui.pmShowRet ? ' sel' : '') + '" data-a="pmShowRet">' + (ui.pmShowRet ? 'Hide' : 'Show') + ' retired (' + ret + ')</button>' : '') + '</div>';
+      const fd = (x) => (x ? fDay(pD(x)) : '—');
+      h += '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Gage #</th><th>Instrument</th><th>Serial</th><th>Location</th><th>Last calibrated</th><th>Result / by</th><th>Next due</th><th>Status</th></tr></thead><tbody>' +
+        LC.map((e) => { const w = WO[e.equip_id]; return '<tr><td><button class="btn sm" data-a="pmEq" data-v="' + esc(e.equip_id) + '">' + esc(e.equip_id) + ' ' + (ui.pmEqOpen === e.equip_id ? '▴' : '▾') + '</button></td><td>' + esc(e.name || '') + '</td><td>' + esc(e.serial_number || '') + '</td><td>' + esc(e.location || e.location_raw || '') + '</td><td>' + fd(e.last_pm_date) + '</td><td>' + esc(w ? (w.tasks_done || '') + (w.tech ? ' · ' + w.tech : '') : '') + '</td><td>' + fd(e.cal_due) + '</td><td>' + (e.status === 'active' ? 'In use' : 'Retired') + '</td></tr>' +
+          (ui.pmEqOpen === e.equip_id ? '<tr><td colspan="8">' + eqCard(e, 'cal') + '</td></tr>' : ''); }).join('') + '</tbody></table></div>' + (!LC.length ? '<div class="empty">No gages match.</div>' : '');
+      return h;
     }
     if (store.pmErr) h += '<div class="banner warn"><div><b>Could not load the maintenance database.</b> ' + esc(store.pmErr) + '</div></div>';
     else if (!store.pmEq) h += '<div class="banner info"><div>Loading machines…</div></div>';
@@ -2039,6 +2048,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (d.a === 'pmFind') { ui.pmQ = ($('#pm-q') || {}).value || ''; return render(); }
     if (d.a === 'pmArea') { ui.pmArea = d.v; return render(); }
     if (d.a === 'pmWho') { ui.pmWho = d.v; return render(); }
+    if (d.a === 'pmShowRet') { ui.pmShowRet = !ui.pmShowRet; return render(); }
     if (d.a === 'pmMore') { ui.pmMore = true; return render(); }
     if (d.a === 'pmEq') { ui.pmEqOpen = ui.pmEqOpen === d.v ? null : d.v; return render(); }
     if (d.a === 'pmReload') { await pmLoad(true); return toast('Updated'); }
