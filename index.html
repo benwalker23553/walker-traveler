@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<script>(function(){var h=location.hash||'';if(/^#tv(=|$)/.test(h)){var a=h.slice(4);location.replace('tv.html'+(a?'?area='+encodeURIComponent(a):''));}})();</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#1B3A5C">
@@ -2067,6 +2068,8 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (d.a === 'pmFind') { ui.pmQ = ($('#pm-q') || {}).value || ''; return render(); }
     if (d.a === 'pmArea') { ui.pmArea = d.v; return render(); }
     if (d.a === 'pmWho') { ui.pmWho = d.v; return render(); }
+    if (d.a === 'tvLink') { (async () => { let k = ''; try { const r = await window.WT_SB.from('tv_access').select('key').limit(1); k = r.data && r.data[0] && r.data[0].key; } catch (e) {} if (!k) return toast('Could not get the TV link. Try again.', 'bad'); const base = location.origin + location.pathname.replace(/[^/]*$/, '') + 'tv.html?k=' + k; ui.tvLinks = base; openModal({ type: 'tvlinks' }); })(); return; }
+    if (d.a === 'tvCopy') { try { navigator.clipboard.writeText(d.v); toast('Link copied'); } catch (e) { toast(d.v); } return; }
     if (d.a === 'tvPick') { ui.tvPick = true; return render(); }
     if (d.a === 'tvSet') { ui.tvPick = false; ui.tvLane = d.v === 'all' ? null : d.v; try { localStorage.setItem('wt-tvlane', d.v); } catch (e) {} try { history.replaceState(null, '', '#tv' + (ui.tvLane ? '=' + ui.tvLane : '')); } catch (e) {} return render(); }
     if (d.a === 'pmShowRet') { ui.pmShowRet = !ui.pmShowRet; return render(); }
@@ -2304,7 +2307,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (ui.tv && ui.tvPick) return renderTvPick();
     if (ui.tv && ui.tvLane) return renderTvLane(ui.tvLane);
     const cols = boardCols(ui.tv ? 6 : 10);
-    return '<div class="head"><div><h1>Priorities · all areas</h1><p class="muted">Live. Each area runs #1 first. Managers and supervisors set these in Daily priorities.</p></div><div class="row"><span class="tvclock num">' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + '</span>' + (ui.tv ? '<button class="btn sm" data-a="tvPick" style="opacity:.6">TV area: All</button>' : (canPlan() ? '<button class="btn" data-nav="prio">Change priorities</button>' : '') + '<a class="btn" href="#tv" target="_blank" rel="noopener">Open TV view</a>') + '</div></div>' + (cols ? '<div class="board">' + cols + '</div>' : '<div class="empty">No priorities set yet. A manager or supervisor sets them in Daily priorities.</div>');
+    return '<div class="head"><div><h1>Priorities · all areas</h1><p class="muted">Live. Each area runs #1 first. Managers and supervisors set these in Daily priorities.</p></div><div class="row"><span class="tvclock num">' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + '</span>' + (ui.tv ? '<button class="btn sm" data-a="tvPick" style="opacity:.6">TV area: All</button>' : (canPlan() ? '<button class="btn" data-nav="prio">Change priorities</button>' : '') + '<button class="btn" data-a="tvLink">TV links (no sign-in)</button>') + '</div></div>' + (cols ? '<div class="board">' + cols + '</div>' : '<div class="empty">No priorities set yet. A manager or supervisor sets them in Daily priorities.</div>');
   }
   /* ---------- Operators folder: each person taps their name and sees only their own work ---------- */
   const myItems = (id) => { const M = []; LANES.forEach((l) => openItems(l.id).forEach((x) => { if (x.who === id) M.push(x); })); return M; };
@@ -3120,6 +3123,9 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const j = m.job ? store.jobs[m.job] : null, op = j && m.i != null ? j.ops[m.i] : null;
     let h = '', wide = false;
     switch (m.type) {
+      case 'tvlinks': { const B = ui.tvLinks || ''; h = '<h2>TV links — no sign-in</h2><p>Open the link on each TV once (type it, or open it from an email/text). The TV remembers its area and shows that area\'s priorities all day. Nobody logs in.</p>' +
+        '<div class="list">' + LANES.map((l) => '<div class="row" style="justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding:6px 0"><b>' + esc(l.name) + '</b><span class="row" style="gap:6px"><a class="btn sm" href="' + esc(B + '&area=' + l.id) + '" target="_blank" rel="noopener">Open</a><button class="btn sm" data-a="tvCopy" data-v="' + esc(B + '&area=' + l.id) + '">Copy link</button></span></div>').join('') + '</div>' +
+        '<p class="small muted">Or open <b>' + esc(B) + '</b> and tap the area on the TV.</p><div class="row"><button class="btn" data-close>Close</button></div>'; break; }
       case 'finpin': h = '<h2>Prices and costs are locked</h2><p><b>' + esc(nm(m.who)) + '</b>, enter your PIN to open them. They lock again when you sign out, after ' + store.cfg.rules.idleLock + ' s idle, or at the end of the shift.</p>' + pad(m) + foot('Open'); break;
       case 'login': { const lp = person(m.who), fresh = lp && !hasPin(lp);
         h = '<h2>Who is working?</h2>' + who(m) + (lp ? '<div class="pinpop" role="dialog" aria-label="Enter PIN"><div class="pinbox"><div class="row" style="justify-content:space-between;align-items:center"><b style="font-size:1.3rem">' + esc(lp.name) + '</b><button class="btn sm" data-set="who" data-v="">Not me</button></div>' + (fresh ? '<div class="banner info"><div><b>' + (m.first ? 'Enter the same PIN again to confirm.' : 'Create your PIN.') + '</b> Use your birth month and year so you never forget it. March 1985 is 0385.</div></div>' : '<p class="muted" style="margin:0">Enter your PIN — tap the numbers or type them on the keyboard.</p>') + pad(m) + (lp.role === 'manager' || W.isApprover(lp) ? '<label class="check" style="display:flex;gap:10px;align-items:center"><input type="checkbox" data-f="keep" style="width:26px;height:26px"' + (m.keep ? ' checked' : '') + '> This is my own phone — keep me signed in (until I sign out, PIN again once a week)</label>' : '') + '<div class="row" style="justify-content:space-between"><button class="btn" data-close>Cancel</button><button class="btn primary" data-submit>' + (fresh ? (m.first ? 'Save my PIN' : 'Next') : 'Sign in') + '</button></div></div></div>' : '<p class="muted">Tap your name. First time here, you will create your own PIN.</p><button class="btn sm" data-m="join" style="align-self:flex-start">My name is not here — add me</button>') + foot(fresh ? (m.first ? 'Save my PIN' : 'Next') : 'Sign in'); break; }
