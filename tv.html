@@ -40,10 +40,10 @@
   const clock = () => new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   const app = document.getElementById('app');
   function draw() {
-    if (!key) { app.innerHTML = '<div class="pick"><h1>Walker Priorities TV</h1><p>This TV needs its TV link once. Ask the office for the TV link and open it on this TV — no sign-in needed after that.</p></div>'; return; }
+    if (!key) { app.innerHTML = '<div class="pick"><h1>Walker Priorities TV</h1><p>This TV needs its TV link once. Open the Walker Traveler app on this TV, tap <b>📺 TV mode</b> on the main menu and pick the area. No typing needed.</p><div class="grid"><button data-a="exit">Open the Walker Traveler app<small>Then tap 📺 TV mode</small></button></div></div>'; return; }
     if (picking) {
       app.innerHTML = '<div class="pick"><h1>Which area is this TV in?</h1><p>Tap the area. This TV will show only that area\'s priorities, all day. No sign-in.</p><div class="grid">' +
-        AREAS.map((a) => '<button data-v="' + a[0] + '">' + esc(a[1]) + '<small>Show ' + esc(a[1]) + ' priorities</small></button>').join('') + '</div></div>';
+        AREAS.map((a) => '<button data-v="' + a[0] + '">' + esc(a[1]) + '<small>Show ' + esc(a[1]) + ' priorities</small></button>').join('') + '<button data-a="exit">← Back to the app<small>Leave TV mode</small></button></div></div>';
       return;
     }
     const it = (data && data.items) || [], open = it.filter((x) => !x.done), done = it.filter((x) => x.done), N = Math.min(open.length, 8), rowH = 76 / Math.max(N, 5);
@@ -53,7 +53,7 @@
     app.innerHTML = '<div class="tva" style="' + sz + '"><div class="h"><h1>' + esc(name(lane).toUpperCase()) + ' — PRIORITIES</h1><div class="meta"><div class="clk">' + clock() + '</div>' + (stale ? '<span class="warn">⚠ not updated today</span>' : set) + (err ? '<div class="warn">' + esc(err) + '</div>' : '') + '</div></div>' +
       (!data ? '<div class="e">Loading…</div>' : open.length ? '<div class="l">' + open.slice(0, 8).map((x, k) => '<div class="r' + (k ? '' : ' next') + '"><div class="n">' + (k + 1) + '</div><div><div class="t">' + (k ? '' : '<span class="tag">NOW</span>') + esc(x.title) + '</div>' + (x.sub || x.note ? '<div class="s">' + esc(x.sub || '') + (x.note ? ' · Note: ' + esc(x.note) : '') + '</div>' : '') + '</div><div class="w">' + (x.who ? '👤 ' + esc(x.who) : '') + '</div></div>').join('') + '</div>'
         : '<div class="e">No priorities set for ' + esc(name(lane)) + ' yet.<br>Ask your supervisor.</div>') +
-      '<div class="f"><span>' + [open.length > 8 ? '+ ' + (open.length - 8) + ' more after these' : '', done.length ? '✓ ' + done.length + ' done today' : ''].filter(Boolean).join(' · ') + '</span><span><button data-a="full">Full screen</button> <button data-a="pick">TV area: ' + esc(name(lane)) + '</button></span></div></div>';
+      '<div class="f"><span>' + [open.length > 8 ? '+ ' + (open.length - 8) + ' more after these' : '', done.length ? '✓ ' + done.length + ' done today' : ''].filter(Boolean).join(' · ') + '</span><span><button data-a="full">Full screen</button> <button data-a="pick">TV area: ' + esc(name(lane)) + '</button> <button data-a="exit">Exit TV mode</button></span></div></div>';
   }
   async function load() {
     if (!key || picking) return draw();
@@ -69,6 +69,7 @@
     if (b.dataset.v) { lane = b.dataset.v; ls.set('wt-tvlane', lane); picking = false; data = null; load(); full(); return; }
     if (b.dataset.a === 'pick') { picking = true; draw(); }
     if (b.dataset.a === 'full') full();
+    if (b.dataset.a === 'exit') location.href = 'index.html';
   });
   function full() { try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {} }
   const wl = () => { try { if (navigator.wakeLock && document.visibilityState === 'visible') navigator.wakeLock.request('screen').catch(() => {}); } catch (e) {} };

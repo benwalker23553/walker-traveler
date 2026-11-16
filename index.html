@@ -1845,6 +1845,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       prio: () => (canPlan() ? tile('data-nav="prio"', 'Daily priorities', 'What each area runs first', LANES.reduce((a, l) => a + openItems(l.id).length, 0), LANES.some((l) => planStale(l.id)) ? 'warn' : '') : T.today()),
       sign: () => tile('data-nav="list" data-lf="sign"', 'Needs a signature', 'First articles and closing signatures', sign, sign ? 'warn' : ''),
       hold: () => tile('data-nav="list" data-lf="hold"', 'On hold', 'Waiting on a disposition', hold, hold ? 'bad' : ''),
+      tvmode: () => tile('data-m="tvmode"', '📺 TV mode', 'Turn this screen into an area priorities TV', null, ''),
       rl: () => tile('data-m="rlList"', 'Traveler changes', rlMine().length ? rlMine().length + ' waiting on you to sign' : 'Changes waiting: ' + rlPending().length, rlMine().length || rlPending().length, rlMine().length ? 'warn' : ''),
       alerts: () => (ui.user && (ui.user.role === 'manager' || W.isApprover(ui.user)) && window.WT_PUSH_KEY ? tile('data-m="alertsOn"', '🔔 Alerts on this phone', (ls.get('wt-alerts') === ui.user.id ? 'On — tap to re-check' : 'Get a ping when you’re needed'), null, ls.get('wt-alerts') === ui.user.id ? '' : 'warn') : ''),
       fin: () => (SRV() && ui.user && ui.user.fin ? tile('data-nav="finance"', 'Prices and costs', 'Sage orders, cost, margin', ui.fin && ui.fin.recon && ui.fin.recon.flags ? ui.fin.recon.flags.filter((f) => f.lvl === 'bad').length : null, 'warn') : ''),
@@ -1862,9 +1863,9 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       inout: () => (ui.user ? tile('id="t-out"', 'Sign out', esc(ui.user.name), null) : tile('data-m="login"', 'Sign in', 'Tap your name, enter your PIN', null, 'go'))
     };
     // Each person sees only what they use. Operators: their work. Supervisors, quality and managers: everything.
-    const order = !ui.user ? ['ops', 'inout', 'work', 'today', 'board', 'all', 'asap', 'where', 'pm', 'cal', 'train', 'area']
-      : !lead ? (/maint/i.test(ui.user.area || '') ? ['pm', 'ops', 'mine', 'where', 'train', 'area', 'inout'] : ['ops', 'work', 'mine', 'today', 'board', 'all', 'asap', 'hold', 'where', 'pm', 'cal', 'train', 'area', 'inout'])
-      : ['work', 'prio', 'board', 'sign', 'ops', 'xl', 'pm', 'cal', 'alerts', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
+    const order = !ui.user ? ['ops', 'inout', 'work', 'today', 'board', 'tvmode', 'all', 'asap', 'where', 'pm', 'cal', 'train', 'area']
+      : !lead ? (/maint/i.test(ui.user.area || '') ? ['pm', 'ops', 'mine', 'where', 'train', 'area', 'inout'] : ['ops', 'work', 'mine', 'today', 'board', 'tvmode', 'all', 'asap', 'hold', 'where', 'pm', 'cal', 'train', 'area', 'inout'])
+      : ['work', 'prio', 'board', 'tvmode', 'sign', 'ops', 'xl', 'pm', 'cal', 'alerts', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
     return '<div class="head"><div><h1>Main menu</h1><p class="muted">' + (ui.user ? 'Signed in as ' + esc(ui.user.name.replace(/\.$/, '')) + '.' : 'Not signed in.') + ' This tablet is set to ' + esc(areaName()) + '.</p></div></div><div class="menu">' + order.map((k) => T[k]()).join('') + '</div>';
   }
 
@@ -2068,10 +2069,6 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (d.a === 'pmFind') { ui.pmQ = ($('#pm-q') || {}).value || ''; return render(); }
     if (d.a === 'pmArea') { ui.pmArea = d.v; return render(); }
     if (d.a === 'pmWho') { ui.pmWho = d.v; return render(); }
-    if (d.a === 'tvLink') { (async () => { let k = ''; try { const r = await window.WT_SB.from('tv_access').select('key').limit(1); k = r.data && r.data[0] && r.data[0].key; } catch (e) {} if (!k) return toast('Could not get the TV link. Try again.', 'bad'); const base = location.origin + location.pathname.replace(/[^/]*$/, '') + 'tv.html?k=' + k; ui.tvLinks = base; openModal({ type: 'tvlinks' }); })(); return; }
-    if (d.a === 'tvCopy') { try { navigator.clipboard.writeText(d.v); toast('Link copied'); } catch (e) { toast(d.v); } return; }
-    if (d.a === 'tvPick') { ui.tvPick = true; return render(); }
-    if (d.a === 'tvSet') { ui.tvPick = false; ui.tvLane = d.v === 'all' ? null : d.v; try { localStorage.setItem('wt-tvlane', d.v); } catch (e) {} try { history.replaceState(null, '', '#tv' + (ui.tvLane ? '=' + ui.tvLane : '')); } catch (e) {} return render(); }
     if (d.a === 'pmShowRet') { ui.pmShowRet = !ui.pmShowRet; return render(); }
     if (d.a === 'pmMore') { ui.pmMore = true; return render(); }
     if (d.a === 'pmEq') { ui.pmEqOpen = ui.pmEqOpen === d.v ? null : d.v; return render(); }
@@ -2307,7 +2304,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (ui.tv && ui.tvPick) return renderTvPick();
     if (ui.tv && ui.tvLane) return renderTvLane(ui.tvLane);
     const cols = boardCols(ui.tv ? 6 : 10);
-    return '<div class="head"><div><h1>Priorities · all areas</h1><p class="muted">Live. Each area runs #1 first. Managers and supervisors set these in Daily priorities.</p></div><div class="row"><span class="tvclock num">' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + '</span>' + (ui.tv ? '<button class="btn sm" data-a="tvPick" style="opacity:.6">TV area: All</button>' : (canPlan() ? '<button class="btn" data-nav="prio">Change priorities</button>' : '') + '<button class="btn" data-a="tvLink">TV links (no sign-in)</button>') + '</div></div>' + (cols ? '<div class="board">' + cols + '</div>' : '<div class="empty">No priorities set yet. A manager or supervisor sets them in Daily priorities.</div>');
+    return '<div class="head"><div><h1>Priorities · all areas</h1><p class="muted">Live. Each area runs #1 first. Managers and supervisors set these in Daily priorities.</p></div><div class="row"><span class="tvclock num">' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + '</span>' + (ui.tv ? '<button class="btn sm" data-a="tvPick" style="opacity:.6">TV area: All</button>' : (canPlan() ? '<button class="btn" data-nav="prio">Change priorities</button>' : '') + '<button class="btn" data-m="tvmode">📺 TV mode</button><button class="btn" data-a="tvLink">TV links</button>') + '</div></div>' + (cols ? '<div class="board">' + cols + '</div>' : '<div class="empty">No priorities set yet. A manager or supervisor sets them in Daily priorities.</div>');
   }
   /* ---------- Operators folder: each person taps their name and sees only their own work ---------- */
   const myItems = (id) => { const M = []; LANES.forEach((l) => openItems(l.id).forEach((x) => { if (x.who === id) M.push(x); })); return M; };
@@ -3123,6 +3120,8 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const j = m.job ? store.jobs[m.job] : null, op = j && m.i != null ? j.ops[m.i] : null;
     let h = '', wide = false;
     switch (m.type) {
+      case 'tvmode': h = '<h2>📺 TV mode — which area is this TV in?</h2><p>Pick the area. This screen will show only that area\'s priorities, big, all day. Nobody needs to sign in.</p><div class="tiles">' +
+        LANES.map((l) => '<button class="btn" data-a="tvGo" data-v="' + esc(l.id) + '"><span>' + esc(l.name) + '</span><small>' + openItems(l.id).length + ' priorities</small></button>').join('') + '</div><div class="row" style="margin-top:10px"><button class="btn" data-close>Cancel</button></div>'; wide = true; break;
       case 'tvlinks': { const B = ui.tvLinks || ''; h = '<h2>TV links — no sign-in</h2><p>Open the link on each TV once (type it, or open it from an email/text). The TV remembers its area and shows that area\'s priorities all day. Nobody logs in.</p>' +
         '<div class="list">' + LANES.map((l) => '<div class="row" style="justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding:6px 0"><b>' + esc(l.name) + '</b><span class="row" style="gap:6px"><a class="btn sm" href="' + esc(B + '&area=' + l.id) + '" target="_blank" rel="noopener">Open</a><button class="btn sm" data-a="tvCopy" data-v="' + esc(B + '&area=' + l.id) + '">Copy link</button></span></div>').join('') + '</div>' +
         '<p class="small muted">Or open <b>' + esc(B) + '</b> and tap the area on the TV.</p><div class="row"><button class="btn" data-close>Close</button></div>'; break; }
@@ -3650,6 +3649,11 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (d.a === 'jnSave') { if (!need()) return; const tx = ($('#jn-text') || {}).value || ''; if (!tx.trim()) return toast('Type a note first, or tap Add photo.', 'bad'); if (run(d.job, 'jobNote', { text: tx, op: d.op })) toast('Note saved'); return; }
     if (d.a === 'jnView') { $('#modal').innerHTML = '<div class="sheet wide"><div class="row" style="justify-content:space-between"><h2>Photo</h2><button class="btn sm" data-close>Close</button></div><div class="viewer"><img src="' + esc(d.src) + '" alt="Job photo" style="max-width:100%"></div></div>'; $('#modal').hidden = false; ui.modal = { type: 'lib' }; return; }
     if (/^pm[A-Z]/.test(d.a || '')) return void pmAct(d);
+    if (d.a === 'tvLink') { (async () => { let k = ''; try { const r = await window.WT_SB.from('tv_access').select('key').limit(1); k = r.data && r.data[0] && r.data[0].key; } catch (e) {} if (!k) return toast('Could not get the TV link. Try again.', 'bad'); const base = location.origin + location.pathname.replace(/[^/]*$/, '') + 'tv.html?k=' + k; ui.tvLinks = base; openModal({ type: 'tvlinks' }); })(); return; }
+    if (d.a === 'tvGo') { const ln = d.v; toast('Starting TV mode…'); (async () => { let k = ''; try { const r = await window.WT_SB.from('tv_access').select('key').limit(1); k = r.data && r.data[0] && r.data[0].key; } catch (e) {} if (!k) return toast('Could not start TV mode. Check the internet and try again.', 'bad'); try { localStorage.setItem('wt-tvkey', k); localStorage.setItem('wt-tvlane', ln); } catch (e) {} if (ui.user) signOutUser(); location.href = 'tv.html'; })(); return; }
+    if (d.a === 'tvCopy') { try { navigator.clipboard.writeText(d.v); toast('Link copied'); } catch (e) { toast(d.v); } return; }
+    if (d.a === 'tvPick') { ui.tvPick = true; return render(); }
+    if (d.a === 'tvSet') { ui.tvPick = false; ui.tvLane = d.v === 'all' ? null : d.v; try { localStorage.setItem('wt-tvlane', d.v); } catch (e) {} try { history.replaceState(null, '', '#tv' + (ui.tvLane ? '=' + ui.tvLane : '')); } catch (e) {} return render(); }
     if (d.a === 'xlLog') { ui.xlLog = d.v; return render(); }
     if (d.a === 'xlOpen') { ui.xlOpen = !ui.xlOpen; return render(); }
     if (d.a === 'xlOld') { ui.xlOld = !ui.xlOld; return render(); }
@@ -3676,6 +3680,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       if (d.m === 'alertsOn') { if (!ui.user) return openModal({ type: 'login', who: null, pin: '' }); return openModal({ type: 'alertsOn', who: ui.user.id, pin: '' }); }
       if (d.m === 'finpin') { if (!ui.user) return openModal({ type: 'login', who: null, pin: '' }); return openModal({ type: 'finpin', who: ui.user.id, pin: '' }); }
       if (d.m === 'rlList') return openModal({ type: 'rlList' });
+      if (d.m === 'tvmode') return openModal({ type: 'tvmode' });
       if (d.m === 'labels') return openModal({ type: 'labels', job: d.job, lots: null });
       if (d.m === 'join') return openModal({ type: 'join', name: '', area: ui.station && !multi() ? W.station(ui.station).name : W.STATIONS[0].name });
       if (d.m === 'ask') { $('#results').hidden = true; openModal({ type: 'ask', q: d.q0 || '', text: '', refs: [] }); if (d.q0) ask(); return; }
