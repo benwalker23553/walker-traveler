@@ -5,77 +5,87 @@
 <style>
 :root{--navy:#1B3A5C;--ok:#1E7B34;--bg:#E7EAF0;--panel:#fff;--line:#C9D0DA;--muted:#5A6676;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
 *{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:#13202F;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
-.tva{height:100vh;display:flex;flex-direction:column;padding:2vh 2.2vw;gap:1.2vh}
-.h{display:flex;justify-content:space-between;align-items:center;border-bottom:.5vh solid var(--navy);padding-bottom:.8vh}
-.h h1{margin:0;font-size:5vh;color:var(--navy);letter-spacing:.02em}
-.meta{font-size:1.9vh;color:var(--muted);text-align:right}.clk{font-size:4.4vh;font-weight:700;color:var(--navy)}
-.l{flex:1;display:flex;flex-direction:column;gap:.9vh;min-height:0}
-.r{display:grid;grid-template-columns:6vw 1fr auto;align-items:center;gap:1.2vw;background:var(--panel);border:.25vh solid var(--line);border-radius:1vh;padding:0 1.4vw;flex:1 1 0;min-height:0;max-height:15vh;overflow:hidden}
-.r.next{background:#E6F2E6;border:.5vh solid var(--ok)}
-.n{font-size:var(--tvn);font-weight:800;color:var(--navy);text-align:center}.r.next .n{color:var(--ok)}
-.t{font-size:var(--tvt);font-weight:700;line-height:1.15;font-family:var(--mono);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-.s{font-size:var(--tvs);color:var(--muted);margin-top:.3vh}.w{font-size:var(--tvs);font-weight:700;text-align:right;white-space:nowrap}
-.tag{display:inline-block;background:var(--ok);color:#fff;border-radius:.6vh;padding:.2vh .7vw;font-size:calc(var(--tvs)*.9);margin-right:.6vw;vertical-align:middle;font-family:system-ui,sans-serif}
-.f{display:flex;justify-content:space-between;align-items:center;font-size:1.8vh;color:var(--muted)}
-.f button{font:inherit;font-size:1.6vh;padding:.5vh 1vw;opacity:.5;background:#fff;border:1px solid var(--line);border-radius:.6vh;cursor:pointer}
-.e{flex:1;display:flex;align-items:center;justify-content:center;font-size:4vh;color:var(--muted);text-align:center}
-.pick{padding:4vh 4vw}.pick h1{font-size:4.5vh;color:var(--navy);margin:0 0 1vh}.pick p{font-size:2.2vh;color:var(--muted);margin:0 0 3vh}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(22vw,1fr));gap:1.6vh 1.2vw}
-.grid button{font:inherit;font-size:3vh;font-weight:700;color:var(--navy);background:#fff;border:.3vh solid var(--navy);border-radius:1.2vh;padding:3vh 1vw;cursor:pointer;text-align:left}
-.grid small{display:block;font-size:1.8vh;color:var(--muted);font-weight:400;margin-top:.5vh}
-.warn{color:#9a5b00}
-.grid button.on{background:#E6F2E6;border-color:var(--ok);color:var(--ok)}.grid button.go{background:var(--ok);color:#fff;border-color:var(--ok)}.grid button.go small{color:#e8f5e9}
-.grid button:focus,.f button:focus{outline:.5vh solid #F2A900;outline-offset:.3vh;opacity:1}
-.two{flex:1;display:grid;grid-template-columns:62fr 38fr;gap:1.4vw;min-height:0}.mainc{display:flex;flex-direction:column;min-height:0}.mainc .l{flex:1}
-.side{display:flex;flex-direction:column;gap:1.2vh;min-height:0}
-.wp{flex:1 1 0;min-height:0;background:var(--panel);border:.25vh solid var(--line);border-radius:1vh;padding:1vh 1vw;display:flex;flex-direction:column;gap:.6vh;overflow:hidden}
-.wh{display:flex;justify-content:space-between;align-items:baseline;gap:.6vw;border-bottom:.3vh solid var(--navy);padding-bottom:.4vh}.wh b{font-size:2.6vh;color:var(--navy);text-transform:uppercase}.wh span{font-size:1.4vh;color:var(--muted);text-align:right}
-.wi{display:flex;gap:.7vw;align-items:flex-start;font-size:1.8vh;padding:.3vh .3vw;border-radius:.6vh}.wi.now{background:#E6F2E6}.wn{font-weight:800;color:var(--navy);min-width:1.6vw;font-size:2.1vh}
-.wt{display:block;font-family:var(--mono);font-weight:700;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.ws{display:block;font-size:1.45vh;color:var(--muted)}.wm{font-size:1.5vh;color:var(--muted)}.muted{color:var(--muted)}
+button{font-family:inherit}
+.tv{height:100vh;display:flex;flex-direction:column;padding:1.2vh 1.2vw;gap:1vh}
+.top{display:flex;justify-content:space-between;align-items:center;gap:1vw}
+.top h1{margin:0;font-size:2.8vh;color:var(--navy);letter-spacing:.04em}
+.clk{font-size:3.2vh;font-weight:800;color:var(--navy)}
+.err{font-size:1.6vh;color:#9a5b00}
+.board{flex:1;display:grid;gap:1vh 1vw;min-height:0}
+.p{background:var(--panel);border:.25vh solid var(--line);border-radius:1vh;padding:.8vh .8vw;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.ph{display:flex;justify-content:space-between;align-items:baseline;gap:.6vw;border-bottom:.35vh solid var(--navy);padding-bottom:.4vh;margin-bottom:.5vh}
+.ph b{font-size:var(--hd);color:var(--navy);text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph span{font-size:calc(var(--sb)*.9);color:var(--muted);text-align:right;white-space:nowrap}
+.ph .warn{color:#9a5b00}
+.rows{flex:1;display:flex;flex-direction:column;gap:.4vh;min-height:0;overflow:hidden}
+.i{display:grid;grid-template-columns:calc(var(--tt)*1.6) 1fr;gap:.5vw;align-items:start;padding:.35vh .4vw;border-radius:.6vh;border:.15vh solid transparent}
+.i.now{background:#E6F2E6;border-color:var(--ok)}
+.n{font-size:calc(var(--tt)*1.35);font-weight:800;color:var(--navy);line-height:1;text-align:center}.i.now .n{color:var(--ok)}
+.t{font-size:var(--tt);font-weight:700;font-family:var(--mono);line-height:1.15;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.s{font-size:var(--sb);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s b{color:#13202F}
+.tag{display:inline-block;background:var(--ok);color:#fff;border-radius:.5vh;padding:0 .5vw;font-size:calc(var(--sb)*.95);margin-right:.4vw;font-family:system-ui,sans-serif;vertical-align:middle}
+.more{font-size:var(--sb);color:var(--muted);padding-top:.3vh}
+.none{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:var(--tt);text-align:center}
+.f{display:flex;justify-content:flex-end;gap:.6vw}
+.f button{font-size:1.5vh;padding:.4vh .8vw;opacity:.45;background:#fff;border:1px solid var(--line);border-radius:.6vh;cursor:pointer}
+.f button:focus{opacity:1;outline:.4vh solid #F2A900}
+.pick{height:100vh;overflow:auto;padding:3vh 3vw}.pick h1{font-size:4vh;color:var(--navy);margin:0 0 .6vh}.pick p{font-size:2vh;color:var(--muted);margin:0 0 1.6vh}
+.pick h2{font-size:2.6vh;color:var(--navy);margin:2.4vh 0 1vh}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(17vw,1fr));gap:1.2vh 1vw}
+.grid button{font-size:2.5vh;font-weight:700;color:var(--navy);background:#fff;border:.3vh solid var(--navy);border-radius:1vh;padding:1.8vh 1vw;cursor:pointer;text-align:left;position:relative}
+.grid small{display:block;font-size:1.6vh;color:var(--muted);font-weight:400;margin-top:.3vh}
+.grid button.on{background:#E6F2E6;border-color:var(--ok);color:var(--ok)}
+.grid button .ord{position:absolute;right:1vw;top:1vh;background:var(--ok);color:#fff;border-radius:50%;width:3.4vh;height:3.4vh;display:flex;align-items:center;justify-content:center;font-size:2vh}
+.grid button.go{background:var(--ok);color:#fff;border-color:var(--ok)}.grid button.go small{color:#e8f5e9}
+.grid button:focus{outline:.5vh solid #F2A900;outline-offset:.3vh}
 </style></head><body><div id="app"></div>
 <script>
 (function () {
   const URL_ = 'https://ztpkhjgsxzlwxjzddgzf.supabase.co', API = 'sb_publishable_Zq17n4I5OapehYOckC7JQA_H7shyW9S';
   const AREAS = [['metal','Metal Floor'],['wash','Wash'],['machine','Machine Shop'],['cnc','CNC'],['weld','Welding'],['wire','Wire welding'],['glue','Glue / Assembly'],['powder','Paint / Powder Coat'],['pack','Packing and Assembly'],['pleat','Pleating'],['pot','Potting line 1'],['clip','Clipping'],['race','Racing'],['qc','QC and Packaging']];
+  const SIZES = [['s', 'Small', 'Most items'], ['m', 'Medium', 'Balanced'], ['l', 'Large', 'Easiest to read far away']];
   const ls = { get: (k) => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
   const q = new URLSearchParams(location.search);
   if (q.get('k')) ls.set('wt-tvkey', q.get('k'));
-  if (q.get('area')) ls.set('wt-tvlane', q.get('area'));
+  if (q.get('area')) ls.set('wt-tvareas', q.get('area'));
   if (q.get('k') || q.get('area')) history.replaceState(null, '', location.pathname);
-  const key = ls.get('wt-tvkey'); let lane = ls.get('wt-tvlane'), watch = ls.get('wt-tvwatch').split(',').filter((x) => x && x !== lane), data = {}, err = '';
-  const okA = (id) => AREAS.some((a) => a[0] === id); watch = watch.filter(okA);
-  let step = !lane || !okA(lane) ? 'main' : ls.get('wt-tvstep') === 'watch' ? 'watch' : ''; ls.set('wt-tvstep', '');
+  const okA = (id) => AREAS.some((a) => a[0] === id);
+  if (!ls.get('wt-tvareas') && ls.get('wt-tvlane')) ls.set('wt-tvareas', [ls.get('wt-tvlane')].concat(ls.get('wt-tvwatch').split(',')).filter(Boolean).join(','));
+  const key = ls.get('wt-tvkey');
+  let areas = ls.get('wt-tvareas').split(',').filter(okA).filter((x, i, a) => a.indexOf(x) === i).slice(0, 6), size = ls.get('wt-tvsize') || 'm', data = {}, err = '';
+  let setup = !areas.length || ls.get('wt-tvstep') === 'setup'; ls.set('wt-tvstep', '');
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const name = (id) => (AREAS.find((a) => a[0] === id) || [id, id])[1];
-  const clock = () => new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   const app = document.getElementById('app');
   const openOf = (id) => ((data[id] && data[id].items) || []).filter((x) => !x.done);
-  const doneOf = (id) => ((data[id] && data[id].items) || []).filter((x) => x.done);
+  const doneN = (id) => ((data[id] && data[id].items) || []).filter((x) => x.done).length;
+  const layout = (n) => (n <= 1 ? [1, 1] : n === 2 ? [2, 1] : n === 3 ? [3, 1] : n === 4 ? [2, 2] : [3, 2]);
   function setLine(id) { const d = data[id]; if (!d || !d.at) return ''; if (new Date(Number(d.at)).toDateString() !== new Date().toDateString() && openOf(id).length) return '<span class="warn">⚠ not updated today</span>';
-    return 'Set ' + new Date(Number(d.at)).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + (d.by ? ' · ' + esc(d.by) : ''); }
+    return 'Set ' + new Date(Number(d.at)).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + (d.by ? ' · ' + esc(String(d.by).split(' ')[0]) : ''); }
+  function drawSetup() {
+    app.innerHTML = '<div class="pick"><h1>📺 TV setup</h1><p>Pick the areas to show on this TV, in the order you want them (up to 6). They fill the screen in rows and columns. Use the remote arrows and OK.</p>' +
+      '<h2>1 · Areas on this TV</h2><div class="grid">' + AREAS.map((a) => { const k = areas.indexOf(a[0]); return '<button data-area="' + a[0] + '"' + (k >= 0 ? ' class="on"' : '') + '>' + esc(a[1]) + (k >= 0 ? '<span class="ord">' + (k + 1) + '</span>' : '') + '<small>' + (k >= 0 ? 'On this TV — OK to remove' : 'OK to add') + '</small></button>'; }).join('') + '</div>' +
+      '<h2>2 · Text size</h2><div class="grid">' + SIZES.map((z) => '<button data-size="' + z[0] + '"' + (size === z[0] ? ' class="on"' : '') + '>' + (size === z[0] ? '✓ ' : '') + z[1] + '<small>' + z[2] + '</small></button>').join('') + '</div>' +
+      '<h2>3 · Start</h2><div class="grid"><button data-a="done" class="go"' + (areas.length ? '' : ' disabled') + '>✓ Show on TV<small>' + (areas.length ? areas.map(name).map(esc).join(' · ') : 'Pick at least one area') + '</small></button><button data-a="exit">← Back to the app<small>Leave TV mode</small></button></div></div>';
+  }
   function draw() {
-    if (!key) { app.innerHTML = '<div class="pick"><h1>Walker Priorities TV</h1><p>Open the Walker Traveler app on this TV, tap <b>📺 TV mode</b> on the main menu and pick the area. No typing needed.</p><div class="grid"><button data-a="exit">Open the Walker Traveler app<small>Then tap 📺 TV mode</small></button></div></div>'; return; }
-    if (step === 'main') {
-      app.innerHTML = '<div class="pick"><h1>TV setup · 1 of 2 — Which area is this TV in?</h1><p>This area shows big, in order. No sign-in.</p><div class="grid">' +
-        AREAS.map((a) => '<button data-main="' + a[0] + '"' + (a[0] === lane ? ' class="on"' : '') + '>' + esc(a[1]) + '</button>').join('') + '<button data-a="exit">← Back to the app<small>Leave TV mode</small></button></div></div>';
-      return;
-    }
-    if (step === 'watch') {
-      app.innerHTML = '<div class="pick"><h1>TV setup · 2 of 2 — Also watch other areas?</h1><p>Optional. Pick up to 3 areas to show on the side — for example Metal Floor or Paint, to see what is coming. Tap again to remove.</p><div class="grid">' +
-        AREAS.filter((a) => a[0] !== lane).map((a) => { const on = watch.indexOf(a[0]) >= 0; return '<button data-watch="' + a[0] + '"' + (on ? ' class="on"' : '') + '>' + (on ? '✓ ' : '') + esc(a[1]) + '<small>' + (on ? 'Watching — tap to remove' : 'Tap to watch') + '</small></button>'; }).join('') +
-        '<button data-a="done" class="go">✓ Done<small>' + esc(name(lane)) + (watch.length ? ' + ' + watch.map(name).map(esc).join(', ') : ' only') + '</small></button></div></div>';
-      return;
-    }
-    const open = openOf(lane), done = doneOf(lane), side = watch.length > 0, N = Math.min(open.length, 8), rowH = 76 / Math.max(N, 5), k2 = side ? 0.85 : 1;
-    const sz = '--tvn:' + (rowH * 0.42 * k2).toFixed(2) + 'vh;--tvt:' + Math.min(rowH * 0.27, 4.2 * k2).toFixed(2) + 'vh;--tvs:' + Math.min(rowH * 0.19, 2.6 * k2).toFixed(2) + 'vh';
-    const mainList = !data[lane] ? '<div class="e">Loading…</div>' : open.length ? '<div class="l">' + open.slice(0, 8).map((x, k) => '<div class="r' + (k ? '' : ' next') + '"><div class="n">' + (k + 1) + '</div><div><div class="t">' + (k ? '' : '<span class="tag">NOW</span>') + esc(x.title) + '</div>' + (x.sub || x.note ? '<div class="s">' + esc(x.sub || '') + (x.note ? ' · Note: ' + esc(x.note) : '') + '</div>' : '') + '</div><div class="w">' + (x.who ? '👤 ' + esc(x.who) : '') + '</div></div>').join('') + '</div>'
-      : '<div class="e">No priorities set for ' + esc(name(lane)) + ' yet.<br>Ask your supervisor.</div>';
-    const per = watch.length >= 3 ? 3 : watch.length === 2 ? 5 : 8;
-    const sideH = side ? '<div class="side">' + watch.map((w) => { const o = openOf(w); return '<section class="wp"><div class="wh"><b>' + esc(name(w)) + '</b><span>' + setLine(w) + '</span></div>' +
-      (!data[w] ? '<div class="wi muted">Loading…</div>' : o.length ? o.slice(0, per).map((x, k) => '<div class="wi' + (k ? '' : ' now') + '"><span class="wn">' + (k + 1) + '</span><span><span class="wt">' + esc(x.title) + '</span><span class="ws">' + esc(x.sub || '') + (x.who ? ' · ' + esc(x.who) : '') + '</span></span></div>').join('') + (o.length > per ? '<div class="wm">+ ' + (o.length - per) + ' more</div>' : '') : '<div class="wi muted">No priorities set</div>') + '</section>'; }).join('') + '</div>' : '';
-    app.innerHTML = '<div class="tva" style="' + sz + '"><div class="h"><h1>' + esc(name(lane).toUpperCase()) + ' — PRIORITIES</h1><div class="meta"><div class="clk">' + clock() + '</div>' + setLine(lane) + (err ? '<div class="warn">' + esc(err) + '</div>' : '') + '</div></div>' +
-      (side ? '<div class="two"><div class="mainc">' + mainList + '</div>' + sideH + '</div>' : mainList) +
-      '<div class="f"><span>' + [open.length > 8 ? '+ ' + (open.length - 8) + ' more after these' : '', done.length ? '✓ ' + done.length + ' done today' : ''].filter(Boolean).join(' · ') + '</span><span><button data-a="full">Full screen</button> <button data-a="setup">⚙ TV setup</button> <button data-a="exit">Exit TV mode</button></span></div></div>';
+    if (!key) { app.innerHTML = '<div class="pick"><h1>Walker Priorities TV</h1><p>Open the Walker Traveler app on this TV, tap <b>📺 TV mode</b> on the main menu and pick the areas. No typing needed.</p><div class="grid"><button data-a="exit">Open the Walker Traveler app<small>Then tap 📺 TV mode</small></button></div></div>'; return; }
+    if (setup) return drawSetup();
+    const [C, R] = layout(areas.length), H = window.innerHeight || 720;
+    const base = { s: 1.55, m: 2.05, l: 2.75 }[size] * (R === 1 ? (C === 1 ? 1.55 : 1.15) : 1) * (C >= 3 ? 0.92 : 1); // title size in vh
+    const tt = base, sb = base * 0.72, hd = base * 1.25;
+        const panels = areas.map((id) => { const o = openOf(id), d = doneN(id), show = Math.min(o.length, 25);
+      return '<section class="p"><div class="ph"><b>' + esc(name(id)) + '</b><span>' + setLine(id) + '</span></div><div class="rows">' +
+        (!data[id] ? '<div class="none">Loading…</div>' : o.length ? o.slice(0, show).map((x, k) => '<div class="i' + (k ? '' : ' now') + '"><div class="n">' + (k + 1) + '</div><div><div class="t">' + (k ? '' : '<span class="tag">NOW</span>') + esc(x.title) + '</div><div class="s">' + esc(x.sub || '') + (x.who ? ' · <b>' + esc(x.who) + '</b>' : '') + (x.note ? ' · Note: ' + esc(x.note) : '') + '</div></div></div>').join('') +
+          '<div class="more" data-total="' + o.length + '" data-done="' + d + '"></div>' : '<div class="none">No priorities set</div>') + '</div></section>'; }).join('');
+    app.innerHTML = '<div class="tv" style="--tt:' + tt.toFixed(2) + 'vh;--sb:' + sb.toFixed(2) + 'vh;--hd:' + hd.toFixed(2) + 'vh"><div class="top"><h1>WALKER PRIORITIES</h1>' + (err ? '<span class="err">' + esc(err) + '</span>' : '') + '<span class="clk">' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + '</span></div>' +
+      '<div class="board" style="grid-template-columns:repeat(' + C + ',1fr);grid-template-rows:repeat(' + R + ',1fr)">' + panels + '</div>' +
+      '<div class="f"><button data-a="full">Full screen</button><button data-a="setup">⚙ TV setup</button><button data-a="exit">Exit TV mode</button></div></div>';
+    // fill each panel: keep as many rows as fit, then say how many more
+    app.querySelectorAll('.rows').forEach((r) => { const m = r.querySelector('.more'); if (!m) return; const tot = +m.dataset.total, dn = +m.dataset.done;
+      const lab = () => { const shown = r.querySelectorAll('.i').length; m.textContent = [tot > shown ? '+ ' + (tot - shown) + ' more' : '', dn ? '✓ ' + dn + ' done today' : ''].filter(Boolean).join(' · '); };
+      lab(); while (r.scrollHeight > r.clientHeight + 1 && r.querySelectorAll('.i').length > 1) { const it = r.querySelectorAll('.i'); it[it.length - 1].remove(); lab(); } });
   }
   async function one(id) {
     const r = await fetch(URL_ + '/rest/v1/rpc/tv_board', { method: 'POST', headers: { apikey: API, Authorization: 'Bearer ' + API, 'Content-Type': 'application/json' }, body: JSON.stringify({ p_key: key, p_lane: id }) });
@@ -83,23 +93,24 @@
     data[id] = await r.json();
   }
   async function load() {
-    if (!key || step) return draw();
-    try { await Promise.all([lane].concat(watch).map(one)); err = ''; } catch (e) { err = (e && e.message) || 'Reconnecting…'; }
+    if (!key || setup) return draw();
+    try { await Promise.all(areas.map(one)); err = ''; } catch (e) { err = (e && e.message) || 'Reconnecting…'; }
     draw();
   }
   app.addEventListener('click', (e) => {
-    const b = e.target.closest('button'); if (!b) return; const d = b.dataset;
-    if (d.main) { lane = d.main; ls.set('wt-tvlane', lane); watch = watch.filter((x) => x !== lane); step = 'watch'; return draw(); }
-    if (d.watch) { const i = watch.indexOf(d.watch); if (i >= 0) watch.splice(i, 1); else { if (watch.length >= 3) watch.shift(); watch.push(d.watch); } return draw(); }
-    if (d.a === 'done') { ls.set('wt-tvwatch', watch.join(',')); step = ''; data = {}; load(); full(); return; }
-    if (d.a === 'setup') { step = 'main'; return draw(); }
+    const b = e.target.closest('button'); if (!b) return; const d = b.dataset, keep = (sel) => { draw(); const x = app.querySelector(sel); if (x) x.focus(); };
+    if (d.area) { const i = areas.indexOf(d.area); if (i >= 0) areas.splice(i, 1); else if (areas.length < 6) areas.push(d.area); return keep('[data-area="' + d.area + '"]'); }
+    if (d.size) { size = d.size; return keep('[data-size="' + d.size + '"]'); }
+    if (d.a === 'done') { if (!areas.length) return; ls.set('wt-tvareas', areas.join(',')); ls.set('wt-tvsize', size); setup = false; data = {}; load(); full(); return; }
+    if (d.a === 'setup') { setup = true; return draw(); }
     if (d.a === 'full') full();
     if (d.a === 'exit') location.href = 'index.html';
   });
+  window.addEventListener('resize', () => { if (!setup) draw(); });
   function full() { try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {} }
   const wl = () => { try { if (navigator.wakeLock && document.visibilityState === 'visible') navigator.wakeLock.request('screen').catch(() => {}); } catch (e) {} };
   wl(); document.addEventListener('visibilitychange', () => { wl(); if (document.visibilityState === 'visible') load(); });
   load(); setInterval(load, 30000);
-  const t0 = Date.now(); setInterval(() => { if (Date.now() - t0 > 3600000 && navigator.onLine !== false) location.reload(); }, 60000);
+  const t0 = Date.now(); setInterval(() => { if (!setup && Date.now() - t0 > 3600000 && navigator.onLine !== false) location.reload(); }, 60000);
 })();
 </script></body></html>
