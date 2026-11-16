@@ -1845,6 +1845,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       prio: () => (canPlan() ? tile('data-nav="prio"', 'Daily priorities', 'What each area runs first', LANES.reduce((a, l) => a + openItems(l.id).length, 0), LANES.some((l) => planStale(l.id)) ? 'warn' : '') : T.today()),
       sign: () => tile('data-nav="list" data-lf="sign"', 'Needs a signature', 'First articles and closing signatures', sign, sign ? 'warn' : ''),
       hold: () => tile('data-nav="list" data-lf="hold"', 'On hold', 'Waiting on a disposition', hold, hold ? 'bad' : ''),
+      pack: () => tile('data-nav="pack"', '📦 Pack orders', 'Sage sales orders · packing takes parts out of stock', null, ''),
       tvmode: () => tile('data-m="tvmode"', '📺 TV mode', 'Turn this screen into an area priorities TV', null, ''),
       rl: () => tile('data-m="rlList"', 'Traveler changes', rlMine().length ? rlMine().length + ' waiting on you to sign' : 'Changes waiting: ' + rlPending().length, rlMine().length || rlPending().length, rlMine().length ? 'warn' : ''),
       alerts: () => (ui.user && (ui.user.role === 'manager' || W.isApprover(ui.user)) && window.WT_PUSH_KEY ? tile('data-m="alertsOn"', '🔔 Alerts on this phone', (ls.get('wt-alerts') === ui.user.id ? 'On — tap to re-check' : 'Get a ping when you’re needed'), null, ls.get('wt-alerts') === ui.user.id ? '' : 'warn') : ''),
@@ -1863,9 +1864,9 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       inout: () => (ui.user ? tile('id="t-out"', 'Sign out', esc(ui.user.name), null) : tile('data-m="login"', 'Sign in', 'Tap your name, enter your PIN', null, 'go'))
     };
     // Each person sees only what they use. Operators: their work. Supervisors, quality and managers: everything.
-    const order = !ui.user ? ['ops', 'inout', 'work', 'today', 'board', 'tvmode', 'all', 'asap', 'where', 'pm', 'cal', 'train', 'area']
-      : !lead ? (/maint/i.test(ui.user.area || '') ? ['pm', 'ops', 'mine', 'where', 'train', 'area', 'inout'] : ['ops', 'work', 'mine', 'today', 'board', 'tvmode', 'all', 'asap', 'hold', 'where', 'pm', 'cal', 'train', 'area', 'inout'])
-      : ['work', 'prio', 'board', 'tvmode', 'sign', 'ops', 'xl', 'pm', 'cal', 'alerts', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
+    const order = !ui.user ? ['ops', 'inout', 'work', 'today', 'board', 'pack', 'tvmode', 'all', 'asap', 'where', 'pm', 'cal', 'train', 'area']
+      : !lead ? (/maint/i.test(ui.user.area || '') ? ['pm', 'ops', 'mine', 'where', 'train', 'area', 'inout'] : ['ops', 'work', 'mine', 'today', 'board', 'pack', 'tvmode', 'all', 'asap', 'hold', 'where', 'pm', 'cal', 'train', 'area', 'inout'])
+      : ['work', 'prio', 'board', 'pack', 'tvmode', 'sign', 'ops', 'xl', 'pm', 'cal', 'alerts', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
     return '<div class="head"><div><h1>Main menu</h1><p class="muted">' + (ui.user ? 'Signed in as ' + esc(ui.user.name.replace(/\.$/, '')) + '.' : 'Not signed in.') + ' This tablet is set to ' + esc(areaName()) + '.</p></div></div><div class="menu">' + order.map((k) => T[k]()).join('') + '</div>';
   }
 
@@ -2269,6 +2270,37 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         (done.length ? '<div class="small bdone">✓ ' + done.length + ' done today</div>' : '') + '</section>'; }).join('');
   }
   /* ---------- the Excel traveler logs, shown the way they look in Excel ---------- */
+  /* ---------- Pack orders: open Sage sales orders; packing a line takes the parts out of inventory right away ---------- */
+  async function packLoad(force) {
+    const P = ui.pk = ui.pk || {}; if (P.busy || (!force && P.at && Date.now() - P.at < 60000)) return; P.busy = true;
+    try { const [a, b] = await Promise.all([window.WT_SB.rpc('pack_orders'), window.WT_SB.rpc('pack_status')]); if (a.error) throw a.error; P.rows = a.data || []; P.st = (b && b.data) || {}; P.err = ''; }
+    catch (e) { P.err = (e && e.message) || 'Could not load the sales orders'; }
+    P.busy = false; P.at = Date.now(); if (ui.view === 'pack') render();
+  }
+  function renderPack() {
+    const P = ui.pk || {}; if (!P.at && !P.busy) packLoad();
+    const left = (l) => Math.max(0, Number(l.qty) - Number(l.shipped) - Number(l.packed)), today = ymd(Date.now()), yr = Date.now() - 365 * DAY;
+    const q = String(ui.pkQ || '').trim().toLowerCase();
+    let R = (P.rows || []).map((o) => Object.assign({}, o, { rem: o.lines.reduce((a, l) => a + left(l), 0) })).filter((o) => o.rem > 0);
+    const old = R.filter((o) => pD(o.date) < yr).length; if (!ui.pkOld) R = R.filter((o) => !(pD(o.date) < yr));
+    if (q) R = R.filter((o) => [o.so, o.cust, o.cust_id, o.po].concat(o.lines.map((l) => l.pn + ' ' + l.d)).join(' ').toLowerCase().indexOf(q) >= 0);
+    const sa = P.st && P.st.sage_at ? new Date(P.st.sage_at) : null, stale = !sa || Date.now() - sa > 2 * 3600000;
+    let h = '<div class="head"><div><h1>📦 Pack orders</h1><p class="muted">Open sales orders from Sage. When you pack a line, tap <b>✓ Packed</b> — the parts come out of inventory right away. Sign in first so it records who packed it.</p></div><button class="btn sm" data-a="pkReload">↻ Refresh</button></div>';
+    h += '<div class="banner ' + (stale ? 'warn' : 'info') + '"><div>Sage last read: <b>' + (sa ? esc(fTime(+sa)) : 'never') + '</b>' + (stale ? ' — Sage is not updating. Tell the office (the Sage sync needs its password re-entered).' : ' · updates every 15 minutes') + '</div></div>';
+    if (P.err) h += '<div class="banner warn"><div>' + esc(P.err) + '</div></div>';
+    if (!ui.user) h += '<div class="banner warn"><div><b>Sign in to pack.</b> Tap your name and PIN so the packing is recorded under you.</div><button class="btn sm" data-m="login">Sign in</button></div>';
+    h += '<div class="row" style="gap:8px;flex-wrap:wrap;margin:8px 0"><input id="pk-q" class="field" style="flex:1;min-width:220px" placeholder="Sales order #, customer, PO or part #" value="' + esc(ui.pkQ || '') + '" autocomplete="off"><button class="btn sm" data-a="pkFind">Search</button>' + (old ? '<button class="btn sm' + (ui.pkOld ? ' sel' : '') + '" data-a="pkOld">' + (ui.pkOld ? 'Hide' : 'Show') + ' orders older than 1 year (' + old + ')</button>' : '') + '<span class="small muted">' + R.length + ' open orders</span></div>';
+    if (!P.rows) return h + '<div class="empty">Loading sales orders…</div>';
+    const T = (P.st && P.st.today) || [];
+    if (T.length) h += '<details class="panel"' + (ui.pkHist ? ' open' : '') + '><summary><b>Packed in the last 24 h (' + T.length + ')</b></summary>' + T.slice(0, 60).map((x) => '<div class="row" style="justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding:5px 0"><span><b>' + esc(x.qty) + ' × <span class="mono">' + esc(x.item || '') + '</span></b> · SO ' + esc(x.so) + ' · ' + esc(nm(x.by)) + ' · ' + esc(fTime(+new Date(x.at))) + '</span>' + (ui.user && (ui.user.id === x.by || ui.user.role === 'manager' || W.isApprover(ui.user)) ? '<button class="btn sm" data-a="pkUndo" data-v="' + esc(x.id) + '">Undo</button>' : '') + '</div>').join('') + '</details>';
+    h += R.slice(0, ui.pkMore ? 600 : 60).map((o) => { const open = ui.pkOpen === o.so, late = o.ship_by && o.ship_by < today;
+      let c = '<div class="card" style="display:block"><div class="row" style="justify-content:space-between;gap:8px;flex-wrap:wrap"><button class="btn sm" data-a="pkOpen" data-v="' + esc(o.so) + '">' + (open ? '▴' : '▾') + ' SO ' + esc(o.so) + '</button><span style="flex:1;min-width:160px"><b>' + esc(o.cust || o.cust_id || '') + '</b>' + (o.po ? ' · PO ' + esc(o.po) : '') + '<br><span class="small muted">' + o.lines.length + ' line' + (o.lines.length > 1 ? 's' : '') + ' · ' + o.rem + ' pcs left to pack</span></span><span class="pill ' + (late ? 'bad' : '') + '">' + (o.ship_by ? (late ? 'LATE · ' : 'Ship by ') + esc(fDue(o.ship_by)) : 'No ship date') + '</span></div>';
+      if (open) c += '<div class="tbl-wrap" style="margin-top:8px"><table class="tbl"><thead><tr><th>Part #</th><th>Description</th><th>Ordered</th><th>Shipped (Sage)</th><th>Packed here</th><th>Left</th><th>In stock</th><th>Pack</th></tr></thead><tbody>' + o.lines.map((l) => { const L = left(l), k = esc(o.so) + '|' + l.line;
+        return '<tr><td class="mono"><b>' + esc(l.pn || '') + '</b></td><td>' + esc(l.d || '') + '</td><td>' + esc(l.qty) + '</td><td>' + esc(l.shipped) + '</td><td>' + esc(l.packed) + '</td><td><b>' + L + '</b></td><td' + (Number(l.stock) < L ? ' style="color:var(--bad);font-weight:700"' : '') + '>' + esc(l.stock) + '</td><td>' +
+          (L > 0 ? (ui.user ? '<div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn sm primary" data-a="pkLine" data-v="' + k + '" data-n="' + L + '">✓ Packed all ' + L + '</button><input id="pk-n-' + esc(o.so) + '-' + l.line + '" type="number" min="1" max="' + L + '" inputmode="numeric" placeholder="#" style="width:70px"><button class="btn sm" data-a="pkLine" data-v="' + k + '">✓ Packed</button></div>' : '<span class="small muted">Sign in</span>') : '<span class="pill ok">Done</span>') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+      return c + '</div>'; }).join('') + (R.length > 60 && !ui.pkMore ? '<button class="btn" data-a="pkMore">Show all ' + R.length + '</button>' : '') + (!R.length ? '<div class="empty">No open sales orders match.</div>' : '');
+    return h;
+  }
   function renderXl() {
     const L = [['metal', 'Shop Traveler Log (metal)'], ['filter', 'Filter Log Sheet'], ['final', 'Final Assembly Traveler Log'], ['cnc', 'CNC Traveler Log']], k = ui.xlLog || 'metal', x = (store.logx || {})[k];
     if (!(ui.user && (ui.user.role === 'manager' || W.isApprover(ui.user) || W.canDispose(ui.user)))) return '<div class="head"><h1>Traveler logs</h1></div><div class="banner warn"><div>Sign in as a supervisor, quality or manager to see the logs.</div><button class="btn sm" data-m="login">Sign in</button></div>';
@@ -3496,7 +3528,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const act = document.activeElement, actId = act && main.contains(act) ? act.id : '', caret = actId && act.selectionStart != null ? [act.selectionStart, act.selectionEnd] : null;
     if (ui.tv) { ui.view = 'board'; ui.modal = null; ui.user = null; }
     const y = window.scrollY;
-    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'prio' ? renderPrio() : ui.view === 'board' ? renderBoard() : ui.view === 'xl' ? renderXl() : (ui.view === 'pm' || ui.view === 'cal') ? renderPM() : ui.view === 'ops' ? renderOps() : ui.view === 'mine' ? renderMine() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
+    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'prio' ? renderPrio() : ui.view === 'board' ? renderBoard() : ui.view === 'xl' ? renderXl() : ui.view === 'pack' ? renderPack() : (ui.view === 'pm' || ui.view === 'cal') ? renderPM() : ui.view === 'ops' ? renderOps() : ui.view === 'mine' ? renderMine() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
     if (ui.keep) Object.keys(ui.keep).forEach((id) => { const e = document.getElementById(id); if (!e) return; if (e.type === 'checkbox') e.checked = !!ui.keep[id]; else if (e.type !== 'file') e.value = ui.keep[id]; });
     if (actId) { const e = document.getElementById(actId); if (e && e !== document.activeElement) { try { e.focus({ preventScroll: true }); if (caret && e.setSelectionRange) e.setSelectionRange(caret[0], caret[1]); } catch (er) { /* number inputs */ } } }
     $('#b-home').textContent = '⌂ Main menu'; $('#b-list').textContent = '☰ Travelers'; $('#q').setAttribute('placeholder', 'Search or scan'); $('#b-lang').textContent = LANG === 'es' ? 'English' : 'Español';
@@ -3654,6 +3686,25 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (d.a === 'tvCopy') { try { navigator.clipboard.writeText(d.v); toast('Link copied'); } catch (e) { toast(d.v); } return; }
     if (d.a === 'tvPick') { ui.tvPick = true; return render(); }
     if (d.a === 'tvSet') { ui.tvPick = false; ui.tvLane = d.v === 'all' ? null : d.v; try { localStorage.setItem('wt-tvlane', d.v); } catch (e) {} try { history.replaceState(null, '', '#tv' + (ui.tvLane ? '=' + ui.tvLane : '')); } catch (e) {} return render(); }
+    if (d.a === 'pkReload') { packLoad(true); return toast('Refreshing…'); }
+    if (d.a === 'pkFind') { ui.pkQ = ($('#pk-q') || {}).value || ''; return render(); }
+    if (d.a === 'pkOld') { ui.pkOld = !ui.pkOld; return render(); }
+    if (d.a === 'pkMore') { ui.pkMore = true; return render(); }
+    if (d.a === 'pkOpen') { ui.pkOpen = ui.pkOpen === d.v ? null : d.v; return render(); }
+    if (d.a === 'pkLine' || d.a === 'pkUndo') {
+      if (!ui.user) return openModal({ type: 'login', who: null, pin: '' });
+      if (t.disabled) return; t.disabled = true;
+      (async () => {
+        let r;
+        if (d.a === 'pkUndo') r = await window.WT_SB.rpc('pack_undo', { p_id: Number(d.v), p_by: ui.user.id });
+        else { const [so, ln] = d.v.split('|'), inp = $('#pk-n-' + so + '-' + ln), n = Number(d.n || (inp && inp.value)); if (!n || n < 1) { t.disabled = false; return toast('Type how many you packed, or tap Packed all', 'bad'); }
+          r = await window.WT_SB.rpc('pack_line', { p_so: so, p_line: Number(ln), p_qty: n, p_by: ui.user.id }); }
+        if (r.error) { t.disabled = false; return toast(String(r.error.message || r.error).replace(/^.*?: /, ''), 'bad'); }
+        toast(d.a === 'pkUndo' ? 'Undone — parts put back in stock' : 'Packed ✓ — taken out of inventory' + (r.data && r.data.txn == null ? ' (part not in the inventory list yet)' : ''));
+        ui.pkHist = d.a === 'pkUndo'; packLoad(true);
+      })();
+      return;
+    }
     if (d.a === 'xlLog') { ui.xlLog = d.v; return render(); }
     if (d.a === 'xlOpen') { ui.xlOpen = !ui.xlOpen; return render(); }
     if (d.a === 'xlOld') { ui.xlOld = !ui.xlOld; return render(); }
@@ -3831,6 +3882,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   window.addEventListener('offline', renderSync);
   setInterval(() => {
     if (ui.user && !ui.modal && !(myPhone() && myPhone().id === ui.user.id) && Date.now() - ui.touched > idleSec(ui.user) * 1000) { signOutUser(); render(); toast('Signed out after ' + Math.round(idleSec(ui.user) / 60) + ' min idle'); return; }
+    if (ui.view === 'pack') packLoad();
     const a = document.activeElement; if (!ui.modal && !(a && /INPUT|SELECT|TEXTAREA/.test(a.tagName))) render();
   }, 30000);
 
