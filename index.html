@@ -1845,6 +1845,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       prio: () => (canPlan() ? tile('data-nav="prio"', 'Daily priorities', 'What each area runs first', LANES.reduce((a, l) => a + openItems(l.id).length, 0), LANES.some((l) => planStale(l.id)) ? 'warn' : '') : T.today()),
       sign: () => tile('data-nav="list" data-lf="sign"', 'Needs a signature', 'First articles and closing signatures', sign, sign ? 'warn' : ''),
       hold: () => tile('data-nav="list" data-lf="hold"', 'On hold', 'Waiting on a disposition', hold, hold ? 'bad' : ''),
+      usage: () => tile('data-nav="usage"', '🏆 Leaderboard', 'Who uses the tablets most · $150 a month', null, ''),
       pack: () => tile('data-nav="pack"', '📦 Pack orders', 'Sage sales orders · packing takes parts out of stock', null, ''),
       tvmode: () => tile('data-m="tvmode"', '📺 TV mode', 'Turn this screen into an area priorities TV', null, ''),
       rl: () => tile('data-m="rlList"', 'Traveler changes', rlMine().length ? rlMine().length + ' waiting on you to sign' : 'Changes waiting: ' + rlPending().length, rlMine().length || rlPending().length, rlMine().length ? 'warn' : ''),
@@ -1864,9 +1865,9 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       inout: () => (ui.user ? tile('id="t-out"', 'Sign out', esc(ui.user.name), null) : tile('data-m="login"', 'Sign in', 'Tap your name, enter your PIN', null, 'go'))
     };
     // Each person sees only what they use. Operators: their work. Supervisors, quality and managers: everything.
-    const order = !ui.user ? ['ops', 'inout', 'work', 'today', 'board', 'pack', 'tvmode', 'all', 'asap', 'where', 'pm', 'cal', 'train', 'area']
-      : !lead ? (/maint/i.test(ui.user.area || '') ? ['pm', 'ops', 'mine', 'where', 'train', 'area', 'inout'] : ['ops', 'work', 'mine', 'today', 'board', 'pack', 'tvmode', 'all', 'asap', 'hold', 'where', 'pm', 'cal', 'train', 'area', 'inout'])
-      : ['work', 'prio', 'board', 'pack', 'tvmode', 'sign', 'ops', 'xl', 'pm', 'cal', 'alerts', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
+    const order = !ui.user ? ['ops', 'inout', 'work', 'today', 'board', 'pack', 'usage', 'tvmode', 'all', 'asap', 'where', 'pm', 'cal', 'train', 'area']
+      : !lead ? (/maint/i.test(ui.user.area || '') ? ['pm', 'ops', 'mine', 'where', 'train', 'area', 'inout'] : ['ops', 'work', 'mine', 'today', 'board', 'pack', 'usage', 'tvmode', 'all', 'asap', 'hold', 'where', 'pm', 'cal', 'train', 'area', 'inout'])
+      : ['work', 'prio', 'usage', 'board', 'pack', 'tvmode', 'sign', 'ops', 'xl', 'pm', 'cal', 'alerts', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
     return '<div class="head"><div><h1>Main menu</h1><p class="muted">' + (ui.user ? 'Signed in as ' + esc(ui.user.name.replace(/\.$/, '')) + '.' : 'Not signed in.') + ' This tablet is set to ' + esc(areaName()) + '.</p></div></div><div class="menu">' + order.map((k) => T[k]()).join('') + '</div>';
   }
 
@@ -2296,6 +2297,39 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       src.then((b) => { const d = b.pages.filter((g) => g.k === 'd'); PKD[dw.key].pages = (d.length ? d : b.pages).map((g) => g.d); render(); }).catch(() => { PKD[dw.key].pages = []; render(); }); }
     const pg = PKD[dw.key].pages; return '<p class="small muted">Drawing from the master traveler <b>' + esc(dw.key) + '</b></p>' + (pg ? (pg.length ? pg.map(img).join('') : '<p class="muted">Could not open the drawing.</p>') : '<p class="muted">Loading drawing…</p>');
   }
+  /* ---------- Leaderboard: who uses the tablets, time on jobs, pieces, kits packed — made comparable as earned hours ---------- */
+  function usageRange(k) { const d = new Date(), z = (x) => x.toISOString().slice(0, 10), y = d.getFullYear(), m = d.getMonth();
+    if (k === 'last') return [z(new Date(Date.UTC(y, m - 1, 1))), z(new Date(Date.UTC(y, m, 0)))];
+    if (k === 'week') { const w = new Date(d); w.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return [ymd(+w), ymd(Date.now())]; }
+    if (k === 'today') return [ymd(Date.now()), ymd(Date.now())];
+    return [z(new Date(Date.UTC(y, m, 1))), ymd(Date.now())]; }
+  function usageLoad(force) { const k = ui.usK || 'month', U = ui.us = ui.us || {}; if (U.busy || (!force && U.k === k && U.at && Date.now() - U.at < 120000)) return; U.busy = true; const [f, t] = usageRange(k);
+    window.WT_SB.rpc('usage_board', { p_from: f, p_to: t }).then((r) => { U.busy = false; U.k = k; U.at = Date.now(); U.data = r.data; U.err = r.error && r.error.message; if (ui.view === 'usage') render(); }); }
+  function renderUsage() {
+    const U = ui.us || {}, k = ui.usK || 'month'; if (!U.data || U.k !== k) usageLoad(); const D = U.k === k ? U.data : null, cfg = (D && D.cfg) || {}, mgr = ui.user && (ui.user.role === 'manager' || W.isApprover(ui.user));
+    const tabs = [['today', 'Today'], ['week', 'This week'], ['month', 'This month'], ['last', 'Last month']].map((x) => '<button class="btn sm ' + (k === x[0] ? 'sel' : '') + '" data-a="usK" data-v="' + x[0] + '">' + x[1] + '</button>').join('');
+    let h = '<div class="head"><div><h1>🏆 Tablet leaderboard</h1><p class="muted">Every operator is scored the same way, so a punch press job and a packing job compare fairly. <b>Top operator each month wins $' + esc(cfg.bonus || 150) + '.</b></p></div><button class="btn sm" data-a="usReload">↻ Refresh</button></div><div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:8px">' + tabs + '</div>';
+    if (U.err) h += '<div class="banner warn"><div>' + esc(U.err) + '</div></div>';
+    if (!D) return h + '<div class="empty">Loading…</div>';
+    const all = D.people || [], isOp = (p) => p.role === 'operator', ops = all.filter(isOp).sort((a, b) => b.score - a.score), leads = all.filter((p) => !isOp(p) && (p.days || p.hours)).sort((a, b) => b.score - a.score);
+    const row = (p, i, bonus) => '<tr' + (bonus && i === 0 && p.score > 0 ? ' style="background:#E6F2E6;font-weight:700"' : ui.user && ui.user.id === p.id ? ' style="background:var(--panel2)"' : '') + '><td>' + (i + 1) + (bonus && i === 0 && p.score > 0 ? ' 💵' : '') + '</td><td><b>' + esc(p.name) + '</b><br><span class="small muted">' + esc(p.area || '') + '</span></td><td>' + p.days + '</td><td>' + p.hours + '</td><td>' + p.jobs + '</td><td>' + Number(p.pieces).toLocaleString() + '</td><td>' + (p.pack_pcs ? p.pack_pcs + ' pcs / ' + p.pack_lines + ' lines' : '—') + '</td><td>' + p.earned + '</td><td><b>' + p.score + '</b></td></tr>';
+    const head = '<thead><tr><th>#</th><th>Name</th><th>Days used</th><th>Hours on jobs</th><th>Jobs</th><th>Pieces made</th><th>Packed</th><th>Earned hours</th><th>Score</th></tr></thead>';
+    const top = ops[0] && ops[0].score > 0 ? ops[0] : null;
+    h += '<div class="banner ' + (top ? 'ok' : 'info') + '"><div>' + (top ? '<b>' + (k === 'last' ? 'Winner' : 'Leading') + ': ' + esc(top.name) + '</b> (' + esc(top.area || '') + ') · score ' + top.score + ' · ' + top.days + ' days on the tablet' : 'Nobody has a score yet for this period.') + '</div></div>';
+    h += '<div class="panel"><h2>Operators</h2><div class="tbl-wrap"><table class="tbl">' + head + '<tbody>' + ops.map((p, i) => row(p, i, true)).join('') + '</tbody></table></div></div>';
+    h += '<details class="panel"><summary><b>How the score works</b></summary><p><b>Earned hours</b> = the pieces you finished on the tablet × the shop’s normal time per piece for that same operation (taken from all the tablet times for that step). So 1,000 punched parts and 5 packed kits are worth what they really take. When a step has no good timing yet, it uses the area’s standard minutes per piece. Packing = ' + esc(cfg.packMinPerPiece || 2) + ' min per piece + ' + esc(cfg.packMinPerLine || 5) + ' min per order line.<br><b>Score</b> = earned hours + ' + esc(cfg.dayPts || 2) + ' points for every day you use the tablet. Work you do without the tablet does not count — start and finish every step on the tablet.</p></details>';
+    if (leads.length) h += '<details class="panel"><summary><b>Supervisors and managers (not in the bonus)</b></summary><div class="tbl-wrap"><table class="tbl">' + head + '<tbody>' + leads.map((p, i) => row(p, i, false)).join('') + '</tbody></table></div></details>';
+    if (mgr) { const low = ops.filter((p) => (p.days || 0) < (cfg.minDays || 3)).sort((a, b) => a.score - b.score);
+      h += '<div class="panel" style="border-color:var(--bad)"><h2>Not using the tablet (' + low.length + ')</h2><p class="small muted">Only managers and supervisors see this. Fewer than ' + esc(cfg.minDays || 3) + ' days used in this period. Talk to them first; print a write-up only if it keeps happening.</p>' +
+        (low.length ? low.map((p) => '<div class="row" style="justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding:6px 0"><span><b>' + esc(p.name) + '</b> · ' + esc(p.area || '') + ' · ' + p.days + ' day' + (p.days === 1 ? '' : 's') + ' used · last ' + (p.last ? esc(fTime(Number(p.last))) : 'never') + '</span><button class="btn sm" data-a="usWrite" data-v="' + esc(p.id) + '">📝 Write-up form</button></div>').join('') : '<p class="muted">Everyone is using it.</p>') + '</div>'; }
+    return h;
+  }
+  function printWriteUp(p, k) { const [f, t] = usageRange(k), E = (v) => esc(v == null ? '' : v);
+    const html = '<!doctype html><html><head><meta charset="utf-8"><title>Write-up ' + E(p.name) + '</title><style>body{font:14px Arial;margin:30px;max-width:780px}h1{font-size:20px}.l{border-bottom:1px solid #000;height:26px}td{padding:6px;border:1px solid #000}table{border-collapse:collapse;width:100%}@media print{button{display:none}}</style></head><body><button onclick="window.print()">Print</button><h1>WALKER ENGINEERING · EMPLOYEE WRITE-UP / WARNING NOTICE</h1>' +
+      '<table><tr><td>Employee</td><td><b>' + E(p.name) + '</b></td><td>Area</td><td>' + E(p.area) + '</td></tr><tr><td>Date</td><td>' + E(fDay(Date.now())) + '</td><td>Period reviewed</td><td>' + E(f) + ' to ' + E(t) + '</td></tr></table>' +
+      '<p><b>Reason:</b> Not using the shop tablet / digital traveler as required. Required: start and finish every job step on the tablet each work day.</p><p><b>Record for the period:</b> days used ' + E(p.days) + ' · hours on jobs ' + E(p.hours) + ' · pieces recorded ' + E(p.pieces) + ' · packed ' + E(p.pack_pcs) + '.</p>' +
+      '<p><b>Type:</b> ☐ Verbal (documented) &nbsp; ☐ Written warning &nbsp; ☐ Final warning</p><p><b>Expectation going forward:</b></p><div class="l"></div><div class="l"></div><p><b>Employee comments:</b></p><div class="l"></div><div class="l"></div><p style="margin-top:30px">Supervisor: ______________________ Date: ________ &nbsp;&nbsp; Employee: ______________________ Date: ________</p><p style="font-size:11px">Signing shows the employee received this notice, not that they agree with it.</p></body></html>';
+    const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); } else toast('Allow pop-ups to print the form', 'bad'); }
   const BSK = [['box', '📦 Box'], ['bag', '🛍 Bag'], ['label', '🏷 Labels'], ['part', '🔩 Parts']];
   function renderBuild() {
     const B = ui.bs, P = B.parts || [], pr = store.prints && store.prints[pKey(B.pn)];
@@ -3573,7 +3607,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const act = document.activeElement, actId = act && main.contains(act) ? act.id : '', caret = actId && act.selectionStart != null ? [act.selectionStart, act.selectionEnd] : null;
     if (ui.tv) { ui.view = 'board'; ui.modal = null; ui.user = null; }
     const y = window.scrollY;
-    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'prio' ? renderPrio() : ui.view === 'board' ? renderBoard() : ui.view === 'xl' ? renderXl() : ui.view === 'pack' ? renderPack() : (ui.view === 'pm' || ui.view === 'cal') ? renderPM() : ui.view === 'ops' ? renderOps() : ui.view === 'mine' ? renderMine() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
+    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'prio' ? renderPrio() : ui.view === 'board' ? renderBoard() : ui.view === 'xl' ? renderXl() : ui.view === 'pack' ? renderPack() : ui.view === 'usage' ? renderUsage() : (ui.view === 'pm' || ui.view === 'cal') ? renderPM() : ui.view === 'ops' ? renderOps() : ui.view === 'mine' ? renderMine() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
     if (ui.keep) Object.keys(ui.keep).forEach((id) => { const e = document.getElementById(id); if (!e) return; if (e.type === 'checkbox') e.checked = !!ui.keep[id]; else if (e.type !== 'file') e.value = ui.keep[id]; });
     if (actId) { const e = document.getElementById(actId); if (e && e !== document.activeElement) { try { e.focus({ preventScroll: true }); if (caret && e.setSelectionRange) e.setSelectionRange(caret[0], caret[1]); } catch (er) { /* number inputs */ } } }
     $('#b-home').textContent = '⌂ Main menu'; $('#b-list').textContent = '☰ Travelers'; $('#q').setAttribute('placeholder', 'Search or scan'); $('#b-lang').textContent = LANG === 'es' ? 'English' : 'Español';
@@ -3747,6 +3781,9 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         const r = await window.WT_SB.rpc('pack_line', { p_so: B.so, p_line: B.line, p_qty: B.qty, p_by: ui.user.id });
         if (r.error) { t.disabled = false; return toast(String(r.error.message || r.error).replace(/^.*?: /, ''), 'bad'); }
         printPackSheet(B, sv.data || {}); toast('Packed ✓ — ' + (r.data && r.data.parts ? r.data.parts + ' parts taken out of inventory' : 'recorded') + '. Build sheet saved for next time.'); ui.bs = null; packLoad(true); render(); })(); return; }
+    if (d.a === 'usK') { ui.usK = d.v; usageLoad(true); return render(); }
+    if (d.a === 'usReload') { usageLoad(true); return toast('Refreshing…'); }
+    if (d.a === 'usWrite') { const p = ((ui.us && ui.us.data && ui.us.data.people) || []).find((x) => x.id === d.v); if (p) printWriteUp(p, ui.usK || 'month'); return; }
     if (d.a === 'pkDw') { ui.pkDw = ui.pkDw === d.v ? null : d.v; return render(); }
     if (d.a === 'pkReload') { packLoad(true); return toast('Refreshing…'); }
     if (d.a === 'pkFind') { ui.pkQ = ($('#pk-q') || {}).value || ''; return render(); }
