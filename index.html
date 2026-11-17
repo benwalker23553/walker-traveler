@@ -125,6 +125,9 @@ p { margin: 0; }
 .opchip { flex: 0 0 auto; min-width: 104px; min-height: 60px; text-align: left; border: 1.5px solid var(--line); background: var(--panel); border-radius: var(--r); padding: 6px 10px; display: flex; flex-direction: column; }
 .opchip b { font-family: var(--f-mono); font-size: 1.05rem; } .opchip span { font-size: .74rem; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
 .opchip.cur { border-color: var(--navy); border-width: 3px; }
+.opchip.mv { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.opchip.dragging { transform: scale(1.08); box-shadow: 0 8px 22px rgba(0,0,0,.35); border-color: #E8730C; border-width: 3px; z-index: 5; position: relative; }
+.oprail.drag-on { touch-action: none; outline: 2px dashed #E8730C; outline-offset: 3px; border-radius: 6px; }
 .opchip { max-width: 210px; } .opchip span:nth-of-type(1) { text-transform: none; letter-spacing: 0; font-size: .82rem; line-height: 1.2; white-space: normal; color: var(--ink); } .opchip.s-done { background: var(--ok-bg); } .opchip.s-hold { background: var(--bad-bg); border-color: var(--bad); }
 .tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 2px solid var(--navy); }
 .tabs button { min-height: 48px; padding: 4px 16px; border: 0; background: none; font-family: var(--f-display); font-size: 1.2rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--ink2); border-radius: var(--r) var(--r) 0 0; white-space: nowrap; }
@@ -929,6 +932,8 @@ window.WT_ESP = [
     return op;
   }
 
+  // A step can move only while nothing has been done on it yet
+  const opLocked = (job, k) => { const o = job.ops[k]; return !o || !(o.st === 'pending' || o.st === 'ready') || (o.seg || []).length > 0 || o.good != null || !!o.scrap || !!o.setup || !!o.paused || !!o.pend || !!o.skipped || !!o.stock || !!o.paper || job.lots.some((l) => l.from === k) || openHolds(job, o.n).length > 0; };
   function finalDest(job, i) { const next = job.ops[i + 1]; if (next) return next.station; const m = (routing(job.rid) || {}).moveTo; return STATIONS.some((s) => s.id === m) ? m : job.ops[i].station; }
   // Final assembly / packaging travelers carry the customer PO # and Sales Order # for shipping
   const isFinal = (r) => !!r && (!!r.fa || String(r.id).indexOf('PK-') === 0 || /FINAL|PACKAG|FNL/i.test((r.kind || '') + ' ' + (r.form || '') + ' ' + (r.file || '')));
@@ -1193,6 +1198,25 @@ window.WT_ESP = [
         job.edits[n] = { text: tx, by: ctx.u.id, at: ctx.at, reason: p.reason.trim() };
         log(job, ctx, 'Step changed', 'Op ' + n + ' · ' + p.reason.trim() + ' · was: ' + was.slice(0, 120) + ' · now: ' + tx.slice(0, 160)); break;
       }
+      case 'reorder': {
+        if (!ctx.u) fail('Sign in first.');
+        const old = job.ops, ns = old.map((o) => String(o.n)), ord = (p.order || []).map(String);
+        if (new Set(ns).size !== ns.length) fail('This traveler has two steps with the same op number, so the steps cannot be moved.');
+        if (ord.length !== ns.length || ord.some((n) => ns.indexOf(n) < 0) || new Set(ord).size !== ord.length) fail('Step list changed. Close the traveler and try again.');
+        const byN = {}; old.forEach((o) => { byN[String(o.n)] = o; });
+        const nx = ord.map((n) => byN[n]);
+        if (nx.every((o, k) => o === old[k])) break;
+        for (let k = 0; k < old.length; k++) {
+          if (nx[k] === old[k]) continue;
+          if (opLocked(job, k)) fail('Op ' + old[k].n + ' has already started, so it stays where it is. Only steps not started yet can move.');
+          if (opLocked({ ops: [nx[k]], lots: [], holds: job.holds }, 0) || job.lots.some((l) => l.from === old.indexOf(nx[k]))) fail('Op ' + nx[k].n + ' has already started, so it stays where it is.');
+          if (k > 0 && job.lots.some((l) => l.from === k - 1 && l.st !== 'received')) fail('Parts are on the way to op ' + old[k].n + '. Receive them first, then move the steps.');
+        }
+        // the slot keeps its state (ready + quantity waiting); the step that lands there takes it over
+        job.ops = nx.map((o, k) => (o === old[k] ? o : Object.assign({}, o, { st: old[k].st, qtyIn: old[k].qtyIn })));
+        log(job, ctx, 'Steps reordered', 'Was ' + ns.join(' → ') + ' · now ' + ord.join(' → ') + (p.master ? ' · master traveler updated for next time' : ''));
+        break;
+      }
       case 'jobNote': {
         if (!ctx.u) fail('Sign in first.');
         const text = String(p.text || '').trim().slice(0, 2000), photo = p.photo ? String(p.photo) : '';
@@ -1314,7 +1338,7 @@ window.WT_ESP = [
     return t;
   }
 
-  root.WT = { STATIONS, ROUTINGS, ISSUES, DEFAULT_CFG, PAUSE_REASONS, HOLD_REASONS, BLOCK_REASONS, DISPOSITIONS, ST_LABEL, clone, routing, station, isApprover, canDispose, sideOf, covers, newJob, act, gate, finalDest, bucket, nextAction, where, blocking, goodDone, dur, approvalWait, totals, isFinal, shipOk, workMs, isWorking, lastShiftEnd, setShift, shiftText, openHolds, openCheck, unmoved, moved, sendable, inbound, midTarget, totalScrap };
+  root.WT = { STATIONS, ROUTINGS, ISSUES, DEFAULT_CFG, PAUSE_REASONS, HOLD_REASONS, BLOCK_REASONS, DISPOSITIONS, ST_LABEL, clone, routing, station, isApprover, canDispose, sideOf, covers, newJob, act, gate, finalDest, opLocked, bucket, nextAction, where, blocking, goodDone, dur, approvalWait, totals, isFinal, shipOk, workMs, isWorking, lastShiftEnd, setShift, shiftText, openHolds, openCheck, unmoved, moved, sendable, inbound, midTarget, totalScrap };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -1459,7 +1483,8 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       store.jobs = m; store.loaded = true; if (ui.openRlOnLoad && !ui.modal) { ui.openRlOnLoad = false; setTimeout(() => openModal({ type: 'rlList' }), 600); } if (ui.openJobOnLoad && m[ui.openJobOnLoad]) { const oj = ui.openJobOnLoad; ui.openJobOnLoad = null; try { history.replaceState(null, '', location.pathname); } catch (e) { /* ok */ } openJob(oj); } render(); setTimeout(endOfDay, 1500);
     }, () => { if (window.WT_SB) { store.loaded = true; render(); setTimeout(() => { try { location.reload(); } catch (e) { /* ok */ } }, 8000); return; } store.mode = 'local'; loadLocal(); store.loaded = true; render(); });
     db.collection('logs').onSnapshot((s) => { s.docs.forEach((d) => { const x = d.data(); if (/_x$/.test(d.id)) { (store.logx = store.logx || {})[d.id.slice(0, -2)] = x; return; } store.logs[d.id] = ((x && x.rows) || []).map((r) => (r && r.s == null ? Object.assign({}, r, { s: r.c ? 'C' : 'O' }) : r)); if (d.id === 'final' && x) store.finMeta = { at: x.at, by: x.by, file: x.file }; }); render(); }, () => {});
-    db.collection('routings').onSnapshot((s) => { s.docs.forEach((d) => { const r = d.data(); if (!r || !r.id) return; const ex = W.routing(r.id); if (!ex) W.ROUTINGS.push(W.clone(r)); else if (r.stack || /^(STK|WO)[:-]/.test(r.id)) { Object.assign(ex, W.clone(r)); Object.keys(PR).forEach((k) => { if (PR[k].dwFail) delete PR[k]; }); } }); W.ROUTINGS.forEach((rt) => { if (rt.stack) applyStackDesign(rt); }); render(); }, () => {});
+    db.collection('routings').onSnapshot((s) => { s.docs.forEach((d) => { const r = d.data(); if (!r || !r.id) return; const ex = W.routing(r.id); if (!ex) W.ROUTINGS.push(W.clone(r)); else if (r.stack || /^(STK|WO)[:-]/.test(r.id)) { Object.assign(ex, W.clone(r)); Object.keys(PR).forEach((k) => { if (PR[k].dwFail) delete PR[k]; }); } }); W.ROUTINGS.forEach((rt) => { if (rt.stack) applyStackDesign(rt); applyOpOrder(rt); }); render(); }, () => {});
+    db.collection('oporder').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.rid && Array.isArray(x.order)) m[x.rid] = x; }); store.opOrder = m; W.ROUTINGS.forEach(applyOpOrder); render(); }, () => {});
     db.collection('sage').onSnapshot((s) => { s.docs.forEach((d) => { if (d.id === 'bom') { const x = d.data(); store.sageBom = (x && x.bom) || {}; store.sageAt = x && x.at; } }); render(); }, () => {});
     db.collection('stackdesign').onSnapshot((s) => { store.stackDesigns = s.docs.map((d) => d.data()).filter((x) => x && x.pn); W.ROUTINGS.forEach((rt) => { if (rt.stack) applyStackDesign(rt); }); render(); if (ui.modal) renderModal(); }, () => {});
     db.collection('cnc').onSnapshot((s) => { s.docs.forEach((d) => { if (d.id === 'materials') { const x = d.data(); store.cncMat = (x && x.rows) || []; } }); }, () => {});
@@ -2172,7 +2197,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       W.STATIONS.filter((s) => s.floor === f).forEach((s) => {
         const rows = []; let pcs = 0;
         J.forEach((j) => { const r = W.routing(j.rid);
-          j.ops.forEach((o, i) => { const b = W.bucket(j, i); if (!b || o.station !== s.id) return; pcs += o.qtyIn; const loc = r && r.ops[i] ? r.ops[i].mach.join(' ') : '';
+          j.ops.forEach((o, i) => { const b = W.bucket(j, i); if (!b || o.station !== s.id) return; pcs += o.qtyIn; const ro = rop(r, j, i), loc = ro ? ro.mach.join(' ') : '';
             rows.push('<button class="card trow" data-open="' + esc(j.id) + '" data-i="' + i + '" style="border-left-color:var(--' + (PILL[b][0] === 'plain' ? 'line' : PILL[b][0] === 'info' ? 'navy' : PILL[b][0]) + ')"><span class="tmain" style="pointer-events:none"><span class="tcol tpart"><span class="pn mono">' + esc(j.pn) + (j.rush ? ' <span class="pill bad">ASAP</span>' : '') + '</span><span class="small">Shop Order ' + esc(j.so) + ' · op ' + o.n + (loc ? ' · ' + esc(loc) : '') + '</span></span><span class="tcol tstat"><b class="num">' + o.qtyIn + ' pcs</b>' + pill(b, W.openHolds(j, o.n).length ? 'On hold' : null) + '</span></span></button>'); });
           j.lots.forEach((l) => { if (l.st === 'received' || l.to !== s.id) return; rows.push('<div class="card trow b-move"><span class="tmain"><span class="tcol tpart"><span class="pn mono">' + esc(j.pn) + '</span><span class="small">Box ' + esc(j.so) + '-' + l.id + ' · coming from op ' + l.n + '</span></span><span class="tcol tstat"><b class="num">' + l.qty + ' pcs</b><span class="pill plain">➜ ' + (l.st === 'transit' ? 'On the way' : 'Delivered, not received') + '</span></span></span></div>'); });
         });
@@ -2520,6 +2545,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   const RISK_NAME = { L: 'Low risk', M: 'Medium risk', H: 'High risk' };
   const ovr = (rid, tag) => { const x = rls().filter((r) => r.rid === rid && r.n === tag && r.status === 'approved').sort((a, b) => b.okAt - a.okAt)[0]; return x ? x.text : null; };
   // Risk set by a supervisor beats the color read from the PDF; same for every traveler of that part
+  const rop = (r, j, i) => { if (!r || !r.ops) return null; const n = j && j.ops[i] ? j.ops[i].n : null; if (r.ops[i] && (n == null || r.ops[i].n === n)) return r.ops[i]; return r.ops.find((o) => o.n === n) || r.ops[i] || null; };
   const rk = (rt, o) => { const v = rt ? ovr(rt.id, 'risk:' + o.n) : null; return v != null ? v : o.risk || ''; };
   // Area (department) chosen by a supervisor for a step; new travelers of that part start there
   function applyAreas() { const A = rls().filter((x) => x.status === 'approved' && String(x.n).indexOf('area:') === 0).sort((a, b) => a.okAt - b.okAt); A.forEach((x) => { const r = W.routing(x.rid); if (!r) return; const o = r.ops.find((q) => 'area:' + q.n === x.n); if (o && W.STATIONS.some((st) => st.id === x.text)) { if (!o.station0) o.station0 = o.station; o.station = x.text; } }); }
@@ -2539,7 +2565,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       store.masterN = arr.length; applyRisk(); applyAreas(); render();
     }).catch(() => { store.masterN = -1; });
   }
-  const dwN = (r) => (r.stack ? (stackOwn(r) ? stackOwn(r).docs.length : 0) + (stackPrint(r) ? 1 : ((stackRef(r) || {}).docs || []).filter((d) => !/^Traveler/.test(d.t || '')).length) : r.series === 'cnc' ? 1 + (r.cncSetup || []).length : r.docs.length || (r.master && store.dwg && store.dwg[r.dw] ? store.dwg[r.dw].n : 0));
+  const dwN = (r) => (r.stack ? (stackOwn(r) ? stackOwn(r).docs.length : 0) + (stackPrint(r) ? 1 : ((stackRef(r) || {}).docs || []).filter((d) => !/^Traveler/.test(d.t || '')).length) : r.series === 'cnc' ? 1 + (r.cncSetup || []).length : (r.docs || []).length || (r.master && store.dwg && store.dwg[r.dw] ? store.dwg[r.dw].n : 0));
   const SHARD = {}, PRINTS_ONLY = { '1002698': 'UPLOAD-1002698' }, ALIAS = { '102911': '1002911', 'KWI-4700QT-1': 'KWI-4700' }, PR = {};
   function printsFor(slug) { PR[slug] = PR[slug] || { master: true, docs: [], dw: slug }; ensureDocs(PR[slug]); return PR[slug]; }
   function ensureDocs(r) {
@@ -2815,7 +2841,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     } catch (e) { if (st) st.textContent = ''; toast('Photo not saved: ' + (e.message || e), 'bad'); }
   }
   function workTab(j, r, i) {
-    const op = j.ops[i], o = r.ops[i], now = Date.now(), holds = W.openHolds(j, op.n), b = W.bucket(j, i);
+    const op = j.ops[i], o = rop(r, j, i), now = Date.now(), holds = W.openHolds(j, op.n), b = W.bucket(j, i);
     let h = '<div class="panel"><div class="row" style="justify-content:space-between"><h2>Op ' + op.n + ' · ' + esc(W.station(op.station).name) + ' ' + riskBox(rk(r, o), true) + '</h2>' +
       (b ? pill(b, holds.length ? 'On hold' : op.paused ? 'Paused' : b === 'approval' ? 'Needs signature' : W.ST_LABEL[op.st]) : '<span class="pill plain">' + esc(W.ST_LABEL[op.st]) + '</span>') + '</div>';
     holds.forEach((x) => { h += '<div class="banner bad"><div><b>■ HOLD ' + x.id + ' · ' + esc(x.reason) + (x.sup && x.sup.name ? ' · ' + esc(x.sup.name) + (x.sup.ref ? ' (' + esc(x.sup.ref) + ')' : '') : '') + ' · ' + x.qty + ' pcs</b><br><span class="small">Opened by ' + esc(nm(x.by)) + ' · ' + esc(fTime(x.at)) + (x.note ? ' · ' + esc(x.note) : '') + '. Tag the parts and submit to Material Review for disposition.</span></div></div>'; });
@@ -2922,7 +2948,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     let h = '<div class="panel"><div class="row" style="justify-content:space-between"><h2>Traveler record · ' + esc(r.form) + '</h2>' + (store.downloads ? '<button class="btn sm" data-a="export" data-job="' + esc(j.id) + '">Print this record</button>' : '') + '</div>' +
       '<div class="label"><span class="qr" id="qr"></span><div><div class="mono" style="font-size:1.4rem">Shop Order ' + esc(j.so) + '</div><div>' + esc(j.pn) + ' · ' + j.qty + ' pcs</div><p class="small muted">Container label. A scanner typed into the search box opens this traveler.</p></div></div>' +
       '<div class="tbl-wrap"><table><tr><th>Op</th><th>Machine / fixture</th><th>Setup</th><th>Operator</th><th>Closed</th><th>Accept</th><th>Reject</th><th>First article</th><th>Closing signature</th></tr>' +
-      j.ops.map((op, i) => '<tr><td class="mono">' + op.n + '</td><td>' + esc(r.ops[i].mach.join(', ')) + '</td><td>' + (op.setup ? esc(nm(op.setup.by)) : '—') + '</td><td>' + (op.who.map(nm).map(esc).join(', ') || '—') + '</td><td>' + esc(fTime(op.closedAt)) + '</td><td class="num">' + (op.good != null ? op.good : '—') + '</td><td class="num">' + op.scrap + '</td><td>' + sig(op, 'first') + '</td><td>' + sig(op, 'final') + '</td></tr>').join('') + '</table></div></div>';
+      j.ops.map((op, i) => '<tr><td class="mono">' + op.n + '</td><td>' + esc((rop(r, j, i) || { mach: [] }).mach.join(', ')) + '</td><td>' + (op.setup ? esc(nm(op.setup.by)) : '—') + '</td><td>' + (op.who.map(nm).map(esc).join(', ') || '—') + '</td><td>' + esc(fTime(op.closedAt)) + '</td><td class="num">' + (op.good != null ? op.good : '—') + '</td><td class="num">' + op.scrap + '</td><td>' + sig(op, 'first') + '</td><td>' + sig(op, 'final') + '</td></tr>').join('') + '</table></div></div>';
     if (j.holds.length) h += '<div class="panel"><h2>Discrepant parts</h2><div class="tbl-wrap"><table><tr><th>Hold</th><th>Op</th><th>Qty</th><th>Defect</th><th>Opened</th><th>Disposition</th></tr>' + j.holds.map((x) => '<tr><td>' + x.id + '</td><td>' + x.n + '</td><td>' + x.qty + '</td><td>' + esc(x.reason) + (x.note ? ' · ' + esc(x.note) : '') + '</td><td>' + esc(nm(x.by)) + ' ' + esc(fTime(x.at)) + '</td><td>' + (x.open ? '<b>OPEN</b>' : esc((W.DISPOSITIONS.find((d) => d[0] === x.disp.action) || [0, x.disp.action])[1]) + ' · ' + esc(nm(x.disp.by)) + ' ' + esc(fTime(x.disp.at)) + (x.disp.note ? ' · ' + esc(x.disp.note) : '')) + '</td></tr>').join('') + '</table></div></div>';
     if (j.lots.length) h += '<div class="panel"><div class="row" style="justify-content:space-between"><h2>Boxes and movement</h2><button class="btn sm" data-m="labels" data-job="' + esc(j.id) + '">Show box labels</button></div><div class="tbl-wrap"><table><tr><th>Container</th><th>From op</th><th>Sent</th><th>To</th><th>Status</th><th>Moved by</th><th>Received by</th><th>Counted</th></tr>' + j.lots.map((l) => '<tr><td>' + l.id + '</td><td>' + l.n + '</td><td>' + l.qty + '</td><td>' + esc(W.station(l.to).name) + (l.to !== l.expect ? ' <span class="flagnote">(expected ' + esc(W.station(l.expect).name) + ')</span>' : '') + '</td><td>' + ({ transit: 'In transit', delivered: 'Delivered, awaiting receipt', received: 'Received' }[l.st]) + '</td><td>' + esc(nm(l.by)) + ' ' + esc(fTime(l.at)) + '</td><td>' + (l.recvBy ? esc(nm(l.recvBy)) + ' ' + esc(fTime(l.recvAt)) : '—') + '</td><td>' + (l.counted != null ? l.counted : '—') + '</td></tr>').join('') + '</table></div></div>';
     if (j.flags.length) h += '<div class="panel"><h2>Instruction flags</h2><ul class="clean">' + j.flags.map((f) => '<li>Op ' + f.n + ': ' + esc(f.text) + ' <span class="muted small">· ' + esc(nm(f.by)) + ' · ' + esc(f.status) + '</span></li>').join('') + '</ul></div>';
@@ -2940,7 +2966,9 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         : '<div class="banner warn"><div><b>Shipping release needed.</b> Marty or QA enters the customer PO # and Sales Order #. Required before the closing signature.</div><button class="btn sm primary" data-m="ship" data-job="' + esc(j.id) + '">Enter PO / Sales Order</button></div>') : '') +
       (j.parent && store.jobs[j.parent] ? '<p class="small">Component for <button class="btn sm" data-open="' + esc(j.parent) + '">Shop Order ' + esc(store.jobs[j.parent].so) + ' · ' + esc(store.jobs[j.parent].pn) + '</button></p>' : '') +
       (j.needs || []).map((n) => { const k = store.jobs[n.id]; return '<p class="small"><b>Needs ' + esc(n.label) + ' before op ' + j.ops[n.i].n + ':</b> ' + (k ? (k.st === 'complete' ? '✔ received' : esc(W.where(k))) : 'job not found') + (n.waived ? ' · started without receipt by ' + esc(nm(n.waived.by)) : '') + ' <button class="btn sm" data-open="' + esc(n.id) + '">Shop Order ' + esc(n.so) + '</button></p>'; }).join('') + '</div></div>';
-    h += '<div class="oprail">' + j.ops.map((op, k) => '<button class="opchip ' + (k === i ? 'cur ' : '') + (op.st === 'done' ? 's-done ' : '') + (W.openHolds(j, op.n).length ? 's-hold ' : '') + (r.ops[k] && rk(r, r.ops[k]) ? 'rk-' + rk(r, r.ops[k]) : '') + '" data-op="' + k + '"><b>' + op.n + '</b><span>' + esc(r.ops[k] && r.ops[k].text ? stepShort(r.ops[k].text) + ((j.final || W.isFinal(r)) ? '' : ' · ' + W.station(op.station).name) : W.station(op.station).name) + '</span><span>' + esc(W.openHolds(j, op.n).length ? '■ Hold' : op.st === 'done' ? '✔ Done' : op.paused ? 'Paused' : W.ST_LABEL[op.st]) + '</span></button>').join('') + '</div>';
+    const canMv = !!ui.user && j.st !== 'complete' && j.ops.filter((o, k) => !W.opLocked(j, k)).length > 1;
+    if (canMv) h += '<div class="small muted" style="margin:2px 0 4px">↔ To fix the step order: press and hold a step, then slide it left or right. Started steps stay put.</div>';
+    h += '<div class="oprail" data-job="' + esc(j.id) + '">' + j.ops.map((op, k) => '<button class="opchip ' + (canMv && !W.opLocked(j, k) ? 'mv ' : '') + (k === i ? 'cur ' : '') + (op.st === 'done' ? 's-done ' : '') + (W.openHolds(j, op.n).length ? 's-hold ' : '') + (rop(r, j, k) && rk(r, rop(r, j, k)) ? 'rk-' + rk(r, rop(r, j, k)) : '') + '" data-op="' + k + '" data-n="' + esc(op.n) + '"><b>' + op.n + '</b><span>' + esc(rop(r, j, k) && rop(r, j, k).text ? stepShort(rop(r, j, k).text) + ((j.final || W.isFinal(r)) ? '' : ' · ' + W.station(op.station).name) : W.station(op.station).name) + '</span><span>' + esc(W.openHolds(j, op.n).length ? '■ Hold' : op.st === 'done' ? '✔ Done' : op.paused ? 'Paused' : W.ST_LABEL[op.st]) + '</span></button>').join('') + '</div>';
     h += '<div class="tabs" role="tablist">' + [['work', 'Operation'], ['docs', 'Prints (' + dwN(r) + ')'], ['record', 'Record']].map((t) => '<button role="tab" class="' + (ui.tab === t[0] ? 'on' : '') + '" data-tab="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>';
     return h + (ui.tab === 'docs' ? docsTab(j, r) : ui.tab === 'record' ? recordTab(j, r) : workTab(j, r, i));
   }
@@ -3265,7 +3293,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       }
       case 'correct': h = '<h2>Correct count · op ' + op.n + '</h2><p>Approved good count is ' + op.good + '. The original stays in the history.</p>' + inp('good', 'Correct good count', m, 'type="number" inputmode="numeric" min="0"') + inp('reason', 'Reason', m) + '<h3>Authorized by</h3>' + who(m, true) + (m.who ? pad(m) : '') + foot('Save correction'); break;
       case 'setup': {
-        const o = W.routing(j.rid).ops[m.i];
+        const o = rop(W.routing(j.rid), j, m.i);
         h = '<h2>Finish setup · op ' + op.n + '</h2>' + (o.checks || []).map((c, k) => '<label class="check"><input type="checkbox" data-chk="' + k + '"' + (m.chk[k] ? ' checked' : '') + '> ' + esc(c) + '</label>').join('') + '<div class="grid2">' + (o.fields || []).map((f) => inp('v_' + f.k, f.label, m, 'autocomplete="off"')).join('') + '</div>' + foot('Setup finished'); break;
       }
       case 'mid': h = '<h2>Request midpoint check · op ' + op.n + '</h2><p>Midpoint is due at <b>' + W.midTarget(op) + ' of ' + op.qtyIn + '</b>.</p>' + inp('count', 'How many are done so far?', m, 'type="number" inputmode="numeric" min="1"') + '<p class="small muted">Keep running while you wait. You cannot finish the operation until this is signed.</p>' + foot('Call supervisor'); break;
@@ -3288,7 +3316,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       case 'callSup': h = '<h2>🔔 Call a supervisor</h2><p class="muted"><span class="mono">' + esc(j.pn) + '</span> · op ' + esc(op.n) + ' · ' + esc(W.station(op.station).name) + '. Sends an alert to the ' + esc(W.sideOf(op.station)) + ' supervisors’ phones.</p>' + tiles('reason', ['Come check this part', 'First piece ready', 'Question on the print', 'Machine problem', 'Need material', 'Quality problem'], m) +
         '<label>Note (optional)<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Send alert', 'go'); break;
       case 'alertsOn': h = '<h2>🔔 Alerts on this phone</h2><p>' + esc(nm(m.who)) + ', get a notification when someone in your area calls you, needs a signature, or puts a part on hold.</p><p class="small muted">iPhone: first add this app to your Home Screen (Share → Add to Home Screen) and open it from the icon. Then turn alerts on here.</p>' + pad(m) + foot('Turn on alerts', 'go'); break;
-      case 'redline': { const o2 = W.routing(j.rid).ops[m.i]; h = '<h2>✎ Change this step · op ' + op.n + '</h2><p class="muted">Fix the words below, or just say what is wrong. ' + esc(nm(RL_QA())) + ' gets a text, finalizes the wording and signs, then ' + esc(nm(RL_MGR())) + ' signs and every ' + esc(j.pn) + ' traveler updates.</p>' +
+      case 'redline': { const o2 = rop(W.routing(j.rid), j, m.i); h = '<h2>✎ Change this step · op ' + op.n + '</h2><p class="muted">Fix the words below, or just say what is wrong. ' + esc(nm(RL_QA())) + ' gets a text, finalizes the wording and signs, then ' + esc(nm(RL_MGR())) + ' signs and every ' + esc(j.pn) + ' traveler updates.</p>' +
         '<label>The step should read<textarea data-f="text" id="m-text" style="min-height:140px" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.text || '') + '</textarea></label>' +
         '<label>What is wrong / why (optional)<input data-f="note" id="m-note" class="field" value="' + esc(m.note || '') + '" placeholder="Example: we use fixture #12 now, not #8"></label>' + tiles('reason', RL_REASONS, m) + foot('Send to ' + esc(nm(RL_QA())), 'go'); break; }
       case 'rlRev': { const x = store.redlines[m.id]; h = '<h2>✎ Change ' + esc(x.id) + ' · <span class="mono">' + esc(x.pn) + '</span> ' + esc(opLabel(x.n)) + '</h2><p class="small">Asked by <b>' + esc(nm(x.by)) + '</b> · ' + esc(x.reason) + (x.note ? ' · “' + esc(x.note) + '”' : '') + '</p><p class="small muted">Now reads: <span class="notr">' + esc(x.was) + '</span></p>' +
@@ -3387,7 +3415,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       case 'dispose': if (SRV() && m.pinOk !== m.who + ':' + m.pin && person(m.who)) return pinGate(m); p = verify(m, 'qa'); if (!p) return; ok = run(m.job, 'dispose', { id: m.hold, action: m.action, note: m.note }, p); break;
       case 'correct': if (SRV() && m.pinOk !== m.who + ':' + m.pin && person(m.who)) return pinGate(m); p = verify(m, true); if (!p) return; ok = run(m.job, 'correct', { i: m.i, good: m.good, reason: m.reason }, p); break;
       case 'setup': {
-        const o = W.routing(store.jobs[m.job].rid).ops[m.i];
+        const o = rop(W.routing(store.jobs[m.job].rid), store.jobs[m.job], m.i);
         if ((o.checks || []).some((c, k) => !m.chk[k])) return toast('Tick every setup check first.', 'bad');
         const vals = {}; for (const f of (o.fields || [])) { const v = (m['v_' + f.k] || '').trim(); if (!v) return toast('Enter: ' + f.label, 'bad'); vals[f.label] = v; }
         ok = run(m.job, 'finishSetup', { i: m.i, vals }); break;
@@ -3411,7 +3439,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         sendAlert(j, m.i, 'call', m.reason, m.note).then((r) => { closeModal(); if (r && r.data && r.data.sent) toast('Alert sent to ' + r.data.people.map(nm).join(', ')); else toast('Saved on the traveler. No supervisor has alerts turned on for this area yet — call them.', 'bad'); }); return; }
       case 'alertsOn': { if ((m.pin || '').length !== 4 || m.busy) return; m.busy = true;
         alertsOn(m.who, m.pin).then((msg) => { m.busy = false; closeModal(); toast(msg); render(); }).catch((e) => { m.busy = false; m.pin = ''; renderModal(); toast(String(e.message || e), 'bad'); }); return; }
-      case 'redline': { const j = store.jobs[m.job], op = j.ops[m.i], o2 = W.routing(j.rid).ops[m.i], tx = String(m.text || '').trim(), was = liveStep(j.rid, op.n, o2.text, null).text;
+      case 'redline': { const j = store.jobs[m.job], op = j.ops[m.i], o2 = rop(W.routing(j.rid), j, m.i), tx = String(m.text || '').trim(), was = liveStep(j.rid, op.n, o2.text, null).text;
         const note = String(m.note || '').trim(); if ((!tx || tx === was) && !note) return toast('Change the words, or say what is wrong.', 'bad');
         const id = 'R' + Date.now().toString(36).toUpperCase().slice(-5);
         const x = { id, rid: j.rid, pn: j.pn, n: op.n, station: op.station, so: j.so, job: j.id, was, text: tx || was, ask: tx || was, reason: m.reason || 'Change', note, by: ui.user.id, at: Date.now(), status: 'pending', stage: 'qa' };
@@ -3565,7 +3593,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const sg = (op, t) => { if (op.skipped) return 'SKIPPED · ' + nm(op.skipped.by) + ' ' + fTime(op.skipped.at); if (t === 'mid' && op.midWaived) return 'n/a'; const c = op.checks.filter((x) => x.type === t && x.result === 'pass').pop(); return c ? nm(c.by) + ' ' + fTime(c.at) : ''; };
     const html = '<!doctype html><meta charset="utf-8"><title>Traveler ' + esc(j.so) + '</title><style>body{font:12px Arial;margin:24px}table{border-collapse:collapse;width:100%;margin:8px 0 18px}td,th{border:1px solid #000;padding:4px 6px;text-align:left;vertical-align:top}h1{font-size:18px}h2{font-size:14px}</style>' +
       '<h1>Walker Engineering — ' + esc(r.form) + '</h1><p>Shop Order ' + esc(j.so) + ' · Part ' + esc(j.pn) + ' · ' + esc(j.name) + ' · Qty ' + j.qty + ' · Due ' + esc(j.due) + ' · Trav rev ' + esc(j.rel.travRev) + ' ' + esc(j.rel.travDate) + ' · Dwg rev ' + esc(j.rel.dwgRev) + ' · Released by ' + esc(nm(j.rel.by)) + ' ' + esc(fTime(j.rel.at)) + (j.sample ? ' · SAMPLE DATA' : '') + '</p>' +
-      '<h2>Operations</h2><table><tr><th>Op</th><th>Description</th><th>Machine / fixture</th><th>Operator</th><th>Accept</th><th>Reject</th><th>First article</th><th>Closing signature</th></tr>' + j.ops.map((op, i) => row([op.n, r.ops[i].text, r.ops[i].mach.join(', '), op.who.map(nm).join(', '), op.good == null ? '' : op.good, op.scrap, sg(op, 'first'), sg(op, 'final')])).join('') + '</table>' +
+      '<h2>Operations</h2><table><tr><th>Op</th><th>Description</th><th>Machine / fixture</th><th>Operator</th><th>Accept</th><th>Reject</th><th>First article</th><th>Closing signature</th></tr>' + j.ops.map((op, i) => row([op.n, (rop(r, j, i) || {}).text || '', ((rop(r, j, i) || {}).mach || []).join(', '), op.who.map(nm).join(', '), op.good == null ? '' : op.good, op.scrap, sg(op, 'first'), sg(op, 'final')])).join('') + '</table>' +
       '<h2>Discrepant parts</h2><table><tr><th>Hold</th><th>Op</th><th>Qty</th><th>Defect</th><th>Disposition</th></tr>' + (j.holds.map((h) => row([h.id, h.n, h.qty, h.reason + ' ' + h.note, h.open ? 'OPEN' : h.disp.action + ' — ' + nm(h.disp.by) + ' ' + fTime(h.disp.at) + ' ' + h.disp.note])).join('') || row(['none', '', '', '', ''])) + '</table>' +
       '<h2>History</h2><table><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr>' + j.log.map((l) => row([fTime(l.at), nm(l.by), l.a, l.d])).join('') + '</table>';
     store.downloads.save({ filename: 'traveler-' + j.so + '.html', data: html }).catch((e) => { if (!e || e.code !== 'declined') toast('Could not save the file here.', 'bad'); });
@@ -3597,7 +3625,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       (W.isFinal(r) ? cell('Customer PO #', j && j.ship ? '<span class="mono">' + E(j.ship.po) + '</span>' : '') + cell('Sales Order #', j && j.ship ? '<span class="mono">' + E(j.ship.sales) + '</span>' : '') + '<div style="grid-column:span 2"><span>Shipping release</span><b>' + (j && W.shipOk(j) ? E(nm(j.ship.by)) + ' · ' + E(fTime(j.ship.at)) : '&nbsp;') + '</b></div>' : '') + '</div>';
     // Operations
     h += '<h2>Operations</h2><table><tr><th style="width:5%">Op</th><th style="width:5%">Risk</th><th style="width:12%">Area · machine</th><th>Operation</th><th style="width:11%">Operator</th><th style="width:12%">First article sign-off</th><th style="width:12%">Closing sign-off</th><th style="width:7%">Good</th><th style="width:6%">Bad</th></tr>' +
-      r.ops.map((o, i) => { const op = j ? j.ops[i] : null, lv = liveStep(r.id, o.n, o.text, j); return '<tr><td class="mono">' + E(o.n) + '</td><td class="prk' + (rk(r, o) ? ' p' + rk(r, o) : '') + '"></td><td class="sm">' + E(W.station(op ? op.station : o.station).name) + '<br>' + E(o.mach.join(', ')) + '</td><td>' + E(lv.text) + (lv.how === 'redline' ? '<div class="rl">✎ RED-LINE ' + E(lv.x.id) + ' · ' + E(nm(lv.x.okBy)) + ' ' + E(fTime(lv.x.okAt)) + '</div>' : lv.how === 'job' ? '<div class="rl">✎ CHANGED FOR THIS JOB · ' + E(nm(lv.x.by)) + ' ' + E(fTime(lv.x.at)) + (lv.x.reason ? ' · ' + E(lv.x.reason) : '') + '</div>' : '') + (op && op.paused ? '<div class="sm">Paused: ' + E(op.paused.reason) + '</div>' : '') + '</td>' +
+      (j ? j.ops.map((x, i) => rop(r, j, i) || { n: x.n, text: '', mach: [] }) : r.ops).map((o, i) => { const op = j ? j.ops[i] : null, lv = liveStep(r.id, o.n, o.text, j); return '<tr><td class="mono">' + E(o.n) + '</td><td class="prk' + (rk(r, o) ? ' p' + rk(r, o) : '') + '"></td><td class="sm">' + E(W.station(op ? op.station : o.station).name) + '<br>' + E(o.mach.join(', ')) + '</td><td>' + E(lv.text) + (lv.how === 'redline' ? '<div class="rl">✎ RED-LINE ' + E(lv.x.id) + ' · ' + E(nm(lv.x.okBy)) + ' ' + E(fTime(lv.x.okAt)) + '</div>' : lv.how === 'job' ? '<div class="rl">✎ CHANGED FOR THIS JOB · ' + E(nm(lv.x.by)) + ' ' + E(fTime(lv.x.at)) + (lv.x.reason ? ' · ' + E(lv.x.reason) : '') + '</div>' : '') + (op && op.paused ? '<div class="sm">Paused: ' + E(op.paused.reason) + '</div>' : '') + '</td>' +
         '<td class="sm">' + (op ? E(op.who.map(nm).join(', ')) : '<div class="blank"></div>') + '</td><td>' + sgn(op, 'first') + '</td><td>' + sgn(op, 'final') + '</td><td class="mono">' + (op && op.good != null ? E(op.good) : '') + '</td><td class="mono">' + (op && op.scrap ? E(op.scrap) : '') + '</td></tr>'; }).join('') + '</table>';
     if (r.ops.some((o) => rk(r, o))) h += '<div class="lg">Risk:<i class="pL"></i>Low<i class="pM"></i>Medium<i class="pH"></i>High</div>';
     // Red-line notes for this part
@@ -3712,6 +3740,75 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   }
   function setStation(s) { ui.station = s; ui.view = 'station'; ls.set('wt-station', s); try { history.replaceState(null, '', '#' + s); } catch (e) { /* ignore */ } $('#results').hidden = true; closeModal(); render(); }
 
+  /* ---------- press-and-hold a step chip, slide it to fix the step order ---------- */
+  (() => {
+    let dg = null, tmr = null, sx = 0, sy = 0, eatClick = 0;
+    const pt = (e) => (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
+    const cancel = () => { clearTimeout(tmr); tmr = null; };
+    const order = (rail) => Array.from(rail.querySelectorAll('.opchip')).map((c) => c.dataset.n);
+    function begin(chip) {
+      const rail = chip.closest('.oprail'), j = rail && store.jobs[rail.dataset.job]; if (!j) return;
+      dg = { chip, rail, job: j.id, start: order(rail), locked: j.ops.map((o, k) => W.opLocked(j, k)) };
+      chip.classList.add('dragging'); rail.classList.add('drag-on'); eatClick = Date.now();
+      try { navigator.vibrate && navigator.vibrate(30); } catch (er) { /* ok */ }
+    }
+    function move(x) {
+      const { chip, rail, start, locked } = dg, r0 = rail.getBoundingClientRect();
+      if (x < r0.left + 40) rail.scrollLeft -= 14; else if (x > r0.right - 40) rail.scrollLeft += 14;
+      const others = Array.from(rail.querySelectorAll('.opchip')).filter((c) => c !== chip);
+      let at = others.length; for (let k = 0; k < others.length; k++) { const b = others[k].getBoundingClientRect(); if (x < b.left + b.width / 2) { at = k; break; } }
+      const cand = others.map((c) => c.dataset.n); cand.splice(at, 0, chip.dataset.n);
+      if (cand.join('|') === order(rail).join('|')) return;
+      if (start.some((n, k) => locked[k] && cand[k] !== n)) return; // started steps never shift
+      if (at >= others.length) rail.appendChild(chip); else rail.insertBefore(chip, others[at]);
+    }
+    function end() {
+      const d = dg; dg = null; if (!d) return;
+      d.chip.classList.remove('dragging'); d.rail.classList.remove('drag-on'); eatClick = Date.now();
+      const now = order(d.rail); if (now.join('|') === d.start.join('|')) return;
+      const j = store.jobs[d.job], cur = j && j.ops[ui.opI] ? String(j.ops[ui.opI].n) : null;
+      const rt = j && W.routing(j.rid), master = !!(rt && rt.ops && rt.ops.length);
+      if (!run(d.job, 'reorder', { order: now, master })) return render();
+      if (cur != null) { const ni = now.indexOf(cur); if (ni >= 0) ui.opI = ni; }
+      if (master) saveOpOrder(rt, now);
+      toast('Step order saved. New travelers for ' + j.pn + ' will use this order.');
+      render();
+    }
+    const down = (e) => {
+      const chip = e.target.closest && e.target.closest('.opchip.mv'); if (!chip || dg) return;
+      if (e.type === 'mousedown' && e.button !== 0) return;
+      const p0 = pt(e); sx = p0.clientX; sy = p0.clientY; cancel();
+      tmr = setTimeout(() => { tmr = null; begin(chip); }, 450);
+    };
+    const mv = (e) => {
+      const p0 = pt(e);
+      if (dg) { if (e.cancelable) e.preventDefault(); move(p0.clientX); return; }
+      if (tmr && (Math.abs(p0.clientX - sx) > 10 || Math.abs(p0.clientY - sy) > 10)) cancel();
+    };
+    const up = () => { cancel(); if (dg) end(); };
+    document.addEventListener('touchstart', down, { passive: true });
+    document.addEventListener('touchmove', mv, { passive: false });
+    document.addEventListener('touchend', up); document.addEventListener('touchcancel', up);
+    document.addEventListener('mousedown', down); document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
+    document.addEventListener('contextmenu', (e) => { if (e.target.closest && e.target.closest('.opchip.mv')) e.preventDefault(); });
+    document.addEventListener('click', (e) => { if (Date.now() - eatClick < 400 && e.target.closest && e.target.closest('.oprail')) { e.stopPropagation(); e.preventDefault(); } }, true);
+  })();
+  // master step order saved from the floor; applied to the routing so the next traveler is built in that order
+  function applyOpOrder(rt) {
+    const x = store.opOrder && store.opOrder[rt.id]; if (!x || !rt.ops) return;
+    const pos = {}; x.order.forEach((n, k) => { pos[String(n)] = k; });
+    if (!rt.ops.some((o) => String(o.n) in pos)) return;
+    const keep = rt.ops.map((o, k) => ({ o, k })), anchor = (e) => (String(e.o.n) in pos ? pos[String(e.o.n)] : null);
+    // ops named in the saved order take its sequence; any others keep their place relative to their neighbor
+    const named = keep.filter((e) => anchor(e) != null).sort((a, b) => anchor(a) - anchor(b));
+    let q = 0; rt.ops = keep.map((e) => (anchor(e) != null ? named[q++].o : e.o));
+  }
+  function saveOpOrder(rt, order) {
+    const names = rt.ops.map((o) => String(o.n)), ord = order.filter((n) => names.indexOf(n) >= 0);
+    const x = { rid: rt.id, pn: rt.pn || '', order: ord, by: ui.user ? ui.user.id : '', at: Date.now() };
+    (store.opOrder = store.opOrder || {})[rt.id] = x; applyOpOrder(rt);
+    if (store.mode === 'shared') store.db.doc('oporder/' + rt.id.replace(/[^A-Za-z0-9_-]/g, '-')).set(x).catch(() => toast('Step order changed on this traveler, but the master did not save. Check Wi-Fi.', 'bad'));
+  }
   document.addEventListener('click', (e) => {
     ui.touched = Date.now();
     const t = e.target.closest('button, [data-close]'); if (!t) { if (!e.target.closest('.search')) $('#results').hidden = true; return; }
@@ -3860,7 +3957,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       if (d.m === 'dispose') return openModal({ type: 'dispose', job, hold: d.hold, who: ap, action: '', note: '', pin: '' });
       if (d.m === 'correct') return openModal({ type: 'correct', job, i, who: ap, good: op.good, reason: '', pin: '' });
       if (!need()) return;
-      if (d.m === 'setup') { const o = W.routing(j.rid).ops[i]; if (!(o.checks || []).length && !(o.fields || []).length) return void run(job, 'finishSetup', { i }); return openModal({ type: 'setup', job, i, chk: {} }); }
+      if (d.m === 'setup') { const o = rop(W.routing(j.rid), j, i); if (!(o.checks || []).length && !(o.fields || []).length) return void run(job, 'finishSetup', { i }); return openModal({ type: 'setup', job, i, chk: {} }); }
       if (d.m === 'upPrint') { if (!W.isApprover(ui.user) && !W.canDispose(ui.user)) return toast('Drafting, quality or a supervisor uploads prints.', 'bad'); const rt = W.routing(d.rid); return openModal({ type: 'upPrint', rid: rt.id, pn: rt.wpn || rt.pn, rev: '' }); }
       if (d.m === 'ship') { if (!(W.canDispose(ui.user) || W.isApprover(ui.user))) return toast('Marty, quality or a supervisor enters the PO and Sales Order.', 'bad'); const lr = finRow(j.so); return openModal({ type: 'ship', job, po: j.ship ? j.ship.po : (lr && lr.po) || '', sales: j.ship ? j.ship.sales : (lr && lr.so) || '', fromLog: !j.ship && !!lr }); }
       if (d.m === 'mid') return openModal({ type: 'mid', job, i, count: W.midTarget(op) });
@@ -3868,10 +3965,10 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       if (d.m === 'move') { const next = j.ops[i + 1]; return openModal({ type: 'move', job, i, dest: W.finalDest(j, i), boxes: 1, qty: j.ops[i].st === 'running' ? '' : W.unmoved(j, i), direct: false, reason: '' }); }
       if (d.m === 'receive') { const l = j.lots.find((x) => x.id === d.lot); return openModal({ type: 'receive', job, lot: d.lot, count: l.qty }); }
       if (d.m === 'reroute') { const l = j.lots.find((x) => x.id === d.lot); return openModal({ type: 'reroute', job, lot: d.lot, dest: l.expect }); }
-      if (d.m === 'editStep') { const ed = (j.edits || {})[op.n]; return openModal({ type: 'editStep', job, i, text: ed ? ed.text : W.routing(j.rid).ops[i].text, reason: '' }); }
+      if (d.m === 'editStep') { const ed = (j.edits || {})[op.n]; return openModal({ type: 'editStep', job, i, text: ed ? ed.text : rop(W.routing(j.rid), j, i).text, reason: '' }); }
       if (d.m === 'skip') return openModal({ type: 'skip', job, i, reason: '', note: '', who: ui.user && W.isApprover(ui.user) ? ui.user.id : null, pin: '' });
       if (d.m === 'callSup') return openModal({ type: 'callSup', job, i, reason: '', note: '' });
-      if (d.m === 'redline') return openModal({ type: 'redline', job, i, reason: '', text: liveStep(j.rid, op.n, W.routing(j.rid).ops[i].text, null).text, note: '' });
+      if (d.m === 'redline') return openModal({ type: 'redline', job, i, reason: '', text: liveStep(j.rid, op.n, rop(W.routing(j.rid), j, i).text, null).text, note: '' });
       if (d.m === 'jobWho') { if (!canPlan()) return toast('A manager or supervisor assigns jobs.', 'bad'); let w = ''; LANES.forEach((l) => openItems(l.id).forEach((x) => { if (x.k === 'j' && x.ref === j.id && x.who) w = x.who; })); return openModal({ type: 'jobWho', job: j.id, who: w }); }
       if (d.m === 'priority') return openModal({ type: 'priority', job, pri: j.pri, rush: j.rush, reason: '' });
       return openModal({ type: d.m, job, i, reason: '', qty: '', note: '', text: '' });
