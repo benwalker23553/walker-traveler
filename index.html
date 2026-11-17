@@ -1698,7 +1698,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         .concat(T.filter((j) => ts(j.due)).map((j) => ({ due: ts(j.due), h: chip(j.pn, j.so, 'data-open="' + esc(j.id) + '" data-i="0"', ts(j.due), j.rel && j.rel.at) })))
         .sort((a, b) => a.due - b.due).slice(0, 8);
       out.push({ lvl: 'bad', t: lateN + ' travelers are past due', d: 'Goal this week: close or update ' + goal + '. Closed so far this week: ' + closedWk + '. Oldest first:',
-        list: oldest.map((x) => x.h).join('') });
+        list: oldest.map((x) => x.h).join('') + '<div style="flex-basis:100%"></div>' + Object.keys(TODO_OWN).map((k) => '<button class="btn sm" data-a="todoGo" data-v="' + k + '">📋 ' + esc(nm(k)) + '’s cleanup list</button>').join('') });
     }
     // 2. Steps running longer than usual
     J.forEach((j) => j.ops.forEach((o, i) => {
@@ -2542,6 +2542,26 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   function openFix(floor, t, job) { const today = ymd(Date.now());
     return openModal({ type: 'lateFix', floor, t, job: job || null, kind: job ? LF_K[1] : '', date: today, due: ymd(Date.now() + 7 * DAY), qty: '', note: '' }); }
   const fixLink = (floor, t) => location.origin + location.pathname + '?fix=' + encodeURIComponent(floor + ':' + t);
+  // Past-due cleanup list for the person who issues travelers on each floor (link in their email)
+  const TODO_OWN = { paul: ['metal', 'cnc'], ricky: ['filter'], marety: ['final'] };
+  const soOwner = (so) => { const n = parseInt(so, 10); return !/^\d+$/.test(String(so)) || !(n >= 10000) ? 'paul' : n >= 20000 ? 'marety' : n < 15000 ? 'ricky' : 'paul'; };
+  function renderTodo() {
+    const who = ui.todo || (ui.user && TODO_OWN[ui.user.id] ? ui.user.id : 'paul'), now = Date.now(), fl = TODO_OWN[who] || [];
+    const P = paper().filter((x) => fl.indexOf(x.f) >= 0 && x.r.s === 'O' && x.r.u && ts(x.r.u) < now).sort((a, b) => ts(a.r.u) - ts(b.r.u));
+    const J = jobs().filter((j) => j.st !== 'complete' && soOwner(j.so) === who).map((j) => { const why = [];
+      if (late(j)) why.push('<b>' + Math.round((now - ts(j.due)) / DAY) + ' days late</b>');
+      W.openHolds(j).forEach((h) => why.push('Hold ' + esc(h.id) + ' on op ' + esc(h.n) + ': ' + esc(h.reason) + ' · ' + h.qty + ' pcs'));
+      j.ops.forEach((o) => { if (o.st === 'fp_wait' || o.st === 'fin_wait') why.push((o.st === 'fp_wait' ? 'First article' : 'Closing signature') + ' waiting on op ' + esc(o.n)); });
+      j.lots.forEach((l) => { if (l.st !== 'received' && now - l.at > DAY) why.push('Box ' + esc(j.so + '-' + l.id) + ' (' + l.qty + ' pcs to ' + esc(W.station(l.to).name) + ') not received ' + Math.round((now - l.at) / DAY) + ' days'); });
+      return { j, why }; }).filter((x) => x.why.length);
+    const tabs = Object.keys(TODO_OWN).map((k) => '<button class="btn sm ' + (k === who ? 'sel' : '') + '" data-a="todoWho" data-v="' + k + '">' + esc(nm(k)) + '</button>').join('');
+    let h = '<div class="head"><div><h1>Past-due cleanup · ' + esc(nm(who)) + '</h1><p class="muted">Every traveler you issued that is past due or stuck. Tap one: close it, give it a new due date, or cancel it. The list shrinks as you go.</p></div><div class="row">' + tabs + '</div></div>';
+    h += '<div class="banner ' + (P.length + J.length ? 'warn' : 'ok') + '"><div><b>' + (P.length + J.length) + ' to clear</b> · ' + P.length + ' paper travelers past due · ' + J.length + ' live travelers that need you</div></div>';
+    const card = (pn, d, tr, sub, btn) => '<div class="card trow" style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 12px"><div><b class="mono" style="font-size:1.25rem">' + esc(pn || '—') + '</b> <span class="small">' + esc(d || '') + '</span><br><b>Traveler #' + esc(tr) + '</b><br><span class="small">' + sub + '</span></div>' + btn + '</div>';
+    if (J.length) h += '<div class="panel"><h2>Live on the tablets (' + J.length + ')</h2>' + J.map((x) => card(x.j.pn, x.j.name, x.j.so, x.why.join('<br>') + (x.j.due ? '<br>Due ' + esc(fDay(ts(x.j.due))) : ''), late(x.j) ? '<button class="btn go" data-m="lateFix" data-job="' + esc(x.j.id) + '">Update</button>' : '<button class="btn primary" data-open="' + esc(x.j.id) + '" data-i="0">Open</button>')).join('') + '</div>';
+    if (P.length) h += '<div class="panel"><h2>Paper travelers past due (' + P.length + ')</h2>' + P.map((x) => card(x.r.pn, x.r.d, x.r.t, '<b>' + Math.round((now - ts(x.r.u)) / DAY) + ' days late</b> · ' + (x.r.i ? 'Issued ' + esc(fDay(ts(x.r.i))) + ' · ' : '') + 'Due ' + esc(fDay(ts(x.r.u))) + (x.r.q ? ' · Qty ' + esc(x.r.q) : ''), '<button class="btn go" data-m="lateFix" data-floor="' + x.f + '" data-t="' + esc(x.r.t) + '">Update</button>')).join('') + '</div>';
+    return h;
+  }
   function paper() { const out = []; ['metal', 'filter', 'final', 'cnc'].forEach((f) => (store.logs[f] || []).forEach((r) => { if (!store.jobs['so-' + r.t]) out.push({ r: f === 'final' ? finS(r) : r, f }); })); return out; }
   const BASE = W.ROUTINGS.slice(), midx = {};
   const HAND = { '40-1022 TRV MASTER': 1, '207-7469 TRV KEY risk': 1, '270-7257 TRV KEY risk': 1, '1001050 TRV MASTER': 1, '1001249 PLEAT TRV': 1, '207-7469 PACKAGING TRAVELER': 1, '270-7257 PACKAGING TRAVELER': 1 };
@@ -3712,7 +3732,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const act = document.activeElement, actId = act && main.contains(act) ? act.id : '', caret = actId && act.selectionStart != null ? [act.selectionStart, act.selectionEnd] : null;
     if (ui.tv) { ui.view = 'board'; ui.modal = null; ui.user = null; }
     const y = window.scrollY;
-    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'prio' ? renderPrio() : ui.view === 'board' ? renderBoard() : ui.view === 'xl' ? renderXl() : ui.view === 'pack' ? renderPack() : ui.view === 'usage' ? renderUsage() : (ui.view === 'pm' || ui.view === 'cal') ? renderPM() : ui.view === 'ops' ? renderOps() : ui.view === 'mine' ? renderMine() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
+    main.innerHTML = '<div class="wrap">' + (store.mode === 'local' && store.loaded ? '<div class="banner warn"><div><b>This device only.</b> The shared shop record is not available in this view, so jobs entered here are not seen by other tablets.</div></div>' : '') + (ui.view === 'home' ? renderHome() : ui.view === 'floor' ? renderFloor() : ui.view === 'job' ? renderJob() : ui.view === 'manage' ? renderManage() : ui.view === 'improve' ? renderImprove() : ui.view === 'finance' ? renderFinance() : ui.view === 'prio' ? renderPrio() : ui.view === 'board' ? renderBoard() : ui.view === 'xl' ? renderXl() : ui.view === 'pack' ? renderPack() : ui.view === 'usage' ? renderUsage() : ui.view === 'todo' ? renderTodo() : (ui.view === 'pm' || ui.view === 'cal') ? renderPM() : ui.view === 'ops' ? renderOps() : ui.view === 'mine' ? renderMine() : ui.view === 'train' ? renderTrain() : ui.view === 'library' ? renderLibrary() : ui.view === 'list' ? renderList() : renderStation()) + '</div>';
     if (ui.keep) Object.keys(ui.keep).forEach((id) => { const e = document.getElementById(id); if (!e) return; if (e.type === 'checkbox') e.checked = !!ui.keep[id]; else if (e.type !== 'file') e.value = ui.keep[id]; });
     if (actId) { const e = document.getElementById(actId); if (e && e !== document.activeElement) { try { e.focus({ preventScroll: true }); if (caret && e.setSelectionRange) e.setSelectionRange(caret[0], caret[1]); } catch (er) { /* number inputs */ } } }
     $('#b-home').textContent = '⌂ Main menu'; $('#b-list').textContent = '☰ Travelers'; $('#q').setAttribute('placeholder', 'Search or scan'); $('#b-lang').textContent = LANG === 'es' ? 'English' : 'Español';
@@ -3976,6 +3996,8 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         const r = await window.WT_SB.rpc('pack_line', { p_so: B.so, p_line: B.line, p_qty: B.qty, p_by: ui.user.id });
         if (r.error) { t.disabled = false; return toast(String(r.error.message || r.error).replace(/^.*?: /, ''), 'bad'); }
         printPackSheet(B, sv.data || {}); toast('Packed ✓ — ' + (r.data && r.data.parts ? r.data.parts + ' parts taken out of inventory' : 'recorded') + '. Build sheet saved for next time.'); ui.bs = null; packLoad(true); render(); })(); return; }
+    if (d.a === 'todoWho') { ui.todo = d.v; return render(); }
+    if (d.a === 'todoGo') { ui.todo = d.v; ui.view = 'todo'; window.scrollTo(0, 0); return render(); }
     if (d.a === 'lfLogin') { const back = Object.assign({}, ui.modal); return openModal({ type: 'login', who: null, pin: '', back }); }
     if (d.a === 'usK') { ui.usK = d.v; usageLoad(true); return render(); }
     if (d.a === 'usReload') { usageLoad(true); return toast('Refreshing…'); }
@@ -4189,6 +4211,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   ui.station = okSt(hs) ? hs : okSt(saved) ? saved : 'all';
   ui.view = 'home';
   if (/^rl=/.test(hs)) ui.openRlOnLoad = true;
+  const qTodo = new URLSearchParams(location.search).get('todo'); if (qTodo) { ui.todo = qTodo; ui.view = 'todo'; }
   const qFix = new URLSearchParams(location.search).get('fix');
   if (qFix) { const [ff, ft] = qFix.split(':'); let tries = 0; const tick = () => { tries++; if (ff === 'job' ? store.jobs[ft] : (store.logs[ff] || []).length) { if (!ui.modal) openFix(ff === 'job' ? '' : ff, ff === 'job' ? '' : ft, ff === 'job' ? ft : null); } else if (tries < 40) setTimeout(tick, 500); }; setTimeout(tick, 800); }
   const qJob = new URLSearchParams(location.search).get('job'); if (qJob && !/^job=/.test(hs)) { ui.station = okSt(saved) ? saved : 'all'; ui.openJobOnLoad = qJob; }
