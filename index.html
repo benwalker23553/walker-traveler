@@ -936,6 +936,17 @@ window.WT_ESP = [
 
   // A step can move only while nothing has been done on it yet
   const opLocked = (job, k) => { const o = job.ops[k]; return !o || !(o.st === 'pending' || o.st === 'ready') || (o.seg || []).length > 0 || o.good != null || !!o.scrap || !!o.setup || !!o.paused || !!o.pend || !!o.skipped || !!o.stock || !!o.paper || job.lots.some((l) => l.from === k) || openHolds(job, o.n).length > 0; };
+  // Paint / powder coat: the painter closes the step themselves, no supervisor closing signature
+  const SELF_CLOSE = ['powder'];
+  const selfClose = (st) => SELF_CLOSE.indexOf(st) >= 0;
+  function closeFinal(job, i, op, ctx) {
+    op.good = op.pend.good; op.scrap += op.pend.scrap; op.short = op.pend.short; op.shortReason = op.pend.shortReason; op.pend = null; op.st = 'closed'; op.closedAt = ctx.at; seg(op, null, ctx);
+    const nx = job.ops[i + 1], q = unmoved(job, i);
+    if ((job.final || isFinal(routing(job.rid))) && nx && q > 0 && nx.station === op.station && !openHolds(job, op.n).length) {
+      const lot = { id: 'C' + (job.lots.length + 1), from: i, n: op.n, qty: q, to: op.station, expect: finalDest(job, i), st: 'received', by: ctx.u.id, at: ctx.at, direct: false, reason: '', recvBy: ctx.u.id, recvAt: ctx.at, recv: q, counted: q, auto: true };
+      job.lots.push(lot); log(job, ctx, 'Parts moved', lot.id + ' · ' + q + ' pcs from op ' + op.n + ' to op ' + nx.n + ' (same station)'); arrive(job, lot, ctx); }
+    if (unmoved(job, i) === 0) op.st = 'done'; complete(job, ctx);
+  }
   function finalDest(job, i) { const next = job.ops[i + 1]; if (next) return next.station; const m = (routing(job.rid) || {}).moveTo; return STATIONS.some((s) => s.id === m) ? m : job.ops[i].station; }
   // Final assembly / packaging travelers carry the customer PO # and Sales Order # for shipping
   const isFinal = (r) => !!r && (!!r.fa || String(r.id).indexOf('PK-') === 0 || /FINAL|PACKAG|FNL/i.test((r.kind || '') + ' ' + (r.form || '') + ' ' + (r.file || '')));
@@ -1046,6 +1057,15 @@ window.WT_ESP = [
         if (short < 0) fail('Counts add up to ' + (good + scrap + op.scrap) + ' but only ' + op.qtyIn + ' came in. Made extra? Close this, tap “+ Made extra” and add ' + (-short) + '. Otherwise recount.');
         if (short > 0 && !p.shortReason) fail(short + ' pcs are not accounted for. Pick what happened to them.');
         touch(job, i, ctx); op.pend = { good, scrap, short, shortReason: short > 0 ? p.shortReason : '' };
+        if (selfClose(op.station)) {
+          seg(op, null, ctx); op.checks.push({ type: 'final', reqBy: ctx.u.id, reqAt: ctx.at, count: good, note: p.note || '', by: ctx.u.id, at: ctx.at, result: 'pass', checked: good, self: true });
+          closeFinal(job, i, op, ctx);
+          { const q = unmoved(job, i); // paint is the last step: the traveler closes now
+            if (i === job.ops.length - 1 && q > 0 && !openHolds(job).length) {
+              const to = finalDest(job, i), lot = { id: 'C' + (job.lots.length + 1), from: i, n: op.n, qty: q, to, expect: to, st: 'received', by: ctx.u.id, at: ctx.at, direct: false, reason: '', recvBy: ctx.u.id, recvAt: ctx.at, recv: q, counted: q, auto: true };
+              job.lots.push(lot); op.st = 'done'; complete(job, ctx); } }
+          log(job, ctx, 'Signed off as done by operator', 'Op ' + op.n + ' at ' + station(op.station).name + ' · good ' + good + ', scrap ' + (scrap + op.scrap) + (short ? ', not run ' + short + ' (' + p.shortReason + ')' : '') + ' · no supervisor sign-off needed for paint'); break;
+        }
         op.st = 'fin_wait'; op.checks.push({ type: 'final', reqBy: ctx.u.id, reqAt: ctx.at, count: good, note: p.note || '' }); seg(op, 'wait_approval', ctx);
         log(job, ctx, 'Closing signature requested', 'Op ' + op.n + ' · good ' + good + ', scrap ' + (scrap + op.scrap) + (short ? ', not run ' + short + ' (' + p.shortReason + ')' : '')); break;
       }
@@ -1067,12 +1087,7 @@ window.WT_ESP = [
         if (p.result === 'pass') {
           if (c.type === 'first') { op.st = 'authorized'; seg(op, null, ctx); }
           if (c.type === 'mid') op.midOk = true;
-          if (c.type === 'final') { op.good = op.pend.good; op.scrap += op.pend.scrap; op.short = op.pend.short; op.shortReason = op.pend.shortReason; op.pend = null; op.st = 'closed'; op.closedAt = ctx.at; seg(op, null, ctx);
-            { const nx = job.ops[i + 1], q = unmoved(job, i);
-              if ((job.final || isFinal(routing(job.rid))) && nx && q > 0 && nx.station === op.station && !openHolds(job, op.n).length) {
-                const lot = { id: 'C' + (job.lots.length + 1), from: i, n: op.n, qty: q, to: op.station, expect: finalDest(job, i), st: 'received', by: ctx.u.id, at: ctx.at, direct: false, reason: '', recvBy: ctx.u.id, recvAt: ctx.at, recv: q, counted: q, auto: true };
-                job.lots.push(lot); log(job, ctx, 'Parts moved', lot.id + ' · ' + q + ' pcs from op ' + op.n + ' to op ' + nx.n + ' (same station)'); arrive(job, lot, ctx); } }
-            if (unmoved(job, i) === 0) op.st = 'done'; complete(job, ctx); }
+          if (c.type === 'final') closeFinal(job, i, op, ctx);
           log(job, ctx, label + ' approved', 'Op ' + op.n + ' · checked ' + c.checked + (c.meas ? ' · ' + c.meas : ''));
         } else {
           if (!p.reason) fail('Pick the reason it failed.');
@@ -1340,7 +1355,7 @@ window.WT_ESP = [
     return t;
   }
 
-  root.WT = { STATIONS, ROUTINGS, ISSUES, DEFAULT_CFG, PAUSE_REASONS, HOLD_REASONS, BLOCK_REASONS, DISPOSITIONS, ST_LABEL, clone, routing, station, isApprover, canDispose, sideOf, covers, newJob, act, gate, finalDest, opLocked, bucket, nextAction, where, blocking, goodDone, dur, approvalWait, totals, isFinal, shipOk, workMs, isWorking, lastShiftEnd, setShift, shiftText, openHolds, openCheck, unmoved, moved, sendable, inbound, midTarget, totalScrap };
+  root.WT = { STATIONS, ROUTINGS, ISSUES, DEFAULT_CFG, PAUSE_REASONS, HOLD_REASONS, BLOCK_REASONS, DISPOSITIONS, ST_LABEL, clone, routing, station, isApprover, canDispose, sideOf, covers, newJob, act, gate, finalDest, opLocked, selfClose, bucket, nextAction, where, blocking, goodDone, dur, approvalWait, totals, isFinal, shipOk, workMs, isWorking, lastShiftEnd, setShift, shiftText, openHolds, openCheck, unmoved, moved, sendable, inbound, midTarget, totalScrap };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -3309,7 +3324,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         const g = Number(m.good) || 0, s = Number(m.scrap) || 0, short = op.qtyIn - g - s - op.scrap;
         h = '<h2>Finish operation · op ' + op.n + '</h2><div class="grid2">' + inp('good', 'Good pieces', m, 'type="number" inputmode="numeric" min="0"') + inp('scrap', 'Scrap pieces' + (op.scrap ? ' (plus ' + op.scrap + ' already scrapped on hold)' : ''), m, 'type="number" inputmode="numeric" min="0"') + '</div>' + (W.moved(j, m.i) ? '<p class="small muted">Count everything this operation made, including the ' + W.moved(j, m.i) + ' pcs already sent ahead.</p>' : '') + '<button class="btn sm" data-all style="align-self:flex-start">All ' + (op.qtyIn - op.scrap) + ' good</button>' +
           '<div class="recon ' + (short === 0 ? 'ok' : 'bad') + '" id="recon">' + (short === 0 ? '✔ Adds up to the ' + op.qtyIn + ' that came in.' : short > 0 ? short + ' of ' + op.qtyIn + ' not accounted for.' : 'That is ' + (-short) + ' more than the ' + op.qtyIn + ' that came in.') + '</div>' +
-          (short > 0 ? '<h3>What happened to the other ' + short + '?</h3>' + tiles('shortReason', ['Not run — short of material', 'Not run — stopped early', 'Still at the machine'], m) : '') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Request closing signature'); break;
+          (short > 0 ? '<h3>What happened to the other ' + short + '?</h3>' + tiles('shortReason', ['Not run — short of material', 'Not run — stopped early', 'Still at the machine'], m) : '') + '<label>Note<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot(W.selfClose(op.station) ? '✔ Done — sign off and close' : 'Request closing signature'); break;
       }
       case 'pause': h = '<h2>Pause · why?</h2>' + tiles('reason', W.PAUSE_REASONS, m) + '<button class="btn" data-close>Cancel</button>'; break;
       case 'block': h = '<h2>Can’t start · why?</h2>' + tiles('reason', W.BLOCK_REASONS, m) + '<button class="btn" data-close>Cancel</button>'; break;
