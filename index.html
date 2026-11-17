@@ -125,6 +125,8 @@ p { margin: 0; }
 .opchip { flex: 0 0 auto; min-width: 104px; min-height: 60px; text-align: left; border: 1.5px solid var(--line); background: var(--panel); border-radius: var(--r); padding: 6px 10px; display: flex; flex-direction: column; }
 .opchip b { font-family: var(--f-mono); font-size: 1.05rem; } .opchip span { font-size: .74rem; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
 .opchip.cur { border-color: var(--navy); border-width: 3px; }
+.ppn b { font-size: 1.35rem; font-weight: 800; } .ppn span { font-size: .9rem; color: var(--ink2); }
+.btn.pchip { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; min-height: 0; padding: 6px 10px; } .btn.pchip b { font-size: 1.1rem; font-weight: 800; } .btn.pchip span { font-size: .78rem; font-weight: 500; }
 .opchip.mv { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .opchip.dragging { transform: scale(1.08); box-shadow: 0 8px 22px rgba(0,0,0,.35); border-color: #E8730C; border-width: 3px; z-index: 5; position: relative; }
 .oprail.drag-on { touch-action: none; outline: 2px dashed #E8730C; outline-offset: 3px; border-radius: 6px; }
@@ -1666,32 +1668,38 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   }
   function prompts() {
     const now = Date.now(), out = [], J = jobs().filter((j) => j.st !== 'complete');
+    // every item leads with the part number; traveler #, why, and dates sit under it
+    const jd = (j) => { const a = []; if (j.rel && j.rel.at) a.push('Issued ' + fDay(j.rel.at)); if (j.due) a.push('Due ' + (ts(j.due) ? fDay(ts(j.due)) : j.due) + (late(j) ? ' (late)' : '')); return a.length ? ' · ' + a.join(' · ') : ''; };
+    const jx = (j, o) => Object.assign({ pn: j.pn, nm: j.name || '', trav: 'Traveler #' + j.so, dates: jd(j) }, o);
     // 1. Late travelers to close this week
     const P = paper().filter((x) => x.r.s === 'O' && x.r.u && ts(x.r.u) < now), T = J.filter((j) => late(j));
     const lateN = P.length + T.length;
     if (lateN) {
       const goal = Math.max(5, Math.ceil(lateN * 0.1)), wk0 = now - ((new Date().getDay() + 6) % 7) * DAY - (now % DAY);
       const closedWk = paper().filter((x) => x.r.s !== 'O' && x.r.c && ts(x.r.c) >= wk0).length;
-      const oldest = P.slice().sort((a, b) => ts(a.r.u) - ts(b.r.u)).slice(0, 8);
+      const chip = (pn, tr, attr, dueT, issT) => '<button class="btn sm pchip" ' + attr + '><b class="mono">' + esc(pn || '—') + '</b><span>Traveler #' + esc(tr) + ' · ' + Math.round((now - dueT) / DAY) + ' days late</span><span>' + (issT ? 'Issued ' + esc(fDay(issT)) + ' · ' : '') + 'Due ' + esc(fDay(dueT)) + '</span></button>';
+      const oldest = P.map((x) => ({ due: ts(x.r.u), h: chip(x.r.pn, x.r.t, 'data-paper="' + esc(x.r.t) + '" data-floor="' + x.f + '"', ts(x.r.u), x.r.i ? ts(x.r.i) : 0) }))
+        .concat(T.filter((j) => ts(j.due)).map((j) => ({ due: ts(j.due), h: chip(j.pn, j.so, 'data-open="' + esc(j.id) + '" data-i="0"', ts(j.due), j.rel && j.rel.at) })))
+        .sort((a, b) => a.due - b.due).slice(0, 8);
       out.push({ lvl: 'bad', t: lateN + ' travelers are past due', d: 'Goal this week: close or update ' + goal + '. Closed so far this week: ' + closedWk + '. Oldest first:',
-        list: oldest.map((x) => '<button class="btn sm" data-paper="' + esc(x.r.t) + '" data-floor="' + x.f + '">#' + esc(x.r.t) + ' · ' + esc(x.r.pn) + ' · ' + Math.round((now - ts(x.r.u)) / DAY) + ' days late</button>').join('') });
+        list: oldest.map((x) => x.h).join('') });
     }
     // 2. Steps running longer than usual
     J.forEach((j) => j.ops.forEach((o, i) => {
       if (o.st !== 'running' || o.paused) return;
       const el = W.dur(o, 'run', now), per = typicalRun(j.rid, o.n), exp = per ? per * o.qtyIn : null;
-      if ((exp && el > exp * 1.5 && el > HOUR) || (!exp && el > 8 * HOUR)) out.push({ lvl: 'warn', t: 'Op ' + o.n + ' on Shop Order ' + j.so + ' is running long', d: 'Running ' + fDur(el) + (exp ? ', usually about ' + fDur(exp) + ' for ' + o.qtyIn + ' pcs.' : ', no history for this step yet.') + ' Check for a machine, tooling or material problem.', open: [j.id, i] });
+      if ((exp && el > exp * 1.5 && el > HOUR) || (!exp && el > 8 * HOUR)) out.push(jx(j, { lvl: 'warn', t: 'Op ' + o.n + ' at ' + W.station(o.station).name + ' is running long', d: 'Running ' + fDur(el) + (exp ? ', usually about ' + fDur(exp) + ' for ' + o.qtyIn + ' pcs.' : ', no history for this step yet.') + ' Check for a machine, tooling or material problem.', open: [j.id, i] }));
     }));
     // 3. Signatures waiting
-    J.forEach((j) => j.ops.forEach((o, i) => { const c = W.openCheck(o); if (c && now - c.reqAt > 15 * 60000) out.push({ lvl: 'warn', t: (c.type === 'first' ? 'First article' : 'Closing signature') + ' waiting ' + fDur(now - c.reqAt), d: 'Shop Order ' + j.so + ' · op ' + o.n + ' at ' + W.station(o.station).name + '. The operator is stopped until a signer comes.', open: [j.id, i] }); }));
+    J.forEach((j) => j.ops.forEach((o, i) => { const c = W.openCheck(o); if (c && now - c.reqAt > 15 * 60000) out.push(jx(j, { lvl: 'warn', t: (c.type === 'first' ? 'First article' : 'Closing signature') + ' waiting ' + fDur(now - c.reqAt), d: 'Op ' + o.n + ' at ' + W.station(o.station).name + '. The operator is stopped until a signer comes. Asked ' + fDay(c.reqAt), open: [j.id, i] })); }));
     // 4. Holds open more than a day
-    J.forEach((j) => W.openHolds(j).forEach((h) => { if (now - h.at > DAY) out.push({ lvl: 'bad', t: 'Hold ' + h.id + ' open ' + fDur(now - h.at), d: 'Shop Order ' + j.so + ' · ' + h.reason + ' · ' + h.qty + ' pcs. Record a disposition so parts can move or be scrapped.', open: [j.id, Math.max(0, j.ops.findIndex((o) => o.n === h.n))] }); }));
+    J.forEach((j) => W.openHolds(j).forEach((h) => { if (now - h.at > DAY) out.push(jx(j, { lvl: 'bad', t: 'Hold ' + h.id + ' open ' + fDur(now - h.at), d: 'Op ' + h.n + ' · ' + h.reason + ' · ' + h.qty + ' pcs. Record a disposition so parts can move or be scrapped. Opened ' + fDay(h.at), open: [j.id, Math.max(0, j.ops.findIndex((o) => o.n === h.n))] })); }));
     // 5. Boxes sitting
-    J.forEach((j) => j.lots.forEach((l) => { if (l.st !== 'received' && now - l.at > 4 * HOUR) out.push({ lvl: 'warn', t: 'Box ' + j.so + '-' + l.id + ' not received for ' + fDur(now - l.at), d: l.qty + ' pcs sent to ' + W.station(l.to).name + '. Receive it or find it.', open: [j.id, l.from] }); }));
+    J.forEach((j) => j.lots.forEach((l) => { if (l.st !== 'received' && now - l.at > 4 * HOUR) out.push(jx(j, { lvl: 'warn', t: 'Box ' + j.so + '-' + l.id + ' not received for ' + fDur(now - l.at), d: l.qty + ' pcs sent to ' + W.station(l.to).name + '. Receive it or find it. Sent ' + fDay(l.at), open: [j.id, l.from] })); }));
     // 6. Red-lines waiting
-    rlPending().forEach((x) => { if (now - x.at > DAY) out.push({ lvl: 'warn', t: 'Red-line ' + x.id + ' waiting ' + fDur(now - x.at), d: x.pn + ' op ' + x.n + ' · ' + x.reason + '. Approve or reject so the floor knows which step to follow.', rl: true }); });
+    rlPending().forEach((x) => { if (now - x.at > DAY) out.push({ lvl: 'warn', pn: x.pn, nm: '', trav: x.so ? 'Traveler #' + x.so : 'Master traveler', dates: ' · Sent ' + fDay(x.at), t: 'Red-line ' + x.id + ' waiting ' + fDur(now - x.at), d: 'Op ' + x.n + ' · ' + x.reason + '. Approve or reject so the floor knows which step to follow.', rl: true }); });
     // 7. Scrap above 3% on a closed step this week
-    J.concat(jobs().filter((j) => j.st === 'complete')).forEach((j) => j.ops.forEach((o, i) => { if (o.good != null && o.closedAt && now - o.closedAt < 7 * DAY) { const r = o.scrap / Math.max(1, o.good + o.scrap); if (r > 0.03 && o.scrap >= 2) out.push({ lvl: 'warn', t: 'Scrap ' + (r * 100).toFixed(1) + '% on Shop Order ' + j.so + ' op ' + o.n, d: o.scrap + ' bad of ' + (o.good + o.scrap) + '. Find the cause; red-line the step if the process needs to change.', open: [j.id, i] }); } }));
+    J.concat(jobs().filter((j) => j.st === 'complete')).forEach((j) => j.ops.forEach((o, i) => { if (o.good != null && o.closedAt && now - o.closedAt < 7 * DAY) { const r = o.scrap / Math.max(1, o.good + o.scrap); if (r > 0.03 && o.scrap >= 2) out.push(jx(j, { lvl: 'warn', t: 'Scrap ' + (r * 100).toFixed(1) + '% at op ' + o.n, d: o.scrap + ' bad of ' + (o.good + o.scrap) + '. Find the cause; red-line the step if the process needs to change. Closed ' + fDay(o.closedAt), open: [j.id, i] })); } }));
     const rank = { bad: 0, warn: 1 }; return out.sort((a, b) => rank[a.lvl] - rank[b.lvl]);
   }
   function bars(rows, opt) { // rows: [label, value, note]; one series, horizontal bars with direct labels
@@ -1746,7 +1754,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   function renderImprove() {
     const now = Date.now(), PR = prompts(), mgr = ui.user && ui.user.role === 'manager', C = SRV() ? ((ui.fin && ui.fin.settings && ui.fin.settings.costs) || {}) : (store.cfg.costs || {});
     let h = '<div class="head"><div><h1>Improve</h1><p class="muted">What to fix this week, where the time goes, and what each job costs. Updates live as the floor works.</p></div></div>';
-    h += '<div class="panel"><h2>Do this week (' + PR.length + ')</h2>' + (PR.length ? PR.map((p) => '<div class="banner ' + p.lvl + '"><div><b>' + esc(p.t) + '</b><br><span class="small">' + esc(p.d) + '</span>' + (p.list ? '<div class="row" style="flex-wrap:wrap;margin-top:6px">' + p.list + '</div>' : '') + '</div>' + (p.open ? '<button class="btn sm" data-open="' + esc(p.open[0]) + '" data-i="' + p.open[1] + '">Open</button>' : p.rl ? '<button class="btn sm" data-m="rlList">Open</button>' : '') + '</div>').join('') : '<p class="muted">Nothing needs attention right now.</p>') + '</div>';
+    h += '<div class="panel"><h2>Do this week (' + PR.length + ')</h2>' + (PR.length ? PR.map((p) => '<div class="banner ' + p.lvl + '"><div>' + (p.pn ? '<div class="ppn"><b class="mono">' + esc(p.pn) + '</b>' + (p.nm ? ' <span>' + esc(p.nm) + '</span>' : '') + '</div><div><b>' + esc(p.trav) + ' · ' + esc(p.t) + '</b></div><span class="small">' + esc(p.d) + esc(p.dates || '') + '</span>' : '<b>' + esc(p.t) + '</b><br><span class="small">' + esc(p.d) + '</span>') + (p.list ? '<div class="row" style="flex-wrap:wrap;margin-top:6px">' + p.list + '</div>' : '') + '</div>' + (p.open ? '<button class="btn sm" data-open="' + esc(p.open[0]) + '" data-i="' + p.open[1] + '">Open</button>' : p.rl ? '<button class="btn sm" data-m="rlList">Open</button>' : '') + '</div>').join('') : '<p class="muted">Nothing needs attention right now.</p>') + '</div>';
     // Paper history: lead time and on-time by month
     const all = paper(), closed = all.filter((x) => x.r.s !== 'O' && x.r.i && x.r.c), byM = {};
     closed.forEach((x) => { const m = x.r.c.slice(0, 7); (byM[m] = byM[m] || []).push(x); });
