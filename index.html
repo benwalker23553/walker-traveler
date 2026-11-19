@@ -1685,7 +1685,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   function run(jobId, action, p, u) {
     const j = store.jobs[jobId];
     try { const ctx = { u: u || ui.user, at: Date.now(), cfg: store.cfg }; save(W.act(j, action, p, ctx), [[action, p, ctx]]);
-      if (ALERT[action]) sendAlert(store.jobs[jobId] || j, p && p.i, action, ALERT[action], p && (p.reason || p.note) ? String(p.reason || p.note).slice(0, 120) : '');
+      { const jj = store.jobs[jobId] || j, oo = jj && p && jj.ops[p.i]; if (ALERT[action] && !(action === 'finish' && oo && oo.st !== 'fin_wait')) sendAlert(jj, p && p.i, action, ALERT[action], p && (p.reason || p.note) ? String(p.reason || p.note).slice(0, 120) : ''); }
       return true; }
     catch (e) { if (e.user) { toast(e.message, 'bad'); return false; } throw e; }
   }
