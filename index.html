@@ -2974,7 +2974,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   function pdfPages(path) {
     const c = PDFR[path]; if (c) return c.pages || null;
     PDFR[path] = { pages: null };
-    loadPdfJs().then((lib) => fetch(path).then((x) => x.arrayBuffer()).then((buf) => lib.getDocument({ data: buf }).promise)).then(async (doc) => {
+    loadPdfJs().then((lib) => fetch(path).then((x) => x.arrayBuffer()).then((buf) => lib.getDocument({ data: buf, disableFontFace: true, useSystemFonts: false }).promise)).then(async (doc) => {
       const out = []; for (let n = 1; n <= Math.min(doc.numPages, 12); n++) { const pg = await doc.getPage(n), vp = pg.getViewport({ scale: 1.8 }), cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height; await pg.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise; out.push(cv.toDataURL('image/png')); }
       PDFR[path].pages = out; render(); if (ui.modal) renderModal();
     }).catch(() => { PDFR[path].pages = []; PDFR[path].fail = true; render(); });
@@ -3110,7 +3110,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   }
   async function pdfText(path, blob) {
     const lib = await loadPdfJs(); const buf = blob ? await blob.arrayBuffer() : await fetch(path).then((x) => x.arrayBuffer());
-    const doc = await lib.getDocument({ data: buf }).promise, pg = await doc.getPage(1), vp = pg.getViewport({ scale: 1 }), tc = await pg.getTextContent();
+    const doc = await lib.getDocument({ data: buf, disableFontFace: true, useSystemFonts: false }).promise, pg = await doc.getPage(1), vp = pg.getViewport({ scale: 1 }), tc = await pg.getTextContent();
     const items = tc.items.filter((it) => String(it.str).trim()).map((it) => ({ s: String(it.str).trim(), x: it.transform[4] / vp.width, y: 1 - it.transform[5] / vp.height, h: Math.abs(it.transform[3]) }));
     const cv = document.createElement('canvas'), v2 = pg.getViewport({ scale: 1.6 }); cv.width = v2.width; cv.height = v2.height; await pg.render({ canvasContext: cv.getContext('2d'), viewport: v2 }).promise;
     return { items, img: cv.toDataURL('image/jpeg', 0.82) };
