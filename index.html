@@ -954,7 +954,7 @@ window.WT_ESP = [
   const SETUP_RX = /^\s*(SET\s*-?\s*UP|SETUP|INSTALL\s+(JAWS|FIXTURE|TOOLING)|FACE\s+MATERIAL\s+AND\s+TOUCH\s+OFF|TOUCH\s+OFF)\b/i;
   function isSetupStep(job, i) { const op = job.ops[i]; if (!op) return false; if (op.setupOnly) return true;
     const r = routing(job.rid), ro = r && r.ops ? (r.ops.find((o) => o.n === op.n) || r.ops[i]) : null; if (ro && typeof ro.setup === 'boolean') return ro.setup;
-    const t = String((ro && ro.text) || ''); return SETUP_RX.test(t) && !/\bRUN\s+(THE\s+)?(PROGRAM|PARTS?|BATCH)\b/i.test(t); }
+    const t = String((ro && ro.text) || ''); return SETUP_RX.test(t) && !/\bRUN\b|\bMACHINE\b|\bCUT\b|\bDRILL|\bWELD/i.test(t); }
   const isFinal = (r) => !!r && (!!r.fa || String(r.id).indexOf('PK-') === 0 || /FINAL|PACKAG|FNL/i.test((r.kind || '') + ' ' + (r.form || '') + ' ' + (r.file || '')));
   const shipOk = (job) => !!(job.ship && String(job.ship.po || '').trim() && String(job.ship.sales || '').trim());
   function newJob(p, ctx) {
