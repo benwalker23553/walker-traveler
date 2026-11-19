@@ -2600,7 +2600,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   function osStatus(x) { const live = x.live || [], pap = x.paper || [], shortN = (x.short || []).filter((c) => !c.making).length;
     if (Number(x.stock) >= Number(x.open)) return 'ready'; if (live.some((l) => l.cur && !/:(ready|pending)$/.test(l.cur))) return 'work'; if (x.kit && shortN) return 'wait'; if (live.length || pap.length) return 'trav'; if (x.kit && (x.short || []).length) return 'wait'; return 'need'; }
   function osLoad(force) { const O = ui.os = ui.os || {}; if (O.busy || (!force && O.at && Date.now() - O.at < 120000)) return; O.busy = true;
-    window.WT_SB.rpc('order_status').then((r) => { O.busy = false; O.at = Date.now(); O.rows = (r.data || []).map((x) => Object.assign(x, { st: osStatus(x) })); O.err = r.error && r.error.message; if (ui.view === 'orders') render(); }); }
+    window.WT_SB.rpc('order_status').then((r) => { O.busy = false; O.at = Date.now(); O.err = r.error && r.error.message; O.rows = r.error ? null : (r.data || []).map((x) => Object.assign(x, { st: osStatus(x) })); if (ui.view === 'orders') render(); }); }
   function renderOrders() { const O = ui.os || {}; osLoad(); if (!O.rows) return '<div class="head"><div><h1>📋 Open orders status</h1></div></div><div class="empty">' + (O.err ? esc(O.err) : 'Loading every open sales order…') + '</div>';
     const cut = ymd(Date.now() - 365 * DAY), old = O.rows.filter((x) => String(x.date || '') < cut).length, q = (ui.osQ || '').toLowerCase();
     const R = O.rows.filter((x) => (ui.osOld || String(x.date || '') >= cut) && (!ui.osF || x.st === ui.osF) && (!q || (x.so + ' ' + x.cust + ' ' + x.pn + ' ' + x.d + ' ' + (x.po || '')).toLowerCase().indexOf(q) >= 0));
