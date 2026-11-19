@@ -4195,7 +4195,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     let ops = B[rt.id].slice();
     rls().filter((x) => x.rid === rt.id && x.status === 'approved' && x.struct).sort((a, b) => a.okAt - b.okAt).forEach((x) => {
       const sx = x.struct;
-      if (sx.kind === 'merge' && sx.drop) ops = ops.filter((o) => String(o.n) !== String(sx.drop));
+      if ((sx.kind === 'merge' || sx.kind === 'del') && sx.drop) ops = ops.filter((o) => String(o.n) !== String(sx.drop));
       if (sx.kind === 'add' && sx.text && !ops.some((o) => String(o.n) === String(sx.n))) {
         const k = ops.findIndex((o) => String(o.n) === String(x.n)), near = ops[k] || ops[ops.length - 1] || {};
         ops.splice(k < 0 ? ops.length : k + 1, 0, { n: sx.n, station: sx.station || near.station, mach: [sx.mach || (near.mach || [])[0] || '—'], text: sx.text, added: x.id });
@@ -4204,7 +4204,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     rt.ops = ops; applyOpOrder(rt);
   }
   const reshapeAll = () => W.ROUTINGS.forEach(reshape);
-  const structTxt = (x) => { const sx = x && x.struct; if (!sx) return ''; return sx.kind === 'merge' ? 'Combines op ' + x.n + ' and op ' + sx.drop + ' into one step (op ' + sx.drop + ' comes off the traveler)' : sx.kind === 'add' ? 'Splits it: adds a new op ' + sx.n + ' right after op ' + x.n + ': “' + sx.text + '”' : ''; };
+  const structTxt = (x) => { const sx = x && x.struct; if (!sx) return ''; return sx.kind === 'del' ? 'Removes op ' + sx.drop + ' from the traveler' + (sx.why ? ' — ' + sx.why : '') : sx.kind === 'merge' ? 'Combines op ' + x.n + ' and op ' + sx.drop + ' into one step (op ' + sx.drop + ' comes off the traveler)' : sx.kind === 'add' ? 'Splits it: adds a new op ' + sx.n + ' right after op ' + x.n + ': “' + sx.text + '”' : ''; };
   function applyOpOrder(rt) {
     const x = store.opOrder && store.opOrder[rt.id]; if (!x || !rt.ops) return;
     const pos = {}; x.order.forEach((n, k) => { pos[String(n)] = k; });
