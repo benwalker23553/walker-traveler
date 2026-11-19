@@ -1282,6 +1282,17 @@ window.WT_ESP = [
         if (!ctx.u) fail('Sign in first.'); op = job.ops[i]; const who = p.who || ctx.u.id, c = (op && op.crew || []).find((x) => x.who === who && !x.end); if (!c) fail('Not on this crew.');
         c.end = ctx.at; log(job, ctx, 'Left the crew', 'Op ' + op.n + ' · ' + who); break;
       }
+      case 'addStep': {
+        // Floor-built travelers: the people doing the work add each step as they go
+        if (!ctx.u) fail('Sign in first.'); const r = routing(job.rid); if (!r || !r.learned) fail('Only floor-built travelers get steps added here. Use ✎ Change this step on a master traveler.');
+        if (!STATIONS.some((x) => x.id === p.station) || !p.text) fail('Pick the area and what is done.');
+        const last = job.ops[job.ops.length - 1], n = String((Math.floor(Number(last ? last.n : 0) / 10) + 1) * 10).padStart(3, '0');
+        const prevDone = !last || last.st === 'done' || last.st === 'closed';
+        job.ops.push({ n, station: p.station, st: prevDone ? 'ready' : 'pending', qtyIn: prevDone ? (last && last.good != null ? last.good : job.qty) : 0, good: null, scrap: 0, short: 0, shortReason: '', checks: [], seg: [], who: [], last: '', setup: null, paused: null, midOk: false, midWaived: false, pend: null });
+        if (job.st === 'complete') { job.st = 'open'; job.doneAt = null; }
+        if (last && last.st === 'closed') last.st = 'done';
+        log(job, ctx, 'Work order edited', 'Step added on the floor · op ' + n + ' · ' + station(p.station).name + ' · ' + String(p.text).slice(0, 140)); p.n = n; break;
+      }
       case 'runMore': {
         // Go back to a step that was finished short (e.g. made 20 of 100 and moved on) and keep running it. No new setup or first article.
         if (!ctx.u) fail('Sign in first.'); op = job.ops[i]; if (!op || ['done', 'closed'].indexOf(op.st) < 0) fail('This step is still open — keep working it.');
@@ -1584,7 +1595,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     db.collection('credits').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { m[d.id] = d.data(); }); store.credits = m; render(); }, () => {});
     db.collection('logfix').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.floor && x.t) m[x.floor + ':' + x.t] = x; }); store.logfix = m; Object.keys(store.logsRaw || {}).forEach((k) => { store.logs[k] = applyFix(k, store.logsRaw[k]); }); render(); if (ui.modal && ui.modal.type === 'lateFix') renderModal(); }, () => {});
     db.collection('logs').onSnapshot((s) => { s.docs.forEach((d) => { const x = d.data(); if (/_x$/.test(d.id)) { (store.logx = store.logx || {})[d.id.slice(0, -2)] = x; return; } (store.logsRaw = store.logsRaw || {})[d.id] = ((x && x.rows) || []).map((r) => (r && r.s == null ? Object.assign({}, r, { s: r.c ? 'C' : 'O' }) : r)); store.logs[d.id] = applyFix(d.id, store.logsRaw[d.id]); if (d.id === 'final' && x) store.finMeta = { at: x.at, by: x.by, file: x.file }; }); render(); }, () => {});
-    db.collection('routings').onSnapshot((s) => { s.docs.forEach((d) => { const r = d.data(); if (!r || !r.id) return; const ex = W.routing(r.id); if (!ex) W.ROUTINGS.push(W.clone(r)); else if (r.stack || /^(STK|WO)[:-]/.test(r.id)) { Object.assign(ex, W.clone(r)); if (store.baseOps) delete store.baseOps[r.id]; Object.keys(PR).forEach((k) => { if (PR[k].dwFail) delete PR[k]; }); } }); W.ROUTINGS.forEach((rt) => { if (rt.stack) applyStackDesign(rt); reshape(rt); }); render(); }, () => {});
+    db.collection('routings').onSnapshot((s) => { s.docs.forEach((d) => { const r = d.data(); if (!r || !r.id) return; const ex = W.routing(r.id); if (!ex) W.ROUTINGS.push(W.clone(r)); else if (r.stack || r.learned || /^(STK|WO|FL)[:-]/.test(r.id)) { Object.assign(ex, W.clone(r)); if (store.baseOps) delete store.baseOps[r.id]; Object.keys(PR).forEach((k) => { if (PR[k].dwFail) delete PR[k]; }); } }); W.ROUTINGS.forEach((rt) => { if (rt.stack) applyStackDesign(rt); reshape(rt); }); render(); }, () => {});
     db.collection('oporder').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.rid && Array.isArray(x.order)) m[x.rid] = x; }); store.opOrder = m; reshapeAll(); render(); }, () => {});
     db.collection('sage').onSnapshot((s) => { s.docs.forEach((d) => { if (d.id === 'bom') { const x = d.data(); store.sageBom = (x && x.bom) || {}; store.sageAt = x && x.at; } }); render(); }, () => {});
     db.collection('stackdesign').onSnapshot((s) => { store.stackDesigns = s.docs.map((d) => d.data()).filter((x) => x && x.pn); W.ROUTINGS.forEach((rt) => { if (rt.stack) applyStackDesign(rt); }); render(); if (ui.modal) renderModal(); }, () => {});
@@ -1979,6 +1990,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       hold: () => tile('data-nav="list" data-lf="hold"', 'On hold', 'Waiting on a disposition', hold, hold ? 'bad' : ''),
       usage: () => tile('data-nav="usage"', '🏆 Leaderboard', 'Who uses the tablets most · $150 a month', null, ''),
       cncreq: () => { const n = reqOpen().length, mine = ui.user && (/cnc/i.test(ui.user.area || '') || W.isApprover(ui.user) || ui.user.role === 'manager'); return mine || n ? tile('data-nav="cncreq"', '🔩 CNC part requests', n ? n + ' waiting · nuts, bungs, fittings' : 'Hardware travelers need from CNC', n || null, n ? 'warn' : '') : ''; },
+      build: () => (ui.user ? tile('data-m="buildTrav"', '🛠 Build a traveler', 'No master traveler? Write it as you work', null, '') : ''),
       orders: () => tile('data-nav="orders"', '📋 Open orders status', 'In work · travelers · waiting on parts · needed', null, ''),
       pack: () => tile('data-nav="pack"', '📦 Pack orders', 'Sage sales orders · packing takes parts out of stock', null, ''),
       tvmode: () => tile('data-m="tvmode"', '📺 TV mode', 'Turn this screen into an area priorities TV', null, ''),
@@ -2000,8 +2012,8 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     };
     // Each person sees only what they use. Operators: their work. Supervisors, quality and managers: everything.
     const order = !ui.user ? ['ops', 'inout', 'work', 'today', 'board', 'pack', 'usage', 'tvmode', 'all', 'asap', 'where', 'pm', 'cal', 'train', 'area']
-      : !lead ? (/maint/i.test(ui.user.area || '') ? ['pm', 'ops', 'mine', 'where', 'train', 'area', 'inout'] : ['ops', 'work', 'mine', 'today', 'board', 'cncreq', 'pack', 'orders', 'usage', 'tvmode', 'all', 'asap', 'hold', 'where', 'pm', 'cal', 'train', 'area', 'inout'])
-      : ['work', 'prio', 'usage', 'board', 'orders', 'cncreq', 'pack', 'tvmode', 'sign', 'ops', 'xl', 'pm', 'cal', 'alerts', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
+      : !lead ? (/maint/i.test(ui.user.area || '') ? ['pm', 'ops', 'mine', 'where', 'train', 'area', 'inout'] : ['ops', 'work', 'mine', 'today', 'board', 'cncreq', 'pack', 'orders', 'build', 'usage', 'tvmode', 'all', 'asap', 'hold', 'where', 'pm', 'cal', 'train', 'area', 'inout'])
+      : ['work', 'prio', 'usage', 'board', 'orders', 'build', 'cncreq', 'pack', 'tvmode', 'sign', 'ops', 'xl', 'pm', 'cal', 'alerts', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
     return '<div class="head"><div><h1>Main menu</h1><p class="muted">' + (ui.user ? 'Signed in as ' + esc(ui.user.name.replace(/\.$/, '')) + '.' : 'Not signed in.') + ' This tablet is set to ' + esc(areaName()) + '.</p></div></div><div class="menu">' + order.map((k) => T[k]()).join('') + '</div>';
   }
 
@@ -2615,12 +2627,35 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     h += '<div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px"><button class="btn ' + (!ui.osF ? 'sel primary' : '') + '" data-a="osF" data-v="">All (' + base.length + ')</button>' + OS.k.map((k) => '<button class="btn ' + (ui.osF === k ? 'sel primary' : '') + '" data-a="osF" data-v="' + k + '">' + OS.name[k] + ' (' + cnt(k) + ')</button>').join('') + '</div>';
     h += '<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><input id="os-q" class="field" style="flex:1;min-width:220px" placeholder="Find an order, customer, PO or part" value="' + esc(ui.osQ || '') + '" autocomplete="off"><label class="check" style="flex-direction:row;gap:8px"><input type="checkbox" data-a="osOld"' + (ui.osOld ? ' checked' : '') + '> Show ' + old + ' lines older than a year</label></div>';
     h += '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Ship by</th><th>Order</th><th>Part</th><th>Open</th><th>In stock</th><th>Status</th><th>Travelers</th><th>Waiting on</th></tr></thead><tbody>' +
-      R.slice(0, 400).map((x) => '<tr' + (x.ship_by && x.ship_by < today ? ' style="background:var(--bad-bg)"' : '') + '><td>' + esc(x.ship_by ? fDue(x.ship_by) : '—') + (x.ship_by && x.ship_by < today ? '<br><span class="pill bad">LATE</span>' : '') + '</td><td><b>' + esc(x.so) + '</b> · line ' + x.line + '<br><span class="small">' + esc(x.cust || '') + (x.po ? ' · PO ' + esc(x.po) : '') + '</span></td><td><b class="mono">' + esc(x.pn || '') + '</b><br><span class="small muted">' + esc(x.d || '') + '</span></td><td class="num"><b>' + Math.round(x.open) + '</b>' + (Number(x.shipped) ? '<br><span class="small muted">' + Math.round(x.shipped) + ' shipped</span>' : '') + '</td><td class="num">' + Math.round(x.stock) + '</td><td><span class="pill ' + OS.cls[x.st] + '">' + OS.name[x.st] + '</span></td><td>' + (trv(x) || '<span class="small muted">none</span>') + '</td><td>' + (waitTx(x) || (x.st === 'need' ? '<span class="small">Issue a traveler' + (x.kit ? '' : ' or buy it') + '</span>' : '')) + '</td></tr>').join('') +
+      R.slice(0, 400).map((x) => '<tr' + (x.ship_by && x.ship_by < today ? ' style="background:var(--bad-bg)"' : '') + '><td>' + esc(x.ship_by ? fDue(x.ship_by) : '—') + (x.ship_by && x.ship_by < today ? '<br><span class="pill bad">LATE</span>' : '') + '</td><td><b>' + esc(x.so) + '</b> · line ' + x.line + '<br><span class="small">' + esc(x.cust || '') + (x.po ? ' · PO ' + esc(x.po) : '') + '</span></td><td><b class="mono">' + esc(x.pn || '') + '</b><br><span class="small muted">' + esc(x.d || '') + '</span></td><td class="num"><b>' + Math.round(x.open) + '</b>' + (Number(x.shipped) ? '<br><span class="small muted">' + Math.round(x.shipped) + ' shipped</span>' : '') + '</td><td class="num">' + Math.round(x.stock) + '</td><td><span class="pill ' + OS.cls[x.st] + '">' + OS.name[x.st] + '</span></td><td>' + (trv(x) || '<span class="small muted">none</span>') + '</td><td>' + (waitTx(x) || (x.st === 'need' ? (ui.user ? '<button class="btn sm go" data-m="buildTrav" data-pn="' + esc(x.pn || '') + '" data-qty="' + Math.round(x.open) + '" data-desc="' + esc(x.d || '') + '" data-sales="' + esc(x.so) + '" data-cust="' + esc(x.cust || '') + '" data-po="' + esc(x.po || '') + '" data-due="' + esc(x.ship_by || '') + '">🛠 ' + (W.routing(flId(x.pn)) ? 'Start it — steps saved' : 'Build traveler as you go') + '</button>' : '<span class="small">Issue a traveler or buy it</span>') : '')) + '</td></tr>').join('') +
       '</tbody></table></div>' + (R.length > 400 ? '<p class="small muted">Showing the first 400 of ' + R.length + '. Use the filters or search.</p>' : '') + (O.at ? '<p class="small muted">Updated ' + esc(fTime(O.at)) + '</p>' : '');
     return h; }
   function osCsv() { const O = ui.os || {}, q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"', rows = [['Ship by', 'Sales order', 'Line', 'Customer', 'PO', 'Part', 'Description', 'Open qty', 'In stock', 'Status', 'Travelers', 'Short parts', 'Being made']];
     (O.rows || []).forEach((x) => rows.push([x.ship_by, x.so, x.line, x.cust, x.po, x.pn, x.d, Math.round(x.open), Math.round(x.stock), OS.name[x.st].replace(/^\S+ /, ''), (x.live || []).map((l) => '#' + l.t + ' ' + (l.cur || '')).concat((x.paper || []).map((p) => '#' + p.t + ' ' + p.floor + ' paper')).concat([].concat.apply([], (x.short || []).filter((c) => c.making).map((c) => (c.tr || []).map((t) => '#' + t.t + ' for ' + c.pn)))).join('; '), (x.short || []).filter((c) => !c.making).map((c) => c.pn + ' need ' + Math.round(c.need) + ' have ' + Math.round(c.have)).join('; '), (x.short || []).filter((c) => c.making).map((c) => c.pn).join('; ')]));
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([rows.map((r) => r.map(q).join(',')).join('\r\n')], { type: 'text/csv' })); a.download = 'open-orders-status-' + ymd(Date.now()) + '.csv'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
+  /* ---------- Floor-built travelers: a part with no master traveler gets one built by the people doing the work — area + what is done + photos, step by step. Next time it comes up by itself. ---------- */
+  const OPS_PRESET = { metal: ['Shear', 'Cut to length', 'Punch', 'Form / brake', 'Roll', 'Drill', 'Deburr', 'Assemble'], machine: ['Saw', 'Lathe', 'Mill', 'Drill', 'Tap', 'Deburr'], cnc: ['Set up', 'Run program', 'Deburr'], weld: ['Tack', 'Weld', 'Spot weld', 'Grind', 'Leak test'], wire: ['Inner wire', 'Outer wire', 'Roll'], wash: ['Wash', 'Dry'], powder: ['Mask', 'Powder coat', 'Bake', 'Unmask'], glue: ['Glue', 'Assemble', 'Clamp'], pleat: ['Pleat', 'Burn', 'Shear', 'Staple'], clip: ['Clip', 'Final clamp', 'Shape to fixture'], pot: ['Pour', 'Demold', 'Oil', 'Trim'], qc: ['Inspect', 'Ink jet / mark', 'Bag', 'Box', 'Label'], race: ['Assemble', 'Oil', 'Inspect', 'Bag', 'Box'], pack: ['Pick parts', 'Assemble kit', 'Bag', 'Box', 'Label', 'Pack'] };
+  const flId = (pn) => 'FL:' + bomKey(pn);
+  function saveRt(rt) { if (store.mode === 'shared') store.db.doc('routings/' + rt.id.replace(/[^A-Za-z0-9_-]/g, '-')).set(W.clone(rt)).catch(() => toast('Could not save the traveler steps. Check the connection.', 'bad')); }
+  const stepTiles = (m) => { const st = m.st || '', P = OPS_PRESET[st] || [];
+    return '<h3>1 · Where</h3><div class="tiles">' + W.STATIONS.filter((x) => x.kind === 'work').map((x) => '<button class="btn sm ' + (st === x.id ? 'sel' : '') + '" data-set="st" data-v="' + x.id + '"><span>' + esc(x.name) + '</span></button>').join('') + '</div>' +
+      (st ? '<h3>2 · What is done — tap one or more</h3><div class="tiles">' + P.map((t) => '<button class="btn ' + ((m.acts || []).indexOf(t) >= 0 ? 'sel' : '') + '" data-a="bldAct" data-v="' + esc(t) + '"><span>' + esc(t) + '</span></button>').join('') + '</div>' +
+        inp('words', '3 · Details (machine, fixture, size, how many per box…) — type or tap the microphone', m, 'autocomplete="off"') + '<p class="small muted">After you save, tap 📷 Add photo on the step — photos stay with this step for the next person.</p>' : ''); };
+  const stepText = (m) => [(m.acts || []).join(', '), String(m.words || '').trim()].filter(Boolean).join(' — ').toUpperCase();
+  function learnedHtml(j, i) { const rt = W.routing(j.rid); if (!rt || !rt.learned) return ''; const ro = rt.ops.find((o) => o.n === j.ops[i].n) || {}, ph = (ro.photos || []).slice(-8), d = ' data-job="' + esc(j.id) + '"';
+    return '<div class="panel" style="border-color:var(--warn)"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><h2>🛠 Built on the floor</h2>' + (ui.user ? '<button class="btn primary go" data-m="addStep"' + d + '>＋ Add the next step</button>' : '') + '</div><p class="small">No master traveler for <b class="mono">' + esc(j.pn) + '</b> yet, so this one is written as the work is done. Add each step when you do it and take photos. <b>Next time this part runs, these steps come up by themselves.</b> ' + rt.ops.length + ' step' + (rt.ops.length === 1 ? '' : 's') + ' so far' + (rt.by ? ' · started by ' + esc(nm(rt.by)) : '') + '.</p>' +
+      (ph.length ? '<div class="small"><b>Photos of this step from before:</b></div><div class="row" style="gap:6px;flex-wrap:wrap">' + ph.map((x) => '<button class="jn-img" data-a="jnView" data-src="' + esc(x.path) + '" style="width:96px;height:96px;padding:0;border:1px solid var(--line);border-radius:6px;overflow:hidden"><img src="' + esc(x.path) + '" alt="Step photo by ' + esc(nm(x.by)) + '" style="width:100%;height:100%;object-fit:cover"></button>').join('') + '</div>' : '') + '</div>'; }
+  function buildTraveler(m) { if (!need()) return; const pn = String(m.pn || '').trim().toUpperCase(), qty = Math.floor(Number(m.qty)); if (!pn) return toast('Type the part number.', 'bad'); if (!(qty > 0)) return toast('Enter how many.', 'bad');
+    let rt = W.routing(flId(pn)), first = false;
+    if (!rt) { if (!m.st || !stepText(m)) return toast('Pick where and what the first step is.', 'bad'); first = true;
+      rt = { id: flId(pn), wo: true, master: false, learned: true, floor: W.sideOf(m.st), series: '', pn, wpn: pn, name: String(m.d || '').trim() || pn, kind: 'BUILT ON THE FLOOR', form: 'Floor-built traveler', fa: false, travRev: 'FLOOR', travDate: new Date().toLocaleDateString('en-US'), dwgRev: '—', by: ui.user.id, at: Date.now(), docs: [],
+        ops: [{ n: '010', station: m.st, mach: ['—'], text: stepText(m), by: ui.user.id, at: Date.now(), photos: [] }] };
+      W.ROUTINGS.push(rt); saveRt(rt); }
+    const fl = rt.floor === 'filter' ? 'filter' : 'metal', so = nextNo(fl) || String(Date.now()).slice(-6);
+    try { const j = W.newJob({ rid: rt.id, so, qty, due: m.due || '', pri: 50, ship: m.sales ? { po: m.po || '', sales: m.sales } : null }, { u: ui.user, at: Date.now(), adopt: true }); j.floor = fl; j.name = rt.name;
+      if (m.sales) j.log.push({ at: Date.now(), by: ui.user.id, a: 'For sales order', d: m.sales + (m.cust ? ' · ' + m.cust : '') });
+      save(j); closeModal(); openJob(j.id); setTimeout(() => assignJob(j, ui.user.id, j.ops[0].station), 300); toast((first ? 'New traveler started' : 'Traveler issued from the steps built last time') + ' · #' + so); }
+    catch (err) { if (err.user) toast(err.message, 'bad'); else throw err; } }
   function renderPack() {
     if (ui.bs) return renderBuild();
     const P = ui.pk || {}; if (!P.at && !P.busy) packLoad();
@@ -3072,7 +3107,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     sec += M('callSup', '🔔 Call supervisor', 'sm');
     sec += M('redline', '✎ Change this step', 'sm');
     if (W.batchStep(j, i) && op.st !== 'done' && op.st !== 'pending') msg = '<b>🏷 Batch code step:</b> when you finish, you type the batch / date code printed on the filters. ' + msg;
-    return '<div class="actionbar"><div class="msg">' + msg + '</div><div class="row">' + main + '</div><div class="row">' + sec + '</div></div>' + crewHtml(j, i);
+    return '<div class="actionbar"><div class="msg">' + msg + '</div><div class="row">' + main + '</div><div class="row">' + sec + '</div></div>' + learnedHtml(j, i) + crewHtml(j, i);
   }
   // Supplier details appear when the reason is a bad supplier part
   // Crews repeat: most of the same people do the same tasks daily — remember each person's last combo and the last lineup at each area
@@ -3210,7 +3245,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       if (window.WT_SB) { path = 'photos/' + jobId.replace(/[^\w-]/g, '') + '/' + Date.now().toString(36) + '.jpg'; const { error } = await window.WT_SB.storage.from('files').upload(path, blob, { contentType: 'image/jpeg' }); if (error) throw error; }
       else path = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
       const tx = ($('#jn-text') || {}).value || '';
-      if (run(jobId, 'jobNote', { text: tx, photo: path, op: opN })) toast('Photo saved on the traveler');
+      if (run(jobId, 'jobNote', { text: tx, photo: path, op: opN })) { toast('Photo saved on the traveler'); const jj = store.jobs[jobId], rt = jj && W.routing(jj.rid), ro = rt && rt.learned && rt.ops.find((o) => o.n === opN); if (ro) { ro.photos = (ro.photos || []).concat([{ path, by: ui.user.id, at: Date.now(), so: jj.so }]).slice(-20); saveRt(rt); } }
     } catch (e) { if (st) st.textContent = ''; toast('Photo not saved: ' + (e.message || e), 'bad'); }
   }
   function workTab(j, r, i) {
@@ -3692,6 +3727,11 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       case 'skip': { const nx = j.ops[m.i + 1]; h = '<h2>⤼ Skip op ' + esc(op.n) + ' · ' + esc(W.station(op.station).name) + '</h2><p class="muted"><span class="mono">' + esc(j.pn) + '</span> · ' + op.qtyIn + ' pcs. They go straight on to ' + (nx ? 'op ' + esc(nx.n) + ' at ' + esc(W.station(W.finalDest(j, m.i)).name) : 'the end of the traveler') + '. A supervisor must sign.</p>' +
         tiles('reason', ['Not needed on this job', 'Already done at another step', 'Engineering / customer says skip', 'Done by outside vendor', 'Other'], m) + '<label>Note (optional)<input data-f="note" id="m-note" class="field" value="' + esc(m.note || '') + '"></label>' +
         '<h3>Supervisor signs</h3>' + who(m, true, op.station) + (m.who ? pad(m) : '<p class="small muted">No supervisor here? <button class="btn sm" data-a="skipAsk" data-job="' + esc(j.id) + '" data-i="' + m.i + '">🔔 Send to supervisor’s phone</button></p>') + foot('Skip step', 'go'); break; }
+      case 'buildTrav': { const ex = m.pn && W.routing(flId(m.pn));
+        h = '<h2>🛠 Build a traveler as you go</h2><p class="muted">For a part with no master traveler. Start it with the first step; add the rest as you do them. Photos and steps are saved, so next time it comes up by itself.</p><div class="grid2">' + inp('pn', 'Part number', m, 'autocomplete="off" style="text-transform:uppercase"') + inp('qty', 'How many', m, 'type="number" inputmode="numeric" min="1"') + '</div>' + inp('d', 'Description', m, 'autocomplete="off"') +
+          (m.sales ? '<p class="small">For Sales Order <b>' + esc(m.sales) + '</b>' + (m.cust ? ' · ' + esc(m.cust) : '') + '</p>' : '') +
+          (ex ? '<div class="banner ok"><div><b>Steps already built for ' + esc(m.pn) + '</b> — ' + ex.ops.length + ' steps: ' + ex.ops.map((o) => esc(W.station(o.station).name)).join(' → ') + '. Tap Start and it uses them.</div></div>' : stepTiles(m)) + foot('▶ Start the traveler'); break; }
+      case 'addStep': h = '<h2>＋ Add the next step · ' + esc(j.pn) + '</h2><p class="muted">Shop Order ' + esc(j.so) + '. Step ' + (j.ops.length + 1) + '. It is saved on this traveler and for every future one.</p>' + stepTiles(m) + foot('Add step'); break;
       case 'crew': { const T = W.CREW_TASKS[op.station] || [], sel = m.tasks || [], ppl = assignList().slice().sort((a, b) => (W.sideOf(op.station) === (b.side || '') ) - (W.sideOf(op.station) === (a.side || '')) || a.name.localeCompare(b.name));
         h = '<h2>👥 ' + (m.other ? 'Add someone to' : 'Join') + ' op ' + esc(op.n) + ' · ' + esc(W.station(op.station).name) + '</h2><p class="muted"><span class="mono">' + esc(j.pn) + '</span> · Shop Order ' + esc(j.so) + '. Tap every task ' + (m.other ? 'they are' : 'you are') + ' doing — one or a combo.</p>' +
           (m.other ? '<h3>Who</h3><div class="tiles">' + ppl.map((p) => '<button class="btn ' + (m.who === p.id ? 'sel' : '') + '" data-set="who" data-v="' + esc(p.id) + '"><span>' + esc(p.name) + '</span><small>' + esc(p.area || '') + '</small></button>').join('') + '</div>' : '') +
@@ -3837,6 +3877,11 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         toast('Op ' + store.jobs[m.job].ops[m.i].n + ' skipped · signed by ' + sp.name);
         const jj = store.jobs[m.job]; if (W.sendable(jj, m.i) > 0) return openModal({ type: 'move', job: m.job, i: m.i, dest: W.finalDest(jj, m.i), boxes: 1, qty: W.unmoved(jj, m.i), direct: false });
         closeModal(); render(); return; }
+      case 'buildTrav': return buildTraveler(m);
+      case 'addStep': { if (!need()) return; const j = store.jobs[m.job], rt = j && W.routing(j.rid), tx = stepText(m); if (!m.st || !tx) return toast('Pick where and what is done.', 'bad'); const p = { station: m.st, text: tx };
+        if (!run(m.job, 'addStep', p)) return; const nj = store.jobs[m.job], no = nj.ops[nj.ops.length - 1];
+        if (rt && !rt.ops.some((o) => o.n === no.n)) { rt.ops.push({ n: no.n, station: m.st, mach: ['—'], text: tx, by: ui.user.id, at: Date.now(), photos: [] }); saveRt(rt); }
+        closeModal(); ui.opI = nj.ops.length - 1; render(); return toast('Step ' + no.n + ' added — ' + tx.slice(0, 60)); }
       case 'crew': { if (!need()) return; if (m.other && !m.who) return toast('Pick who.', 'bad'); if (!(m.tasks || []).length) return toast('Tap at least one task.', 'bad');
         if (!run(m.job, 'crewJoin', { i: m.i, who: m.who || ui.user.id, tasks: m.tasks })) return; { const jj = store.jobs[m.job]; crewToPlan(jj, jj.ops[m.i].station, [m.who || ui.user.id]); } closeModal(); render(); return toast(nm(m.who || ui.user.id) + ' is on the crew: ' + m.tasks.join(' + ')); }
       case 'partReq': { if (!need()) return; const C = cncComps(m.ppn), L = [];
@@ -4440,6 +4485,8 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       if (d.m === 'editStep') { const ed = (j.edits || {})[op.n]; return openModal({ type: 'editStep', job, i, text: ed ? ed.text : rop(W.routing(j.rid), j, i).text, reason: '' }); }
       if (d.m === 'skip') return openModal({ type: 'skip', job, i, reason: '', note: '', who: ui.user && W.isApprover(ui.user) ? ui.user.id : null, pin: '' });
       if (d.m === 'crew') { const jj = store.jobs[d.job], oo = jj && jj.ops[Number(d.i)], mine = !d.other && oo && ui.user ? W.crewOpen(oo).find((c) => c.who === ui.user.id) : null; return openModal({ type: 'crew', job: d.job, i: Number(d.i), other: !!d.other, who: d.other ? '' : (ui.user ? ui.user.id : ''), tasks: mine ? mine.tasks.slice() : (!d.other && ui.user && lastCombo(ui.user.id) ? lastCombo(ui.user.id).slice() : []) }); }
+      if (d.m === 'buildTrav') return openModal({ type: 'buildTrav', pn: d.pn || '', qty: d.qty || '', d: d.desc || '', sales: d.sales || '', cust: d.cust || '', po: d.po || '', due: d.due || '', st: '', acts: [], words: '' });
+      if (d.m === 'addStep') { const jj = store.jobs[d.job], lo = jj && jj.ops[jj.ops.length - 1]; return openModal({ type: 'addStep', job: d.job, st: lo ? lo.station : '', acts: [], words: '' }); }
       if (d.m === 'partReq') { const C0 = {}; return openModal({ type: 'partReq', so: d.so, ppn: d.ppn, qty: Number(d.qty) || 0, job: d.job || '', due: d.due || '', xpn: '', xq: '', note: '' }); }
       if (d.m === 'callSup') return openModal({ type: 'callSup', job, i, reason: '', note: '' });
       if (d.m === 'redline') return openModal({ type: 'redline', job, i, reason: '', text: liveStep(j.rid, op.n, rop(W.routing(j.rid), j, i).text, null).text, note: '' });
@@ -4481,6 +4528,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         if (store.jobs[x.job]) run(x.job, 'logNote', { a: 'Red-line approved', d: x.id + ' · op ' + x.n + ' now reads: ' + x.text.slice(0, 140) });
         return toast('Approved. Op ' + x.n + ' is updated on every traveler for ' + x.pn + '.');
       }
+      if (d.a === 'bldAct') { const m = ui.modal; if (!m) return; m.acts = m.acts || []; const k = m.acts.indexOf(d.v); if (k >= 0) m.acts.splice(k, 1); else m.acts.push(d.v); return renderModal(); }
       if (d.a === 'whoT') { const m = ui.modal; if (!m) return; m.crew = m.crew || []; if (!d.v) m.crew = []; else { const k = m.crew.indexOf(d.v); if (k >= 0) m.crew.splice(k, 1); else m.crew.push(d.v); } return renderModal(); }
       if (d.a === 'crewQuick') { const t = lastCombo(ui.user.id); if (!t) return; run(d.job, 'crewJoin', { i: Number(d.i), who: ui.user.id, tasks: t }); { const jj = store.jobs[d.job]; crewToPlan(jj, jj.ops[Number(d.i)].station, [ui.user.id]); } render(); return toast('Joined: ' + t.join(' + ')); }
       if (d.a === 'crewAsg') { const j = store.jobs[d.job], op = j && j.ops[Number(d.i)], PI = op && openItems(op.station).find((y) => y.k === 'j' && y.ref === j.id); if (!PI) return; let n = 0, later = [];
