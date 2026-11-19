@@ -3007,10 +3007,20 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     return '<div class="actionbar"><div class="msg">' + msg + '</div><div class="row">' + main + '</div><div class="row">' + sec + '</div></div>' + crewHtml(j, i);
   }
   // Supplier details appear when the reason is a bad supplier part
+  // Crews repeat: most of the same people do the same tasks daily — remember each person's last combo and the last lineup at each area
+  function crewEntries() { const E = []; jobs().forEach((j) => j.ops.forEach((o) => (o.crew || []).forEach((c) => E.push({ j, o, c })))); return E.sort((a, b) => b.c.at - a.c.at); }
+  const lastCombo = (who) => { const e = crewEntries().find((x) => x.c.who === who); return e ? e.c.tasks : null; };
+  function lastCrew(st, pn, notJob) { const E = crewEntries().filter((x) => x.o.station === st && x.j.id !== notJob), mine = E.filter((x) => key(x.j.pn) === key(pn)), src = (mine[0] || E[0]); if (!src) return null;
+    const L = {}; (mine[0] ? mine : E).filter((x) => x.j.id === src.j.id && x.o.n === src.o.n).forEach((x) => { if (!L[x.c.who]) L[x.c.who] = x.c.tasks; });
+    return { from: src.j, same: !!mine[0], list: Object.keys(L).map((w) => ({ who: w, tasks: L[w] })) }; }
   // 👥 Crew on a step: who is on the line and what combo of tasks each person does
   function crewHtml(j, i) { const op = j.ops[i], T = W.CREW_TASKS[op.station]; if (!T || op.st === 'done' || op.st === 'pending') return '';
     const C = W.crewOpen(op), me = ui.user && C.find((c) => c.who === ui.user.id), d = ' data-job="' + esc(j.id) + '" data-i="' + i + '"';
-    return '<div class="panel"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><h2>👥 Crew on this step (' + C.length + ')</h2>' + (ui.user ? '<span class="row" style="gap:6px"><button class="btn ' + (me ? '' : 'primary go') + '" data-m="crew"' + d + '>' + (me ? '✎ Change my tasks' : '＋ Join this step') + '</button>' + (canPlan() ? '<button class="btn sm" data-m="crew"' + d + ' data-other="1">＋ Add someone</button>' : '') + '</span>' : '') + '</div>' +
+    const lc = ui.user && !me ? lastCombo(ui.user.id) : null, LC = ui.user && canPlan() ? lastCrew(op.station, j.pn, j.id) : null, miss = LC ? LC.list.filter((x) => !C.some((c) => c.who === x.who)) : [];
+    return '<div class="panel"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><h2>👥 Crew on this step (' + C.length + ')</h2>' + (ui.user ? '<span class="row" style="gap:6px;flex-wrap:wrap">' +
+      (lc ? '<button class="btn primary go" data-a="crewQuick"' + d + '>⚡ Join as usual — ' + esc(lc.join(' + ')) + '</button>' : '') +
+      '<button class="btn ' + (me || lc ? '' : 'primary go') + '" data-m="crew"' + d + '>' + (me ? '✎ Change my tasks' : lc ? 'Pick other tasks' : '＋ Join this step') + '</button>' + (canPlan() ? '<button class="btn sm" data-m="crew"' + d + ' data-other="1">＋ Add someone</button>' : '') + '</span>' : '') + '</div>' +
+      (miss.length ? '<div class="banner info"><div><b>⚡ Same crew as ' + (LC.same ? 'last time on this part' : 'the last job here') + '</b> (Shop Order ' + esc(LC.from.so) + '): ' + miss.map((x) => esc(nm(x.who)) + ' — ' + esc(x.tasks.join(' + '))).join(' · ') + '</div><button class="btn primary go" data-a="crewCopy"' + d + '>⚡ Put this crew on — one tap</button></div>' : '') +
       (C.length ? C.map((c) => '<div class="row" style="justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding:6px 0;flex-wrap:wrap"><span><b>' + esc(nm(c.who)) + '</b>' + (ui.user && c.who === ui.user.id ? ' <span class="pill ok">YOU</span>' : '') + ' — ' + c.tasks.map((t) => '<span class="pill plain">' + esc(t) + '</span>').join(' ') + ' <span class="small muted">since ' + esc(fTime(c.at)) + '</span></span>' + (ui.user && (c.who === ui.user.id || canPlan()) ? '<button class="btn sm" data-a="crewLeave"' + d + ' data-who="' + esc(c.who) + '">Leave</button>' : '') + '</div>').join('')
         : '<p class="small muted">Nobody on this step yet. Everyone working it taps Join and picks their tasks — one or a combo.</p>') + '</div>'; }
   function supList() { const S = {}; jobs().forEach((j) => { (j.holds || []).forEach((h) => { if (h.sup && h.sup.name) S[h.sup.name] = 1; }); (j.supIssues || []).forEach((x) => { if (x.sup.name) S[x.sup.name] = 1; }); }); return Object.keys(S).sort(); }
@@ -4311,6 +4321,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (d.pin && m) return pinKey(m, d.pin);
     if (d.set && m) {
       m[d.set] = d.v; if (d.set === 'who') { m.pin = ''; m.first = ''; if (m.type === 'login') m.keep = !!d.v && (ls.get('wt-keep') === d.v || ls.get('wt-alerts') === d.v); if (d.v && m.type !== 'login' && m.type !== 'jobWho' && m.type !== 'plWho') setTimeout(() => { const pd = $('#modal .pad'); if (pd) pd.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 30); }
+      if (m.type === 'crew' && d.set === 'who' && d.v) { const t = lastCombo(d.v); m.tasks = t ? t.slice() : []; }
       if ((m.type === 'pause' || m.type === 'block') && d.set === 'reason') { if (run(m.job, m.type, { i: m.i, reason: d.v })) closeModal(); return; }
       return renderModal();
     }
@@ -4343,7 +4354,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       if (d.m === 'reroute') { const l = j.lots.find((x) => x.id === d.lot); return openModal({ type: 'reroute', job, lot: d.lot, dest: l.expect }); }
       if (d.m === 'editStep') { const ed = (j.edits || {})[op.n]; return openModal({ type: 'editStep', job, i, text: ed ? ed.text : rop(W.routing(j.rid), j, i).text, reason: '' }); }
       if (d.m === 'skip') return openModal({ type: 'skip', job, i, reason: '', note: '', who: ui.user && W.isApprover(ui.user) ? ui.user.id : null, pin: '' });
-      if (d.m === 'crew') { const jj = store.jobs[d.job], oo = jj && jj.ops[Number(d.i)], mine = !d.other && oo && ui.user ? W.crewOpen(oo).find((c) => c.who === ui.user.id) : null; return openModal({ type: 'crew', job: d.job, i: Number(d.i), other: !!d.other, who: d.other ? '' : (ui.user ? ui.user.id : ''), tasks: mine ? mine.tasks.slice() : [] }); }
+      if (d.m === 'crew') { const jj = store.jobs[d.job], oo = jj && jj.ops[Number(d.i)], mine = !d.other && oo && ui.user ? W.crewOpen(oo).find((c) => c.who === ui.user.id) : null; return openModal({ type: 'crew', job: d.job, i: Number(d.i), other: !!d.other, who: d.other ? '' : (ui.user ? ui.user.id : ''), tasks: mine ? mine.tasks.slice() : (!d.other && ui.user && lastCombo(ui.user.id) ? lastCombo(ui.user.id).slice() : []) }); }
       if (d.m === 'partReq') { const C0 = {}; return openModal({ type: 'partReq', so: d.so, ppn: d.ppn, qty: Number(d.qty) || 0, job: d.job || '', due: d.due || '', xpn: '', xq: '', note: '' }); }
       if (d.m === 'callSup') return openModal({ type: 'callSup', job, i, reason: '', note: '' });
       if (d.m === 'redline') return openModal({ type: 'redline', job, i, reason: '', text: liveStep(j.rid, op.n, rop(W.routing(j.rid), j, i).text, null).text, note: '' });
@@ -4385,6 +4396,9 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         if (store.jobs[x.job]) run(x.job, 'logNote', { a: 'Red-line approved', d: x.id + ' · op ' + x.n + ' now reads: ' + x.text.slice(0, 140) });
         return toast('Approved. Op ' + x.n + ' is updated on every traveler for ' + x.pn + '.');
       }
+      if (d.a === 'crewQuick') { const t = lastCombo(ui.user.id); if (!t) return; run(d.job, 'crewJoin', { i: Number(d.i), who: ui.user.id, tasks: t }); render(); return toast('Joined: ' + t.join(' + ')); }
+      if (d.a === 'crewCopy') { const j = store.jobs[d.job], op = j && j.ops[Number(d.i)], LC = op && lastCrew(op.station, j.pn, j.id); if (!LC) return; let n = 0;
+        LC.list.forEach((x) => { if (!W.crewOpen(op).some((c) => c.who === x.who) && run(d.job, 'crewJoin', { i: Number(d.i), who: x.who, tasks: x.tasks })) n++; }); render(); return toast(n + ' people put on the crew — same tasks as last time. Anyone doing something different taps Change.'); }
       if (d.a === 'crewT') { const m = ui.modal; if (!m) return; m.tasks = m.tasks || []; const k = m.tasks.indexOf(d.v); if (k >= 0) m.tasks.splice(k, 1); else m.tasks.push(d.v); return renderModal(); }
       if (d.a === 'crewLeave') { run(d.job, 'crewLeave', { i: Number(d.i), who: d.who }); return render(); }
       if (d.a === 'prSt') { if (!need()) return; const x = (store.partreq || {})[d.id]; if (!x) return; const y = Object.assign({}, x, { st: d.v, stBy: ui.user.id, stAt: Date.now() }); savePR(y);
