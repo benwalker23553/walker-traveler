@@ -1441,7 +1441,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     render();
   }
   function signedIn(p, r) {
-    ui.user = Object.assign({}, p, r ? { role: r.role, side: r.side || '', fin: !!r.fin } : {});
+    ui.user = Object.assign({}, p, r ? { role: r.role, side: r.side || '', fin: !!r.fin } : {}); setTimeout(() => cncAuto(), 1500);
     ui.touched = Date.now(); ui.signedAt = Date.now(); markMine(p.id); ui.finTok = (r && r.finToken) || null; ui.fin = null; ui.finErr = '';
     if (ui.finTok) finLoad();
   }
@@ -1534,7 +1534,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     db.collection('jobs').onSnapshot((s) => {
       const m = {}; s.docs.forEach((d) => { const j = d.data(); if (j && j.id) m[j.id] = j; });
       Object.keys(store.queue).forEach((id) => { m[id] = store.queue[id].job || store.queue[id]; });
-      store.jobs = m; store.loaded = true; if (ui.openRlOnLoad && !ui.modal) { ui.openRlOnLoad = false; setTimeout(() => openModal({ type: 'rlList' }), 600); } if (ui.openJobOnLoad && m[ui.openJobOnLoad]) { const oj = ui.openJobOnLoad; ui.openJobOnLoad = null; try { history.replaceState(null, '', location.pathname); } catch (e) { /* ok */ } openJob(oj); } render(); setTimeout(endOfDay, 1500);
+      store.jobs = m; store.loaded = true; setTimeout(cncAuto, 1500); if (ui.openRlOnLoad && !ui.modal) { ui.openRlOnLoad = false; setTimeout(() => openModal({ type: 'rlList' }), 600); } if (ui.openJobOnLoad && m[ui.openJobOnLoad]) { const oj = ui.openJobOnLoad; ui.openJobOnLoad = null; try { history.replaceState(null, '', location.pathname); } catch (e) { /* ok */ } openJob(oj); } render(); setTimeout(endOfDay, 1500);
     }, () => { if (window.WT_SB) { store.loaded = true; render(); setTimeout(() => { try { location.reload(); } catch (e) { /* ok */ } }, 8000); return; } store.mode = 'local'; loadLocal(); store.loaded = true; render(); });
     db.collection('credits').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { m[d.id] = d.data(); }); store.credits = m; render(); }, () => {});
     db.collection('logfix').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.floor && x.t) m[x.floor + ':' + x.t] = x; }); store.logfix = m; Object.keys(store.logsRaw || {}).forEach((k) => { store.logs[k] = applyFix(k, store.logsRaw[k]); }); render(); if (ui.modal && ui.modal.type === 'lateFix') renderModal(); }, () => {});
@@ -1550,7 +1550,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     db.collection('wip').onSnapshot((sn) => { sn.docs.forEach((d) => { if (d.id === 'count') { const x = d.data(), lnOf = (l) => (/^paint/i.test(l) ? 'powder' : /^wel/i.test(l) ? 'weld' : /^wash/i.test(l) ? 'wash' : /^metal/i.test(l) ? 'metal' : /^lui[sz]/i.test(l) ? 'glue' : ''); store.wip = Object.assign({}, x, { rows: (x.rows || []).map((r) => (Array.isArray(r) ? { t: String(r[0]), pn: String(r[1] || ''), loc: r[2], ln: lnOf(r[2]) } : r)) }); } }); render(); }, () => {});
     db.collection('pm').onSnapshot((sn) => { const m = {}; sn.docs.forEach((d) => { m[d.id] = d.data(); }); store.pm = m; if (ui.view === 'pm' || ui.view === 'cal' || ui.view === 'home') render(); }, () => {});
     db.collection('pmlog').onSnapshot((sn) => { const m = {}; sn.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.pmlog = m; if (ui.view === 'pm' || ui.view === 'cal' || ui.view === 'home') render(); }, () => {});
-    db.collection('plan').onSnapshot((sn) => { const m = {}; sn.docs.forEach((d) => { const x = d.data(); if (x && x.items) m[d.id] = x; }); store.plan = m; render(); }, () => {});
+    db.collection('plan').onSnapshot((sn) => { const m = {}; sn.docs.forEach((d) => { const x = d.data(); if (x && x.items) m[d.id] = x; }); store.plan = m; render(); setTimeout(cncAuto, 1500); }, () => {});
     db.doc('config/main').onSnapshot((s) => { if (s.exists) { mergeCfg(s.data()); render(); } }, () => {});
     loadStaff(); setInterval(loadStaff, 60000);
   }
@@ -2331,7 +2331,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const I = itemInfo(x), done = !!x.done, d = ' data-ln="' + ln + '" data-id="' + esc(x.id) + '"';
     const mine = ui.user && x.who === ui.user.id && !done;
     return '<div class="card ' + (done ? 'b-progress pl-done' : 'b-ready') + (!done && k === 0 ? ' pl-next' : '') + (mine ? ' pl-mine' : '') + '"><span class="pri"><small>' + (done ? 'DONE' : k === 0 ? 'NEXT' : 'RUN') + '</small>' + (done ? '✓' : k + 1) + '</span>' +
-      '<span class="c-main"><span class="pn mono">' + esc(I.title) + '</span>' + (I.sub ? '<span class="small muted">' + esc(I.sub) + '</span>' : '') + (x.who ? '<span class="small plwho">👤 Assigned to <b>' + esc(nm(x.who)) + '</b>' + (mine ? ' <span class="pill ok">YOU</span>' : '') + '</span>' : '') + (x.note ? '<span class="small"><b>Note:</b> <span class="notr">' + esc(x.note) + '</span></span>' : '') + (done ? '<span class="small"><b>Done</b> · ' + esc(nm(x.done.by)) + ' · ' + esc(fTime(x.done.at)) + '</span>' : '') + '</span>' +
+      '<span class="c-main"><span class="pn mono">' + esc(I.title) + '</span>' + (I.sub ? '<span class="small muted">' + esc(I.sub) + '</span>' : '') + (x.who ? '<span class="small plwho">👤 Assigned to <b>' + esc(nm(x.who)) + '</b>' + (x.auto === true && x.why ? ' <span class="small muted">· auto · ' + esc(x.why) + '</span>' : '') + (mine ? ' <span class="pill ok">YOU</span>' : '') + '</span>' : '') + (x.note ? '<span class="small"><b>Note:</b> <span class="notr">' + esc(x.note) + '</span></span>' : '') + (done ? '<span class="small"><b>Done</b> · ' + esc(nm(x.done.by)) + ' · ' + esc(fTime(x.done.at)) + '</span>' : '') + '</span>' +
       '<span class="c-act"><span class="row">' + (I.job ? '<button class="btn sm" data-open="' + esc(I.job) + '">Open</button>' : '') + (done ? '<button class="btn sm" data-a="plUndo"' + d + '>Not done</button>' : '<button class="btn sm go" data-a="plDone"' + d + '>✓ Done</button>') +
       (edit && !done ? '<button class="btn sm" data-a="plUp"' + d + (k === 0 ? ' disabled' : '') + ' aria-label="Move up">↑</button><button class="btn sm" data-a="plDn"' + d + (k >= n - 1 ? ' disabled' : '') + ' aria-label="Move down">↓</button><button class="btn sm" data-a="plNote"' + d + '>Note</button><button class="btn sm" data-a="plWho"' + d + '>' + (x.who ? 'Reassign' : 'Assign') + '</button>' : '') + (edit ? '<button class="btn sm" data-a="plRm"' + d + ' aria-label="Remove">✕</button>' : '') + '</span></span></div>';
   }
@@ -2629,7 +2629,22 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   const assyUsed = (a) => !!a && ((store.logs.metal || []).some((r) => assyOf(r) === a) || jobs().some((j) => j.assy === a));
   const assignList = () => store.cfg.roster.slice().filter((p) => p.role === 'operator' || W.isApprover(p)).sort((a, b) => String(a.area || '').localeCompare(String(b.area || '')) || a.name.localeCompare(b.name));
   function assignJob(job, who, laneId) { const ln = laneId || (() => { const k = job.ops.findIndex((o, i) => W.bucket(job, i)); return job.ops[k >= 0 ? k : 0].station; })();
-    return savePlan(ln, (p) => { let x = p.items.find((y) => !y.done && y.k === 'j' && y.ref === job.id); if (!x) { x = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), k: 'j', ref: job.id, fl: '', snap: null, add: { by: ui.user.id, at: Date.now() }, done: null }; p.items.push(x); } x.who = who || ''; }, true); }
+    return savePlan(ln, (p) => { let x = p.items.find((y) => !y.done && y.k === 'j' && y.ref === job.id); if (!x) { x = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), k: 'j', ref: job.id, fl: '', snap: null, add: { by: ui.user.id, at: Date.now() }, done: null }; p.items.push(x); } x.who = who || ''; x.auto = false; }, true); }
+  // CNC auto-assign: setup steps → Joseph (supervisor), production run steps → Bill; stacks are not given to Bill. A manual Assign/Reassign turns it off for that job.
+  const CNC_AUTO = { setup: 'joseph', run: 'bill', stackRun: '' };
+  const cncStack = (j) => { const r = W.routing(j.rid); return !!(r && r.stack) || /^STK[:-]/.test(String(j.rid || '')) || /(^|[\s\\/(\-"”])P\.?\s?L\.?($|[\s)])|\bSTACKS?\b/i.test(String(j.name || '')); };
+  function cncWant(j) { if (j.st === 'complete') return null; const i = j.ops.findIndex((o) => ['done', 'closed', 'skipped'].indexOf(o.st) < 0); if (i < 0 || j.ops[i].station !== 'cnc') return null;
+    const w = W.isSetupStep(j, i) ? CNC_AUTO.setup : cncStack(j) ? CNC_AUTO.stackRun : CNC_AUTO.run; return !w || person(w) ? { who: w, setup: W.isSetupStep(j, i) } : null; }
+  const cncAutoOn = (x) => !!x && (x.auto === true || (x.auto !== false && (!x.who || x.who === CNC_AUTO.setup || x.who === CNC_AUTO.run)));
+  let cncAutoT = 0, cncAutoBusy = false;
+  setInterval(() => cncAuto(), 20000);
+  function cncAuto() { if (cncAutoBusy || !ui.user || ui.tv || store.mode !== 'shared' || !store.plan || !jobs().length || Date.now() - cncAutoT < 4000) return; cncAutoT = Date.now();
+    const P = planOf('cnc'), ch = {}; jobs().forEach((j) => { const w = cncWant(j); if (!w) return; const x = P.items.find((y) => !y.done && y.k === 'j' && y.ref === j.id);
+      if (!x ? !!w.who : cncAutoOn(x) && ((x.who || '') !== w.who || x.auto !== true)) ch[j.id] = w; });
+    if (!Object.keys(ch).length) return; cncAutoBusy = true;
+    Promise.resolve(savePlan('cnc', (p) => { Object.keys(ch).forEach((id) => { let x = p.items.find((y) => !y.done && y.k === 'j' && y.ref === id); if (x && !cncAutoOn(x)) return;
+      if (!x) { x = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), k: 'j', ref: id, fl: '', snap: null, add: { by: 'auto', at: Date.now() }, done: null }; p.items.push(x); }
+      x.who = ch[id].who; x.auto = true; x.why = ch[id].setup ? 'Setup step' : 'Production run'; }); }, false)).catch(() => {}).then(() => { cncAutoBusy = false; }); }
   // Past-due cleanup from the app (link in the email): closes, re-dates or cancels a paper traveler until the log catches up
   function applyFix(floor, rows) { const F = store.logfix || {}; if (!Object.keys(F).length) return rows;
     return rows.map((r) => { const x = r && F[floor + ':' + r.t]; if (!x || r.s !== 'O') return r;
@@ -3709,7 +3724,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       case 'receive': ok = run(m.job, 'receive', { lot: m.lot, count: m.count === '' ? NaN : m.count }); break;
       case 'reroute': ok = run(m.job, 'reroute', { lot: m.lot, dest: m.dest, reason: 'Redirected at ' + areaName() }); break;
       case 'jobWho': assignJob(store.jobs[m.job], m.who); ok = true; break;
-      case 'plWho': savePlan(m.ln, (p) => { const x = p.items.find((y) => y.id === m.id); if (x) x.who = m.who || ''; }, true); ok = true; break;
+      case 'plWho': savePlan(m.ln, (p) => { const x = p.items.find((y) => y.id === m.id); if (x) { x.who = m.who || ''; x.auto = false; } }, true); ok = true; break;
       case 'plNote': savePlan(m.ln, (p) => { const x = p.items.find((y) => y.id === m.id); if (x) x.note = (m.note || '').trim(); }, true); ok = true; break;
       case 'priority': ok = run(m.job, 'priority', { pri: m.pri, rush: m.rush, reason: m.reason }); break;
       case 'join': { const n = (m.name || '').trim(); if (n.length < 2) return toast('Type your name.', 'bad'); if (store.cfg.roster.some((x) => x.name.toLowerCase() === n.toLowerCase())) return toast(n + ' is already on the list. Go back and tap your name.', 'bad');
