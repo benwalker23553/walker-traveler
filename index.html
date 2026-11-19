@@ -949,6 +949,12 @@ window.WT_ESP = [
   }
   function finalDest(job, i) { const next = job.ops[i + 1]; if (next) return next.station; const m = (routing(job.rid) || {}).moveTo; return STATIONS.some((s) => s.id === m) ? m : job.ops[i].station; }
   // Final assembly / packaging travelers carry the customer PO # and Sales Order # for shipping
+  // A setup-only step (e.g. CNC "Set up jaws…", "Face material and touch off tools…"): no parts are run there.
+  // Flagged on the routing step (setup: true / false wins), otherwise read from the wording.
+  const SETUP_RX = /^\s*(SET\s*-?\s*UP|SETUP|INSTALL\s+(JAWS|FIXTURE|TOOLING)|FACE\s+MATERIAL\s+AND\s+TOUCH\s+OFF|TOUCH\s+OFF)\b/i;
+  function isSetupStep(job, i) { const op = job.ops[i]; if (!op) return false; if (op.setupOnly) return true;
+    const r = routing(job.rid), ro = r && r.ops ? (r.ops.find((o) => o.n === op.n) || r.ops[i]) : null; if (ro && typeof ro.setup === 'boolean') return ro.setup;
+    const t = String((ro && ro.text) || ''); return SETUP_RX.test(t) && !/\bRUN\s+(THE\s+)?(PROGRAM|PARTS?|BATCH)\b/i.test(t); }
   const isFinal = (r) => !!r && (!!r.fa || String(r.id).indexOf('PK-') === 0 || /FINAL|PACKAG|FNL/i.test((r.kind || '') + ' ' + (r.form || '') + ' ' + (r.file || '')));
   const shipOk = (job) => !!(job.ship && String(job.ship.po || '').trim() && String(job.ship.sales || '').trim());
   function newJob(p, ctx) {
@@ -987,6 +993,19 @@ window.WT_ESP = [
         op = guard(job, i, ctx); if (op.st !== 'setup') fail('Setup is not running.');
         touch(job, i, ctx); op.st = 'setup_done'; op.setup = { by: ctx.u.id, at: ctx.at, vals: p.vals || {} }; seg(op, null, ctx);
         log(job, ctx, 'Setup finished', 'Op ' + op.n + (p.vals && Object.keys(p.vals).length ? ' · ' + Object.keys(p.vals).map((k) => k + ': ' + p.vals[k]).join(', ') : '')); break;
+      case 'setupDone': {
+        // Setup-only step: finish it and send the same parts straight to the next step. No first article, no closing signature.
+        op = guard(job, i, ctx); if (['ready', 'setup', 'setup_done'].indexOf(op.st) < 0) fail('This step is already done.');
+        if (!isSetupStep(job, i)) fail('This step runs parts. Use Start setup / first article.');
+        if (openHolds(job, op.n).length) fail('Close the hold first.');
+        touch(job, i, ctx); seg(op, null, ctx); op.setup = op.setup || { by: ctx.u.id, at: ctx.at, vals: p.vals || {} }; op.setupOnly = true;
+        op.good = op.qtyIn; op.st = 'done'; op.closedAt = ctx.at;
+        { const nx = job.ops[i + 1];
+          if (nx && op.good > 0) { const lot = { id: 'C' + (job.lots.length + 1), from: i, n: op.n, qty: op.good, to: nx.station, expect: nx.station, st: 'received', by: ctx.u.id, at: ctx.at, direct: false, reason: '', recvBy: ctx.u.id, recvAt: ctx.at, recv: op.good, counted: op.good, auto: true, setup: true };
+            job.lots.push(lot); arrive(job, lot, ctx); }
+          else if (!nx) complete(job, ctx); }
+        log(job, ctx, 'Setup step done', 'Op ' + op.n + ' · setup only, no parts run · ' + op.good + ' pcs go on to op ' + ((job.ops[i + 1] || {}).n || '—')); break;
+      }
       case 'startStep': {
         // Final assembly / packaging: like the paper Form 9-3 — operator does the step, then an inspector signs it. No setup or first article.
         op = guard(job, i, ctx); if (['ready', 'setup', 'setup_done'].indexOf(op.st) < 0) fail('This step is already started.');
@@ -1373,7 +1392,7 @@ window.WT_ESP = [
     return t;
   }
 
-  root.WT = { STATIONS, ROUTINGS, ISSUES, DEFAULT_CFG, PAUSE_REASONS, HOLD_REASONS, BLOCK_REASONS, DISPOSITIONS, ST_LABEL, clone, routing, station, isApprover, canDispose, sideOf, covers, newJob, act, gate, finalDest, opLocked, selfClose, bucket, nextAction, where, blocking, goodDone, dur, approvalWait, totals, isFinal, shipOk, workMs, isWorking, lastShiftEnd, setShift, shiftText, openHolds, openCheck, unmoved, moved, sendable, inbound, midTarget, totalScrap };
+  root.WT = { STATIONS, ROUTINGS, ISSUES, DEFAULT_CFG, PAUSE_REASONS, HOLD_REASONS, BLOCK_REASONS, DISPOSITIONS, ST_LABEL, clone, routing, station, isApprover, canDispose, sideOf, covers, newJob, act, gate, finalDest, opLocked, selfClose, isSetupStep, bucket, nextAction, where, blocking, goodDone, dur, approvalWait, totals, isFinal, shipOk, workMs, isWorking, lastShiftEnd, setShift, shiftText, openHolds, openCheck, unmoved, moved, sendable, inbound, midTarget, totalScrap };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -2785,9 +2804,12 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         main = inc.map((l) => l.to === op.station ? '<button class="btn primary go" data-m="receive" data-job="' + id + '" data-lot="' + esc(l.id) + '">Receive ' + esc(l.id) + ' · ' + l.qty + ' pcs</button>' : '<button class="btn primary" data-m="reroute" data-job="' + id + '" data-lot="' + esc(l.id) + '">' + esc(l.id) + ' went to ' + esc(W.station(l.to).name) + ' — send it to ' + esc(W.station(op.station).name) + '</button>').join(''); break; }
       case 'ready': case 'setup': case 'setup_done':
         if (FA && !j.blocked && !holds.length && !op.paused) { msg = op.qtyIn + ' pcs here. Do this step, then tap Finish and have the inspector sign it.'; main = A('startStep', '▶ Start this step', 'primary go'); sec = M('block', 'Can’t start', 'sm'); break; }
+        if (W.isSetupStep(j, i) && !j.blocked) { msg = '<b>Setup step — no parts are run here.</b> ' + (op.st === 'setup' ? 'Setup running · ' + fDur(W.dur(op, 'setup', Date.now())) + '. Tap Setup done when it is ready.' : 'Do the setup, then tap Setup done. The ' + op.qtyIn + ' pcs go on to the next step, where the run starts.');
+          main = op.st === 'setup' ? A('setupDone', '✔ Setup done — next step', 'primary go') : A('startSetup', 'Start setup', 'primary go') + A('setupDone', '✔ Setup already done — next step', ''); sec = M('block', 'Can’t start', 'sm'); break; }
         if (op.st === 'setup') { msg = 'Setup running · ' + fDur(W.dur(op, 'setup', Date.now())); main = M('setup', 'Finish setup'); break; }
         if (op.st === 'setup_done') { msg = 'Setup done. Make the first article for approval.'; main = A('startFirst', 'Start first article', 'primary go'); break; }
         if (j.blocked) { msg = 'Not ready to run: ' + esc(j.blocked.reason) + '.'; main = '<button class="btn primary" data-a="unblock" data-job="' + id + '">' + (j.blocked.auto ? 'Supervisor: start without receipt' : 'Mark ready') + '</button>'; }
+        else if (i > 0 && j.ops[i - 1].setupOnly) { msg = op.qtyIn + ' pcs here. Setup is done (op ' + esc(j.ops[i - 1].n) + ') — start the run: make the first article for approval.'; main = A('startFirst', '▶ Start the run — first article', 'primary go') + A('startSetup', 'More setup first', ''); sec = M('block', 'Can’t start', 'sm'); }
         else { msg = op.qtyIn + ' pcs here and ready.'; main = A('startSetup', 'Start setup', 'primary go') + A('startFirst', 'No setup needed — start first article', ''); sec = M('block', 'Can’t start', 'sm'); }
         break;
       case 'first_piece': msg = 'Make the first article, then call a supervisor.'; main = A('reqFirst', 'Request first-article approval'); break;
@@ -4205,6 +4227,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       if (d.a === 'saveRules') { const idf = {}; document.querySelectorAll('[data-idlefor]').forEach((e) => { const v = Number(e.value); if (v > 0) idf[e.dataset.idlefor] = Math.round(Math.min(720, v) * 60); }); store.cfg.rules = Object.assign({}, store.cfg.rules, { idleLock: Math.max(30, Number($('#ru-idle').value) || 180), selfApprove: $('#ru-self').checked, idleFor: idf }); { const rl = W.clone(store.cfg.rules); saveCfg((c) => { c.rules = Object.assign({}, c.rules, rl); }); } return toast('Rules saved'); }
       if (d.a === 'deliver') return void run(d.job, 'deliver', { lot: d.lot });
       if (d.a === 'unblock') return void run(d.job, 'unblock', {});
+      if (d.a === 'setupDone') { if (run(d.job, 'setupDone', { i: Number(d.i) })) { ui.opI = Number(d.i) + 1; render(); } return; }
       return void run(d.job, d.a, { i: Number(d.i) });
     }
   });
