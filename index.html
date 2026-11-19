@@ -940,9 +940,13 @@ window.WT_ESP = [
   // Paint / powder coat: the painter closes the step themselves, no supervisor closing signature
   const SELF_CLOSE = ['powder'];
   // Assembly-line crews in the filter building: several people on one step, each doing a combo of these tasks
-  const PP = ['Burning', 'Shearing', 'Stapling', 'Clipping', 'Final clamp on clip', 'Cutting / shaping to fixture'];
+  const PP = ['Pleating', 'Burning', 'Shearing', 'Stapling', 'Clipping', 'Final clamp on clip', 'Cutting / shaping to fixture'];
   const POT = ['Pour station 1', 'Pour station 2', 'Demolding', 'Oiling', 'Trimming', 'Inspecting', 'Bagging', 'Boxing', 'Ink jetting'];
-  const CREW_TASKS = { clip: PP, pleat: ['Pleating'].concat(PP), pot: POT, qc: POT, race: POT, wire: ['Inner wire', 'Outer wire', 'Rolling'] };
+  const WIR = ['Inner wire', 'Outer wire', 'Rolling'];
+  // Every task shows on every filter step (a crew can span the whole line); the step's own group is listed first
+  const CREW_GROUPS = [['✂ Pleat packs · clipping', PP], ['🫗 Pouring · potting · finishing', POT], ['〰 Wires', WIR]];
+  const CREW_FIRST = { pleat: 0, clip: 0, pot: 1, qc: 1, race: 1, wire: 2 };
+  const CREW_TASKS = {}; Object.keys(CREW_FIRST).forEach((st) => { CREW_TASKS[st] = PP.concat(POT, WIR); });
   const crewOpen = (op) => (op.crew || []).filter((c) => !c.end);
   const selfClose = (st) => SELF_CLOSE.indexOf(st) >= 0;
   // Last step of any traveler: the operator's finish closes it — no supervisor closing signature. Final/packing travelers still need the PO # and Sales Order # first.
@@ -1422,7 +1426,7 @@ window.WT_ESP = [
     return t;
   }
 
-  root.WT = { STATIONS, ROUTINGS, ISSUES, DEFAULT_CFG, PAUSE_REASONS, HOLD_REASONS, BLOCK_REASONS, DISPOSITIONS, ST_LABEL, clone, routing, station, isApprover, canDispose, sideOf, covers, newJob, act, gate, finalDest, opLocked, selfClose, closesSelf, CREW_TASKS, crewOpen, isSetupStep, bucket, nextAction, where, blocking, goodDone, dur, approvalWait, totals, isFinal, shipOk, workMs, isWorking, lastShiftEnd, setShift, shiftText, openHolds, openCheck, unmoved, moved, sendable, inbound, midTarget, totalScrap };
+  root.WT = { STATIONS, ROUTINGS, ISSUES, DEFAULT_CFG, PAUSE_REASONS, HOLD_REASONS, BLOCK_REASONS, DISPOSITIONS, ST_LABEL, clone, routing, station, isApprover, canDispose, sideOf, covers, newJob, act, gate, finalDest, opLocked, selfClose, closesSelf, CREW_TASKS, CREW_GROUPS, CREW_FIRST, crewOpen, isSetupStep, bucket, nextAction, where, blocking, goodDone, dur, approvalWait, totals, isFinal, shipOk, workMs, isWorking, lastShiftEnd, setShift, shiftText, openHolds, openCheck, unmoved, moved, sendable, inbound, midTarget, totalScrap };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -3605,7 +3609,8 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       case 'crew': { const T = W.CREW_TASKS[op.station] || [], sel = m.tasks || [], ppl = assignList().slice().sort((a, b) => (W.sideOf(op.station) === (b.side || '') ) - (W.sideOf(op.station) === (a.side || '')) || a.name.localeCompare(b.name));
         h = '<h2>👥 ' + (m.other ? 'Add someone to' : 'Join') + ' op ' + esc(op.n) + ' · ' + esc(W.station(op.station).name) + '</h2><p class="muted"><span class="mono">' + esc(j.pn) + '</span> · Shop Order ' + esc(j.so) + '. Tap every task ' + (m.other ? 'they are' : 'you are') + ' doing — one or a combo.</p>' +
           (m.other ? '<h3>Who</h3><div class="tiles">' + ppl.map((p) => '<button class="btn ' + (m.who === p.id ? 'sel' : '') + '" data-set="who" data-v="' + esc(p.id) + '"><span>' + esc(p.name) + '</span><small>' + esc(p.area || '') + '</small></button>').join('') + '</div>' : '') +
-          '<h3>Tasks</h3><div class="tiles">' + T.map((t) => '<button class="btn ' + (sel.indexOf(t) >= 0 ? 'sel' : '') + '" data-a="crewT" data-v="' + esc(t) + '"><span>' + esc(t) + '</span></button>').join('') + '</div>' +
+          (() => { const f = W.CREW_FIRST[op.station] || 0, G = W.CREW_GROUPS.map((g, k) => [g, k]).sort((a, b) => (a[1] === f ? -1 : b[1] === f ? 1 : a[1] - b[1])).map((x) => x[0]);
+            return G.map((g) => '<h3>' + esc(g[0]) + '</h3><div class="tiles">' + g[1].map((t) => '<button class="btn ' + (sel.indexOf(t) >= 0 ? 'sel' : '') + '" data-a="crewT" data-v="' + esc(t) + '"><span>' + esc(t) + '</span></button>').join('') + '</div>').join(''); })() +
           (crewTip(op.station, j.pn) || '') + foot(m.other ? 'Add to crew' : 'Join'); break; }
       case 'partReq': { const C = cncComps(m.ppn), had = (c) => { const x = (store.partreq || {})[prId(m.so, c.pn)]; return x && x.st !== 'cancel' ? x : null; }, on = (c, k) => (m['c' + k] != null ? m['c' + k] : !had(c));
         h = '<h2>🔩 Request parts from CNC</h2><p class="muted">Traveler <b>#' + esc(m.so) + '</b> · <span class="mono">' + esc(m.ppn) + '</span> · ' + m.qty + ' pcs. Joseph and CNC get an alert.</p>' +
