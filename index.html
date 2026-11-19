@@ -2540,7 +2540,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   function applyFix(floor, rows) { const F = store.logfix || {}; if (!Object.keys(F).length) return rows;
     return rows.map((r) => { const x = r && F[floor + ':' + r.t]; if (!x || r.s !== 'O') return r;
       if (x.kind === 'due') return (r.u || '') >= x.date ? r : Object.assign({}, r, { u: x.date, fix: x });
-      return Object.assign({}, r, { s: 'C', c: x.date, m: x.kind === 'closed' && x.qty !== '' && x.qty != null ? String(x.qty) : r.m, w: (x.kind === 'cancel' ? 'Cancelled' : 'Closed') + ' in the app by ' + nm(x.by) + (x.note ? ' — ' + x.note : '') + ' (log not updated yet)', fix: x }); }); }
+      return Object.assign({}, r, { s: 'C', c: x.date, m: x.kind === 'closed' && x.qty !== '' && x.qty != null ? String(x.qty) : r.m, w: (x.kind === 'cancel' ? 'Cancelled' : 'Closed') + ' in the app by ' + nm(x.by) + (x.note ? ' — ' + x.note : '') + ' (written to the log on the next sync)', fix: x }); }); }
   const LF_K = ['✔ Done — close it', '📅 Still working — new due date', '✖ Not needed — cancel it'];
   function openFix(floor, t, job) { const today = ymd(Date.now());
     return openModal({ type: 'lateFix', floor, t, job: job || null, kind: job ? LF_K[1] : '', date: today, due: ymd(Date.now() + 7 * DAY), qty: '', note: '' }); }
@@ -3402,7 +3402,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
           '<h3>What is the status?</h3>' + tiles('kind', j ? [LF_K[1]] : LF_K, m) +
           (m.kind === LF_K[0] ? '<div class="row" style="gap:10px">' + inp('date', 'Date finished', m, 'type="date"') + inp('qty', 'Good qty made (optional)', m, 'inputmode="numeric"') + '</div>' : '') +
           (m.kind === LF_K[1] ? inp('due', 'New due date', m, 'type="date"') : '') +
-          (m.kind ? inp('note', m.kind === LF_K[2] ? 'Why is it not needed?' : 'Note (optional)', m) + '<p class="small muted">' + (j ? 'Changes the due date on the live traveler.' : 'Updates the app right away. Still mark it on the ' + esc(m.floor) + ' traveler log so the log matches.') + '</p>' + foot('Save', 'go') : foot(null))); break; }
+          (m.kind ? inp('note', m.kind === LF_K[2] ? 'Why is it not needed?' : 'Note (optional)', m) + '<p class="small muted">' + (j ? 'Changes the due date on the live traveler.' : 'Updates the app right away and is written to the ' + esc(m.floor) + ' traveler log on the next hourly sync.') + '</p>' + foot('Save', 'go') : foot(null))); break; }
       case 'rlNo': h = '<h2>Reject red-line ' + esc(m.id) + '</h2>' + inp('why', 'Why not?', m) + foot('Reject', 'stop'); break;
       case 'flag': h = '<h2>Flag this instruction · op ' + op.n + '</h2><p class="muted">Goes to review. The approved instruction does not change until someone releases a new revision.</p><label>What is unclear, or what would you change?<textarea data-f="text" id="m-text" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.text || '') + '</textarea></label>' + foot('Send for review'); break;
       case 'move': {
