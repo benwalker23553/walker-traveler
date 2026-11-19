@@ -2877,7 +2877,11 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   let CNCPN = null, CNCPNk = null;
   function isCncPart(pn) { const L = store.logs.cnc; if (CNCPNk !== L || !CNCPN) { CNCPNk = L; CNCPN = {}; (L || []).forEach((r) => { if (r.pn && !/^N\/?A$/i.test(r.pn)) CNCPN[bomKey(r.pn)] = r.d || ''; }); W.ROUTINGS.forEach((r) => { if (r.series === 'cnc' && r.pn) CNCPN[bomKey(r.pn)] = CNCPN[bomKey(r.pn)] || r.name || ''; }); }
     return Object.prototype.hasOwnProperty.call(CNCPN, bomKey(pn)); }
-  function cncComps(pn) { const L = (store.sageBom || {})[bomKey(pn)] || []; return L.filter((x) => x && x[0] && !/^LABOR/i.test(x[0]) && isCncPart(x[0])).map((x) => ({ pn: x[0], d: x[1] || CNCPN[bomKey(x[0])] || '', per: Number(x[2]) || 1 })); }
+  // Walks the Sage BOM down through sub-assemblies (filters → elements → pleat packs…) to find every CNC-made part and how many per top part
+  function cncComps(pn) { const B = store.sageBom || {}, out = {}, seen = {};
+    const walk = (k, mult, depth) => { if (depth > 4 || seen[k + '@' + depth]) return; seen[k + '@' + depth] = 1; (B[k] || []).forEach((x) => { if (!x || !x[0] || /^LABOR/i.test(x[0])) return; const ck = bomKey(x[0]), q = (Number(x[2]) || 1) * mult;
+      if (isCncPart(x[0])) { const o = out[ck] = out[ck] || { pn: x[0], d: x[1] || CNCPN[ck] || '', per: 0 }; o.per += q; } else if (B[ck] && ck !== k) walk(ck, q, depth + 1); }); };
+    walk(bomKey(pn), 1, 0); return Object.values(out); }
   const prId = (so, pn) => 'pr-' + bomKey(so) + '-' + bomKey(pn);
   const reqsFor = (so) => Object.values(store.partreq || {}).filter((x) => String(x.so) === String(so) && x.st !== 'cancel');
   const reqOpen = () => Object.values(store.partreq || {}).filter((x) => x.st === 'open' || x.st === 'making');
