@@ -1003,6 +1003,24 @@ window.WT_ESP = [
         touch(job, i, ctx);
         if (op.st === 'ready') { op.setup = { by: ctx.u.id, at: ctx.at, vals: {}, none: true }; log(job, ctx, 'No setup needed', 'Op ' + op.n); }
         op.st = 'first_piece'; seg(op, 'first_piece', ctx); log(job, ctx, 'First article started', 'Op ' + op.n); break;
+      case 'catchUp': {
+        // Steps done in an area that is not on the tablets yet (e.g. wash, welding): a supervisor records them so the traveler moves on / closes
+        if (!ctx.u || !isApprover(ctx.u)) fail('A supervisor records steps done off the tablet.');
+        const i0 = job.ops.findIndex((o) => ['done', 'closed', 'skipped'].indexOf(o.st) < 0), up = Number(p.upTo), good = Number(p.good);
+        if (i0 < 0) fail('Every step is already done.');
+        if (!(up >= i0 && up < job.ops.length)) fail('Pick the last step that was done.');
+        if (!(good >= 0)) fail('Enter how many good pieces.');
+        for (let k = i0; k <= up; k++) { const o = job.ops[k];
+          if (['ready', 'pending'].indexOf(o.st) < 0) fail('Op ' + o.n + ' is being worked on the tablet right now (' + o.st + '). Finish it there first.');
+          if (openHolds(job, o.n).length) fail('Op ' + o.n + ' has an open hold. Close it first.'); }
+        const who = String(p.who || '').trim(), note = String(p.note || '').trim();
+        for (let k = i0; k <= up; k++) { const o = job.ops[k]; o.st = 'done'; o.paper = true; o.offTablet = { by: ctx.u.id, at: ctx.at, who, note, good }; o.closedAt = ctx.at; o.qtyIn = k === i0 ? o.qtyIn : 0; if (k === up) o.good = good; }
+        const nx = job.ops[up + 1];
+        if (nx) { nx.qtyIn = good; nx.st = 'ready'; }
+        else { job.st = 'complete'; job.doneAt = ctx.at; }
+        log(job, ctx, 'Steps recorded off the tablet', 'Op ' + job.ops[i0].n + (up > i0 ? ' – ' + job.ops[up].n : '') + ' done' + (who ? ' by ' + who : '') + ' · ' + good + ' good' + (note ? ' · ' + note : '') + (nx ? ' · now at op ' + nx.n : ' · traveler closed'));
+        break;
+      }
       case 'skip': {
         // Skip a step that is not needed on this job. Only before work starts on it, and only with a supervisor's PIN.
         op = job.ops[i]; if (!op) fail('Pick a step.');
@@ -3031,7 +3049,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const j = store.jobs[ui.jobId]; if (!j) return '<div class="empty">That job is not in the shop record.</div><button class="btn" data-nav="station">Back</button>';
     const r = W.routing(j.rid); if (!r) return '<div class="empty">Loading this traveler’s master steps…</div><button class="btn" data-back>‹ Back</button>';
     ensureDocs(r); const i = Math.min(ui.opI, j.ops.length - 1), blk = W.blocking(j);
-    let h = '<div class="jobhead"><span class="row" style="flex-direction:column;gap:8px;align-items:stretch"><button class="btn sm" data-back>‹ Back</button><button class="btn sm" data-a="printJob" data-job="' + esc(j.id) + '">🖨 Print</button>' + (/^(WO|STK):/.test(j.rid || '') && ui.user && (W.canDispose(ui.user) || (j.rel && j.rel.by === ui.user.id)) ? '<button class="btn sm" data-a="woEdit" data-job="' + esc(j.id) + '">✎ Edit work order</button>' : '') + '</span><div class="t"><h1><span class="mono">' + esc(j.pn) + '</span> ' + esc(liveStep(r.id, '@name', j.name, null).text) + '</h1>' +
+    let h = '<div class="jobhead"><span class="row" style="flex-direction:column;gap:8px;align-items:stretch"><button class="btn sm" data-back>‹ Back</button><button class="btn sm" data-a="printJob" data-job="' + esc(j.id) + '">🖨 Print</button>' + (/^(WO|STK):/.test(j.rid || '') && ui.user && (W.canDispose(ui.user) || (j.rel && j.rel.by === ui.user.id)) ? '<button class="btn sm" data-a="woEdit" data-job="' + esc(j.id) + '">✎ Edit work order</button>' : '') + (ui.user && W.isApprover(ui.user) && j.st !== 'complete' ? '<button class="btn sm" data-a="catchUp" data-job="' + esc(j.id) + '">✔ Done off the tablet</button>' : '') + '</span><div class="t"><h1><span class="mono">' + esc(j.pn) + '</span> ' + esc(liveStep(r.id, '@name', j.name, null).text) + '</h1>' +
       '<div class="facts"><span>Shop Order <b>' + esc(j.so) + '</b></span>' + (jobAssy(j) ? '<span style="font-size:1.15em">Assembly # <b class="mono" style="font-size:1.3em">' + esc(jobAssy(j)) + '</b></span>' : '') + (() => { let w = ''; LANES.forEach((l) => openItems(l.id).forEach((x) => { if (x.k === 'j' && x.ref === j.id && x.who) w = nm(x.who); })); return (w ? '<span>Assigned to <b>' + esc(w) + '</b></span>' : '') + (canPlan() ? '<button class="btn sm" data-m="jobWho" data-job="' + esc(j.id) + '">' + (w ? 'Reassign' : 'Assign to a person') + '</button>' : ''); })() + (floorAt(j.so) ? '<span>On the floor <b>' + esc(floorAt(j.so)) + '</b></span>' : '') + '<span>Qty <b>' + j.qty + '</b></span><span>Due <b>' + esc(fDue(j.due)) + '</b></span><span>Type <b>' + esc(kindOf(r)) + '</b></span><span>Trav rev <b>' + esc(j.rel.travRev) + '</b></span><span>Dwg rev <b>' + esc(j.rel.dwgRev) + '</b></span>' + (hdr(r, 'material') ? '<span>Material <b class="notr">' + esc(hdr(r, 'material')) + '</b></span>' : '') + (j.rush ? '<span class="pill bad">ASAP</span>' : '') + (j.sample ? '<span class="pill plain">Sample data</span>' : '') + (ui.user && ui.user.role === 'manager' ? '<button class="btn sm" data-m="priority" data-job="' + esc(j.id) + '">' + (j.rush ? 'Change priority' : (j.rush ? 'Remove ASAP' : 'Mark ASAP')) + '</button>' : '') + '</div>' +
       '<p class="small muted">' + esc(W.where(j)) + (blk && !/^Paused/.test(blk) ? ' · Waiting on: ' + esc(blk) : blk ? ' (' + esc(blk.replace(/^Paused:\s*/, '').toLowerCase()) + ')' : '') + '</p>' +
       ((j.final || W.isFinal(r)) ? (W.shipOk(j) ? '<div class="banner ok"><div><b>Shipping release ✔</b> · PO <b class="mono">' + esc(j.ship.po) + '</b> · Sales Order <b class="mono">' + esc(j.ship.sales) + '</b> · ' + esc(nm(j.ship.by)) + ' ' + esc(fTime(j.ship.at)) + '</div>' + (ui.user && (W.canDispose(ui.user) || W.isApprover(ui.user)) ? '<button class="btn sm" data-m="ship" data-job="' + esc(j.id) + '">Change</button>' : '') + '</div>'
@@ -3331,6 +3349,10 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const j = m.job ? store.jobs[m.job] : null, op = j && m.i != null ? j.ops[m.i] : null;
     let h = '', wide = false;
     switch (m.type) {
+      case 'catchUp': { const j = store.jobs[m.job], i0 = j.ops.findIndex((o) => ['done', 'closed', 'skipped'].indexOf(o.st) < 0), r0 = W.routing(j.rid);
+        h = '<h2>✔ Steps done off the tablet · Shop Order ' + esc(j.so) + '</h2><p class="muted">For areas not on the tablets yet (wash, welding…). Pick the last step that is finished. Every step from op ' + esc(j.ops[i0].n) + ' up to it is marked done with your name, and the parts move to the next step — or the traveler closes if it is the last one.</p>' +
+          '<h3>Done through</h3><div class="tiles">' + j.ops.map((o, k) => k < i0 ? '' : '<button class="btn sm ' + (String(m.upTo) === String(k) ? 'sel' : '') + '" data-set="upTo" data-v="' + k + '"><span>Op ' + esc(o.n) + ' · ' + esc(W.station(o.station).name) + '</span><small>' + esc(stepShort((rop(r0, j, k) || {}).text || '')) + (k === j.ops.length - 1 ? ' · LAST — closes the traveler' : '') + '</small></button>').join('') + '</div>' +
+          '<div class="row" style="gap:10px">' + inp('good', 'Good pieces', m, 'inputmode="numeric"') + inp('who', 'Who did the work (optional)', m) + '</div>' + inp('note', 'Note (optional)', m) + foot('Record ' + (Number(m.upTo) === j.ops.length - 1 ? 'and close the traveler' : 'and move to op ' + esc((j.ops[Number(m.upTo) + 1] || {}).n || '')), 'go'); break; }
       case 'woEdit': { const j = store.jobs[m.job], rt = j && W.routing(j.rid); if (!j || !rt) { h = '<p>Not found.</p>'; break; } wide = true;
         h = '<h2>✎ Edit work order ' + esc(j.so) + '</h2><p class="small muted">Fix the part number, description, quantity, due date or step wording. Steps that already have work signed on them keep their history.</p>' +
           '<div class="grid2"><label>Part number<input id="we-pn" value="' + esc(j.pn || '') + '"></label><label>Quantity<input id="we-qty" type="number" min="1" value="' + esc(j.qty) + '"></label></div>' +
@@ -3559,6 +3581,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
           const doc = { pn, rev, path, at: Date.now(), by: ui.user.id, src: 'app', name: f.name, hist }; await store.db.doc('prints/' + key).set(doc); (store.prints = store.prints || {})[key] = doc; closeModal(); render(); toast(pn + ' rev ' + rev + ' is now the current print on every tablet'); }
           catch (e) { toast('Upload failed: ' + (e.message || e), 'bad'); } })(); return; }
       case 'ship': ok = run(m.job, 'shipInfo', { po: m.po, sales: m.sales }); if (ok) toast('Shipping release saved'); break;
+      case 'catchUp': { if (!run(m.job, 'catchUp', { upTo: Number(m.upTo), good: Number(m.good), who: m.who, note: m.note })) return; closeModal(); toast('Recorded. ' + (store.jobs[m.job].st === 'complete' ? 'Traveler closed.' : 'Parts are at the next step.')); return render(); }
       case 'woEdit': { const j0 = store.jobs[m.job], rt = j0 && W.routing(j0.rid); if (!j0 || !rt) return closeModal();
         const v = (id) => (($('#' + id) || {}).value || '').trim(), pn = v('we-pn'), name = v('we-name'), qty = Number(v('we-qty')), due = v('we-due'), cust = v('we-cust'), why = v('we-why');
         if (!pn) return toast('Part number cannot be empty.', 'bad'); if (!(qty > 0)) return toast('Enter the quantity.', 'bad');
@@ -3964,6 +3987,8 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     }
     if (d.a === 'setRisk' || d.a === 'setArea') { if (!ui.user || !W.isApprover(ui.user)) return toast('A supervisor or manager makes this change.', 'bad'); const rt = W.routing(d.rid), o = rt.ops.find((q) => String(q.n) === String(d.n)); return openModal({ type: d.a, rid: rt.id, n: o.n, v: d.a === 'setRisk' ? rk(rt, o) : o.station }); }
     if (d.a === 'mEdit') { if (!ui.user || !W.isApprover(ui.user)) return toast('A supervisor or manager makes corrections.', 'bad'); const rt = W.routing(d.rid), o = rt.ops.find((x) => String(x.n) === String(d.n)), n = o ? o.n : d.n, was = d.fld ? hdr(rt, d.fld) : liveStep(rt.id, n, o ? o.text : '', null).text; return openModal({ type: 'mEdit', rid: rt.id, n, was, text: was, reason: '', note: '' }); }
+    if (d.a === 'catchUp') { const j = store.jobs[d.job]; if (!j || !ui.user || !W.isApprover(ui.user)) return toast('A supervisor records steps done off the tablet.', 'bad'); const i0 = j.ops.findIndex((o) => ['done', 'closed', 'skipped'].indexOf(o.st) < 0); if (i0 < 0) return toast('Every step is already done.');
+      return openModal({ type: 'catchUp', job: j.id, upTo: String(j.ops.length - 1), good: String(j.ops[i0].qtyIn || j.qty || ''), who: '', note: '' }); }
     if (d.a === 'woEdit') { const j = store.jobs[d.job]; if (!j || !ui.user || !(W.canDispose(ui.user) || (j.rel && j.rel.by === ui.user.id))) return toast('A supervisor or the person who wrote it can edit a work order.', 'bad'); return openModal({ type: 'woEdit', job: j.id }); }
     if (d.a === 'printJob') return printTraveler(store.jobs[d.job]);
     if (d.a === 'printMaster') { closeModal(); return printTraveler(null, W.routing(d.rid)); }
