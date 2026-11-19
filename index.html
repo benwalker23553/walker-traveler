@@ -1475,6 +1475,14 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (ui.user) { const u = person(ui.user.id); if (!u) signOutUser(); else ui.user = Object.assign({}, u); }
     else restoreMine();
   }
+  // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
+  const APP_BUILD = '2026-11-19 15:55';
+  function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
+  let newBuild = '';
+  function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /const APP_BUILD = '([^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
+      const idle = !ui.modal && Date.now() - (ui.touched || 0) > 90000 && !(document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName));
+      if (idle) return goFresh(); render(); }).catch(() => {}); }
+  setInterval(checkBuild, 180000); setTimeout(checkBuild, 20000);
   function restoreMine() { if (ui.user || ui.tv) return;
     let rs = null; try { rs = JSON.parse(sessionStorage.getItem('wt-resume') || 'null'); } catch (e) { rs = null; }
     if (rs && Date.now() - rs.at > 180000) { try { sessionStorage.removeItem('wt-resume'); } catch (e) { /* ok */ } rs = null; }
@@ -2016,7 +2024,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const order = !ui.user ? ['ops', 'inout', 'work', 'today', 'board', 'pack', 'usage', 'tvmode', 'all', 'asap', 'where', 'pm', 'cal', 'train', 'area']
       : !lead ? (/maint/i.test(ui.user.area || '') ? ['pm', 'ops', 'mine', 'where', 'train', 'area', 'inout'] : ['ops', 'work', 'mine', 'today', 'board', 'cncreq', 'pack', 'orders', 'build', 'usage', 'tvmode', 'all', 'asap', 'hold', 'where', 'pm', 'cal', 'train', 'area', 'inout'])
       : ['work', 'prio', 'usage', 'board', 'orders', 'build', 'cncreq', 'pack', 'tvmode', 'sign', 'ops', 'xl', 'pm', 'cal', 'alerts', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
-    return '<div class="head"><div><h1>Main menu</h1><p class="muted">' + (ui.user ? 'Signed in as ' + esc(ui.user.name.replace(/\.$/, '')) + '.' : 'Not signed in.') + ' This tablet is set to ' + esc(areaName()) + '.</p></div></div><div class="menu">' + order.map((k) => T[k]()).join('') + '</div>';
+    return (newBuild ? '<div class="banner warn"><div><b>New version of the app is ready.</b></div><button class="btn primary" id="b-refresh2" data-a="goFresh">⟳ Update now</button></div>' : '') + '<div class="head"><div><h1>Main menu</h1><p class="muted">' + (ui.user ? 'Signed in as ' + esc(ui.user.name.replace(/\.$/, '')) + '.' : 'Not signed in.') + ' This tablet is set to ' + esc(areaName()) + '.</p></div></div><div class="menu">' + order.map((k) => T[k]()).join('') + '</div><p class="small muted" style="text-align:right;margin-top:10px">App version ' + esc(APP_BUILD) + '</p>';
   }
 
   /* ---------- preventive maintenance (PM): pm_equipment (every machine + gage) and pm_work_orders are the record.
@@ -4397,7 +4405,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (d.lfilt) { ui.lfilt = d.lfilt; return render(); }
     if (d.a === 'stepEs') { ui.stepEs = !ui.stepEs; try { localStorage.setItem('wt-stepes', ui.stepEs ? '1' : ''); } catch (e) { /* ok */ } if (ui.stepEs && !STEP_ES) { stepEsAsk = false; loadStepEs(true); } return render(); }
     if (t.id === 'b-refresh') { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ }
-      t.textContent = '⟳ Loading…'; const jid = ui.view === 'job' && ui.jobId ? ui.jobId : '', go = () => { if (jid) location.replace(location.pathname + '?job=' + encodeURIComponent(jid)); else location.replace(location.pathname); };
+      t.textContent = '⟳ Loading…'; const go = () => goFresh();
       try { if (navigator.serviceWorker) navigator.serviceWorker.getRegistration().then((r) => (r ? r.update() : null)).catch(() => {}).then(go); else go(); } catch (e) { go(); } setTimeout(go, 2500); return; }
     if (t.id === 'b-lang') { LANG = LANG === 'es' ? 'en' : 'es'; try { localStorage.setItem('wt-lang', LANG); } catch (e) { /* this tablet only */ } document.documentElement.lang = LANG; render(); renderModal(); return; }
     if (t.id === 'b-full') { const de = document.documentElement, no = () => toast('Full screen is not available in this view. Open the link in Chrome to use it.', 'bad');
@@ -4574,6 +4582,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         return toast('Approved. Op ' + x.n + ' is updated on every traveler for ' + x.pn + '.');
       }
       if (d.a === 'bldAct') { const m = ui.modal; if (!m) return; m.acts = m.acts || []; const k = m.acts.indexOf(d.v); if (k >= 0) m.acts.splice(k, 1); else m.acts.push(d.v); return renderModal(); }
+      if (d.a === 'goFresh') return goFresh();
       if (d.a === 'whoT') { const m = ui.modal; if (!m) return; m.crew = m.crew || []; if (!d.v) m.crew = []; else { const k = m.crew.indexOf(d.v); if (k >= 0) m.crew.splice(k, 1); else m.crew.push(d.v); } return renderModal(); }
       if (d.a === 'crewQuick') { const t = lastCombo(ui.user.id); if (!t) return; run(d.job, 'crewJoin', { i: Number(d.i), who: ui.user.id, tasks: t }); { const jj = store.jobs[d.job]; crewToPlan(jj, jj.ops[Number(d.i)].station, [ui.user.id]); } render(); return toast('Joined: ' + t.join(' + ')); }
       if (d.a === 'crewAsg') { const j = store.jobs[d.job], op = j && j.ops[Number(d.i)], PI = op && openItems(op.station).find((y) => y.k === 'j' && y.ref === j.id); if (!PI) return; let n = 0, later = [];
