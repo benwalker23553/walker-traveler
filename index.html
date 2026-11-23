@@ -1502,7 +1502,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 13:40';
+  const APP_BUILD = '2026-11-23 13:50';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -1519,7 +1519,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (rs && Date.now() - rs.at > 180000) { try { sessionStorage.removeItem('wt-resume'); } catch (e) { /* ok */ } rs = null; }
     const ru = rs && rs.id && person(rs.id) && !(person(rs.id).role !== 'manager' && crossedBreak(rs.at)); if (ru) { try { sessionStorage.removeItem('wt-resume'); } catch (e) { /* ok */ } ui.user = Object.assign({}, person(rs.id)); ui.touched = Date.now(); ui.signedAt = Date.now(); if (rs.view && rs.view !== 'job') ui.view = rs.view; return; }
     const mp = myPhone(), u = mp && person(mp.id); if (u && u.role !== 'manager' && crossedBreak(Number(ls.get('wt-pinAt') || 0))) return; if (u) { ui.user = Object.assign({}, u); ui.touched = Date.now(); ui.signedAt = Date.now(); } }
-  async function loadStaff() { if (!SRV()) return; try { const r = await rpc('staff_roster'); if (Array.isArray(r) && r.length) { store.staff = r; applyStaff(); render(); if (ui.modal) renderModal(); } } catch (e) { /* offline: keep the last list */ } }
+  async function loadStaff() { if (!SRV()) return; if (!store.staff) { try { const k = JSON.parse(ls.get('wt-staff') || 'null'); if (Array.isArray(k) && k.length) { store.staff = k; applyStaff(); render(); } } catch (e) {} } try { const r = await rpc('staff_roster'); if (Array.isArray(r) && r.length) { store.staff = r; try { ls.set('wt-staff', JSON.stringify(r)); } catch (e) {} applyStaff(); render(); if (ui.modal) renderModal(); } } catch (e) { /* offline: keep the last list */ } }
   function finEnd() { const t = ui.finTok; ui.finTok = null; ui.fin = null; ui.finErr = ''; if (t && SRV()) rpc('fin_lock', { p_token: t }).catch(() => {}); }
   /* A supervisor's own phone (alerts turned on there) stays signed in for 12 hours after their PIN, so tapping an alert never asks again. Shared tablets still lock when idle. */
   const myPhone = () => { try { const x = JSON.parse(ls.get('wt-mine') || 'null'); return x && x.id && x.until > Date.now() ? x : null; } catch (e) { return null; } };
@@ -1628,7 +1628,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       const m = {}; s.docs.forEach((d) => { const j = d.data(); if (j && j.id) m[j.id] = j; });
       Object.keys(store.queue).forEach((id) => { m[id] = store.queue[id].job || store.queue[id]; });
       store.jobs = m; store.loaded = true; setTimeout(cncAuto, 1500); if (ui.openRlOnLoad && !ui.modal) { ui.openRlOnLoad = false; setTimeout(() => openModal({ type: 'rlList' }), 600); } if (ui.openJobOnLoad && m[ui.openJobOnLoad]) { const oj = ui.openJobOnLoad; ui.openJobOnLoad = null; try { history.replaceState(null, '', location.pathname); } catch (e) { /* ok */ } openJob(oj); } render(); setTimeout(endOfDay, 1500);
-    }, () => { if (window.WT_SB) { store.loaded = true; render(); setTimeout(() => { try { location.reload(); } catch (e) { /* ok */ } }, 8000); return; } store.mode = 'local'; loadLocal(); store.loaded = true; render(); });
+    }, () => { if (window.WT_SB) { store.loaded = true; render(); setTimeout(() => { try { if (navigator.onLine !== false) location.reload(); } catch (e) { /* ok */ } }, 60000 + Math.random() * 120000); return; } store.mode = 'local'; loadLocal(); store.loaded = true; render(); });
     db.collection('dock').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.dock = m; const a = document.activeElement; if (ui.view === 'dock' && !(a && /dk-f|^dk-q$/.test((a.className || '') + ' ' + (a.id || '')))) render(); }, () => {});
     db.collection('bphotos').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.bphotos = m; if (ui.view === 'pack') render(); }, () => {});
     // Office can push an update to every tablet at once: config/app.reloadAt newer than when this tablet loaded → reload (stays signed in). Waits while someone is typing or has a window open.
@@ -3972,7 +3972,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (only && !(only === 'qa' ? W.canDispose(p) : W.isApprover(p))) { toast(p.name + ' is not set up to do that.', 'bad'); return null; }
     if (!hasPin(p)) { toast(p.name + ' has no PIN yet. Tap Sign in at the top once to create it.', 'bad'); return null; }
     if (SRV()) { if (m.pinOk !== m.who + ':' + m.pin) { m.pin = ''; renderModal(); toast('Wrong PIN.', 'bad'); return null; } }
-    else if (window.WT_SB) { m.pin = ''; renderModal(); toast('This device lost its link to the shop record. Reloading — then try again.', 'bad'); setTimeout(() => location.reload(), 2500); return null; }
+    else if (window.WT_SB) { m.pin = ''; renderModal(); toast('The network is slow — trying again in a moment.', 'bad'); setTimeout(() => { if (!SRV()) location.reload(); }, 20000 + Math.random() * 20000); return null; }
     else if (p.pin !== m.pin) { m.pin = ''; renderModal(); toast('Wrong PIN.', 'bad'); return null; }
     return p;
   }
@@ -4167,7 +4167,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
           if (!r.finToken) { closeModal(); return toast('Your account is not set up to see prices or costs.', 'bad'); }
           if (ui.finTok) rpc('fin_lock', { p_token: ui.finTok }).catch(() => {}); ui.finTok = r.finToken; ui.user = Object.assign({}, ui.user, { role: r.role, fin: true }); closeModal(); finLoad(); }).catch(() => { m.busy = false; toast('Could not check the PIN. Check the connection.', 'bad'); }); return; }
       case 'login': { const lp = person(m.who); if (!lp) return toast('Tap your name.', 'bad');
-        if (window.WT_SB && !SRV()) { m.pin = ''; m.first = ''; renderModal(); toast('This device lost its link to the shop record. Reloading — then try your PIN again.', 'bad'); setTimeout(() => location.reload(), 2500); return; }
+        if (window.WT_SB && !SRV()) { m.pin = ''; m.first = ''; renderModal(); toast('The network is slow — trying again in a moment. Then enter your PIN again.', 'bad'); setTimeout(() => { if (!SRV()) location.reload(); }, 20000 + Math.random() * 20000); return; }
         if (SRV()) {
           if ((m.pin || '').length !== 4) return toast('Enter 4 digits.', 'bad');
           if (!hasPin(lp)) { if (!m.first) { m.first = m.pin; m.pin = ''; return renderModal(); } if (m.first !== m.pin) { m.first = ''; m.pin = ''; renderModal(); return toast('Those did not match. Start again.', 'bad'); } }

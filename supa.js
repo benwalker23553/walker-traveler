@@ -53,13 +53,15 @@
   }
   function live() {
     if (channel) return;
+    // Catch up after the tablet wakes, Wi-Fi returns or the live link reconnects — at most once every 3 minutes, spread out so tablets don't all download at once
+    let lastSync = Date.now(); const resync = () => { if (Date.now() - lastSync < 180000) return; lastSync = Date.now(); setTimeout(() => Object.keys(cache).forEach((c) => loadCol(c).then(() => emit(c)).catch(() => {})), Math.random() * 15000); };
     channel = sb.channel('docs-live').on('postgres_changes', { event: '*', schema: 'public', table: 'docs' }, (p) => {
       const r = p.new && p.new.col ? p.new : null; if (!r) return;
       (cache[r.col] = cache[r.col] || new Map()).set(r.id, r.data); emit(r.col);
-    }).subscribe((st) => { if (st === 'SUBSCRIBED') Object.keys(cache).forEach((c) => loadCol(c).then(() => emit(c)).catch(() => {})); });
+    }).subscribe((st) => { if (st === 'SUBSCRIBED') resync(); });
     // Catch up after the tablet wakes or Wi-Fi returns
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) Object.keys(cache).forEach((c) => loadCol(c).then(() => emit(c)).catch(() => {})); });
-    window.addEventListener('online', () => Object.keys(cache).forEach((c) => loadCol(c).then(() => emit(c)).catch(() => {})));
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) resync(); });
+    window.addEventListener('online', resync);
   }
   const db = {
     collection(col) {
@@ -92,8 +94,11 @@
   async function getFile(path) {
     if (!fileCache[path]) fileCache[path] = (async () => {
       const C = window.caches ? await caches.open('wt-files').catch(() => null) : null, key = new Request('/wt-files/' + path);
-      try { const { data, error } = await sb.storage.from('files').download(path); if (error) throw error; if (C) C.put(key, new Response(data)).catch(() => {}); return data; }
-      catch (e) { const hit = C ? await C.match(key) : null; if (hit) return hit.blob(); delete fileCache[path]; throw e; }
+      const net = async () => { const { data, error } = await sb.storage.from('files').download(path); if (error) throw error; if (C) C.put(key, new Response(data)).catch(() => {}); return data; };
+      const hit = C ? await C.match(key).catch(() => null) : null;
+      // Saved copy first so the tablet opens fast and 20 tablets don't all pull megabytes at once; a quiet refresh later keeps it current.
+      if (hit) { if (/^data\//.test(path)) setTimeout(() => net().catch(() => {}), 120000 + Math.random() * 240000); return hit.blob(); }
+      try { return await net(); } catch (e) { delete fileCache[path]; throw e; }
     })();
     return fileCache[path];
   }
