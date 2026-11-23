@@ -1502,7 +1502,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 13:05';
+  const APP_BUILD = '2026-11-23 13:30';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -3272,7 +3272,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       for (const k of tries) { (midx[k] || []).forEach((r) => { if (out.indexOf(r) < 0) out.push(r); }); if (out.length) break; }
       if (!out.length && s0.length >= 4) Object.keys(midx).forEach((k) => { if (k.indexOf(s0) === 0 && /^[A-Z]{1,2}$/.test(k.slice(s0.length))) midx[k].forEach((r) => { if (out.indexOf(r) < 0) out.push(r); }); });
       if (out.length) out.close = true; }
-    const fin = (r) => (r.fa || /FINAL|FNL|PACKAG/i.test((r.file || '') + ' ' + (r.kind || '')) ? 1 : 0); const res = out.sort((x, y) => own(x) - own(y) || fin(x) - fin(y)); return res; }
+    const fin = (r) => (r.fa || String(r.id || '').indexOf('PK-') === 0 || /FINAL|FNL|PACKAG/i.test((r.file || '') + ' ' + (r.kind || '') + ' ' + (r.form || '')) ? 1 : 0); const res = out.sort((x, y) => own(x) - own(y) || fin(x) - fin(y)); return res; }
   // Which floor a live traveler belongs to: CNC work orders/stacks, final assembly (on the final log or 2xxxx), else by its last step
   const jobFloor = (j) => { if (j.floor && ['metal', 'filter', 'final', 'cnc'].indexOf(j.floor) >= 0) return j.floor; if (/^(WO|STK)[:-]/.test(j.rid || '')) return 'cnc';
     const so = String(j.so); if ((store.logs.final || []).some((r) => String(r.t) === so) || (/^\d+$/.test(so) && +so >= 20000)) return 'final';
