@@ -1502,7 +1502,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 12:58';
+  const APP_BUILD = '2026-11-23 13:05';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -4327,7 +4327,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       case 'priority': ok = run(m.job, 'priority', { pri: m.pri, rush: m.rush, reason: m.reason }); break;
       case 'join': { const n = (m.name || '').trim(); if (n.length < 2) return toast('Type your name.', 'bad'); if (store.cfg.roster.some((x) => x.name.toLowerCase() === n.toLowerCase())) return toast(n + ' is already on the list. Go back and tap your name.', 'bad');
         const id = n.toLowerCase().replace(/[^a-z0-9]/g, '') + Date.now().toString(36).slice(-3);
-        if (SRV()) { rpc('staff_join', { p_id: id, p_name: n, p_area: m.area || '' }).then(() => loadStaff()).then(() => openModal({ type: 'login', who: id, pin: '', first: '' })).catch(() => toast('Could not add. Check the connection.', 'bad')); return; }
+        if (SRV()) { if (m.adding) return; m.adding = true; rpc('staff_join', { p_id: id, p_name: n, p_area: m.area || '' }).then(() => loadStaff()).then(() => openModal({ type: 'login', who: id, pin: '', first: '' })).catch((e) => { m.adding = false; const t = String((e && e.message) || e || ''); toast(/already on the list/.test(t) ? t.replace(/^.*?(That name)/, '$1') : 'Could not add. Check the connection.', 'bad'); }); return; }
         { const np = { id, name: n, area: m.area, role: 'operator', side: '', pin: '', self: true }; store.cfg.roster.push(np); saveCfg((c) => { if (!c.roster.some((y) => y.id === id)) c.roster.push(W.clone(np)); }); } return openModal({ type: 'login', who: id, pin: '', first: '' }); }
       case 'ask': ask(); return;
     }
