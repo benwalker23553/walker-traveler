@@ -44,7 +44,7 @@ button{font-family:inherit}
 <script>
 (function () {
   const URL_ = 'https://ztpkhjgsxzlwxjzddgzf.supabase.co', API = 'sb_publishable_Zq17n4I5OapehYOckC7JQA_H7shyW9S';
-  const AREAS = [['metal','Metal Floor'],['wash','Wash'],['machine','Machine Shop'],['cnc','CNC'],['weld','Welding'],['wire','Wire welding'],['glue','Glue / Assembly'],['powder','Paint / Powder Coat'],['pack','Packing and Assembly'],['pleat','Pleating'],['pot','Potting line 1'],['clip','Clipping'],['race','Racing'],['qc','QC and Packaging']];
+  const AREAS = [['metal','Metal Floor'],['wash','Wash'],['machine','Machine Shop'],['cnc','CNC'],['weld','Welding'],['spot','Spot welding'],['glue','Glue / Assembly'],['powder','Paint / Powder Coat'],['pack','Packing and Assembly'],['pleat','Pleating'],['pot','Potting line 1'],['clip','Clipping'],['fweld','Filter welding'],['race','Racing'],['qc','QC and Packaging']];
   const SIZES = [['s', 'Small', 'Most items'], ['m', 'Medium', 'Balanced'], ['l', 'Large', 'Easiest to read far away']];
   const ls = { get: (k) => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
   const q = new URLSearchParams(location.search);

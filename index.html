@@ -822,14 +822,16 @@ window.WT_ESP = [
     { id: 'wash', floor: 'metal', name: 'Wash', kind: 'work', note: 'Wash station' },
     { id: 'machine', floor: 'metal', name: 'Machine Shop', kind: 'work', note: 'Cold saw, lathe, mill' },
     { id: 'cnc', floor: 'metal', name: 'CNC', kind: 'work', note: 'Haas lathes and mills · deburr · tumbler · ultrasonic' },
-    { id: 'weld', floor: 'metal', name: 'Welding', kind: 'work', note: 'Spot welder #383 · fixture FX685' },
-    { id: 'wire', floor: 'metal', name: 'Wire welding', kind: 'work', note: 'Wire welding' },
+    { id: 'weld', floor: 'metal', name: 'Welding', kind: 'work', note: 'Tack, wire (MIG) and TIG welding' },
+    { id: 'spot', floor: 'metal', name: 'Spot welding', kind: 'work', note: 'Spot welders A · B · C · P' },
+    { id: 'wire', floor: 'metal', name: 'Welding', kind: 'old', note: 'Old area — now part of Welding' },
     { id: 'glue', floor: 'metal', name: 'Glue / Assembly', kind: 'work', note: 'Glue, foam and assembly · Luis Herrera' },
     { id: 'powder', floor: 'metal', name: 'Paint / Powder Coat', kind: 'work', note: 'Paint and powder coat' },
     { id: 'pack', floor: 'metal', name: 'Packing and Assembly', kind: 'work', note: 'Assembly, packing' },
     { id: 'pleat', floor: 'filter', name: 'Pleating', kind: 'work', note: 'Pleater #336 · sonic welder #453' },
     { id: 'pot', floor: 'filter', name: 'Potting line 1', kind: 'work', note: 'Foam machine #308 · turntable #321 · oven' },
     { id: 'clip', floor: 'filter', name: 'Clipping', kind: 'work', note: 'Clipping' },
+    { id: 'fweld', floor: 'filter', name: 'Filter welding', kind: 'work', note: 'Screens and baffles for filters · spot welder #383 · fixture FX685' },
     { id: 'race', floor: 'filter', name: 'Racing', kind: 'work', note: 'Racing filters' },
     { id: 'qc', floor: 'filter', name: 'QC and Packaging', kind: 'work', note: 'Height gage · ink marker #317 · handle · bag · box · palletize' },
   ];
@@ -844,7 +846,7 @@ window.WT_ESP = [
 
   function asmOps(pn, gage, letterDwg, weldMach, potMach) {
     return [
-      { n: '010', station: 'weld', mach: weldMach, text: 'USING FIXTURE FX685, SPOT WELD OUTER BAFFLE, 12.00” (1001050) AT 10.80” DIAMETER (APPROX .375” OVERLAP) (5) PLACES. EVERY FEW PIECES, PLACE ON CHECK FIXTURE.' },
+      { n: '010', station: 'fweld', mach: weldMach, text: 'USING FIXTURE FX685, SPOT WELD OUTER BAFFLE, 12.00” (1001050) AT 10.80” DIAMETER (APPROX .375” OVERLAP) (5) PLACES. EVERY FEW PIECES, PLACE ON CHECK FIXTURE.' },
       { n: '020', station: 'pot', mach: potMach, checks: POT_CHECKS, fields: POT_FIELDS, text: 'FOLLOW OPERATING PROCEDURE TO GET URETHANE FOAM MACHINE' + (pn === '40-1022' ? ' # 308' : '') + ' STARTED. HEAT MOLD TO 125° F. PLACE 12.00” COALESCER MOLD (FX665) ONTO TURNTABLE # 321. SET MACHINE TO ENCODE MODE AND SET SHOT TO (SEE CHART BELOW). PLACE THE 12.00” COALESCER PLEAT PACK ASSY (1001249) INTO MOLD FOLLOWED BY THE 12.00” OUTER BAFFLE (1001050) MAKING SURE PLEATS ARE EVENLY SPACED. USING FIXTURE FX1276, SET A WEIGHT ON TOP AND SLIDE INTO OVEN ALLOWING 5-7 MINUTES TO CURE.' },
       { n: '030', station: 'pot', mach: potMach, checks: POT_CHECKS, text: 'AFTER 5 MINUTES DEMOLD FILTERS. PLACE 12.00” MOLD (FX665) ONTO TURNTABLE # 321. SET MACHINE TO ENCODE MODE AND SET SHOT TO (SEE CHART BELOW). PLACE UNPOTTED SIDE INTO THE FILLED MOLD. USING FIXTURE FX1276, SET A WEIGHT ON TOP AND SLIDE INTO OVEN ALLOWING 5-7 MINUTES TO CURE. ' + (pn === '40-1022' ? '' : (pn === '207-7469' ? 'PLACE FINISHED FILTERS IN CURING RACK. ' : 'PLACE FINISHED FILTERS ON CURING RACK. ')) + 'CHECK ONE FILTER FIRST TO ENSURE PROPER SIZE*' },
       { n: '040', station: 'qc', mach: ['GAGE ' + gage], insp: '100% inspection', text: 'CHECK FILTER HEIGHT USING GO/NO GO GAGE ' + gage + ' 100% INSPECTION.' },
@@ -1488,7 +1490,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 10:00';
+  const APP_BUILD = '2026-11-23 10:20';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -2609,7 +2611,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   function scoreSheet(cfg) {
     const v = (k, d) => (cfg[k] != null ? cfg[k] : d), row = (ic, what, pts, how) => '<tr><td style="font-size:1.4rem;text-align:center">' + ic + '</td><td><b>' + what + '</b><br><span class="small muted">' + how + '</span></td><td style="text-align:right;white-space:nowrap"><b style="font-size:1.25rem">' + pts + '</b></td></tr>';
     const sec = (t, rows) => '<tr><th colspan="3" style="background:var(--panel2);text-align:left">' + t + '</th></tr>' + rows;
-    const SM = cfg.stationMin || {}, names = { metal: 'Metal floor', wash: 'Wash', machine: 'Machine shop', cnc: 'CNC', weld: 'Welding', wire: 'Wire welding', glue: 'Glue / assembly', powder: 'Paint / powder', pack: 'Packing (traveler)', pleat: 'Pleating', pot: 'Potting', clip: 'Clipping', race: 'Racing filters', qc: 'QC / packaging' };
+    const SM = cfg.stationMin || {}, names = { metal: 'Metal floor', wash: 'Wash', machine: 'Machine shop', cnc: 'CNC', weld: 'Welding', spot: 'Spot welding', fweld: 'Filter welding', glue: 'Glue / assembly', powder: 'Paint / powder', pack: 'Packing (traveler)', pleat: 'Pleating', pot: 'Potting', clip: 'Clipping', race: 'Racing filters', qc: 'QC / packaging' };
     let h = '<div class="panel"><h2>📋 Score sheet</h2><p class="muted">Everyone is scored the same way. <b>Score = work points + helping points + day points.</b> Top operator each month wins <b>$' + esc(v('bonus', 150)) + '</b>. Only what is done on the tablet counts.</p>' +
       '<div class="tbl-wrap"><table class="tbl"><thead><tr><th></th><th>What you do</th><th style="text-align:right">Points</th></tr></thead><tbody>' +
       sec('Show up on the tablet', row('📅', 'Use the tablet on a work day', v('dayPts', 2) + ' per day', 'Any day you run a step, pack an order or add a note on the tablet.')) +
@@ -2724,7 +2726,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     (O.rows || []).forEach((x) => rows.push([x.ship_by, x.so, x.line, x.cust, x.po, x.pn, x.d, Math.round(x.open), Math.round(x.stock), OS.name[x.st].replace(/^\S+ /, ''), (x.live || []).map((l) => '#' + l.t + ' ' + (l.cur || '')).concat((x.paper || []).map((p) => '#' + p.t + ' ' + p.floor + ' paper')).concat([].concat.apply([], (x.short || []).filter((c) => c.making).map((c) => (c.tr || []).map((t) => '#' + t.t + ' for ' + c.pn)))).join('; '), (x.short || []).filter((c) => !c.making).map((c) => c.pn + ' need ' + Math.round(c.need) + ' have ' + Math.round(c.have)).join('; '), (x.short || []).filter((c) => c.making).map((c) => c.pn).join('; ')]));
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([rows.map((r) => r.map(q).join(',')).join('\r\n')], { type: 'text/csv' })); a.download = 'open-orders-status-' + ymd(Date.now()) + '.csv'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
   /* ---------- Floor-built travelers: a part with no master traveler gets one built by the people doing the work — area + what is done + photos, step by step. Next time it comes up by itself. ---------- */
-  const OPS_PRESET = { metal: ['Shear', 'Cut to length', 'Punch', 'Form / brake', 'Roll', 'Drill', 'Deburr', 'Assemble'], machine: ['Saw', 'Lathe', 'Mill', 'Drill', 'Tap', 'Deburr'], cnc: ['Set up', 'Run program', 'Deburr'], weld: ['Tack', 'Weld', 'Spot weld', 'Grind', 'Leak test'], wire: ['Inner wire', 'Outer wire', 'Roll'], wash: ['Wash', 'Dry'], powder: ['Mask', 'Powder coat', 'Bake', 'Unmask'], glue: ['Glue', 'Assemble', 'Clamp'], pleat: ['Pleat', 'Burn', 'Shear', 'Staple'], clip: ['Clip', 'Final clamp', 'Shape to fixture'], pot: ['Pour', 'Demold', 'Oil', 'Trim'], qc: ['Inspect', 'Ink jet / mark', 'Bag', 'Box', 'Label'], race: ['Assemble', 'Oil', 'Inspect', 'Bag', 'Box'], pack: ['Pick parts', 'Assemble kit', 'Bag', 'Box', 'Label', 'Pack'] };
+  const OPS_PRESET = { metal: ['Shear', 'Cut to length', 'Punch', 'Form / brake', 'Roll', 'Drill', 'Deburr', 'Assemble'], machine: ['Saw', 'Lathe', 'Mill', 'Drill', 'Tap', 'Deburr'], cnc: ['Set up', 'Run program', 'Deburr'], weld: ['Tack', 'Weld', 'Wire weld', 'TIG', 'Grind', 'Leak test'], spot: ['Spot weld', 'Set schedule', 'Check weld'], fweld: ['Spot weld screen', 'Spot weld baffle', 'Tack'], wire: ['Inner wire', 'Outer wire', 'Roll'], wash: ['Wash', 'Dry'], powder: ['Mask', 'Powder coat', 'Bake', 'Unmask'], glue: ['Glue', 'Assemble', 'Clamp'], pleat: ['Pleat', 'Burn', 'Shear', 'Staple'], clip: ['Clip', 'Final clamp', 'Shape to fixture'], pot: ['Pour', 'Demold', 'Oil', 'Trim'], qc: ['Inspect', 'Ink jet / mark', 'Bag', 'Box', 'Label'], race: ['Assemble', 'Oil', 'Inspect', 'Bag', 'Box'], pack: ['Pick parts', 'Assemble kit', 'Bag', 'Box', 'Label', 'Pack'] };
   const flId = (pn) => 'FL:' + bomKey(pn);
   function saveRt(rt) { if (store.mode === 'shared') store.db.doc('routings/' + rt.id.replace(/[^A-Za-z0-9_-]/g, '-')).set(W.clone(rt)).catch(() => toast('Could not save the traveler steps. Check the connection.', 'bad')); }
   const stepTiles = (m) => { const st = m.st || '', P = OPS_PRESET[st] || [];
@@ -2928,10 +2930,10 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   const HAND = { '40-1022 TRV MASTER': 1, '207-7469 TRV KEY risk': 1, '270-7257 TRV KEY risk': 1, '1001050 TRV MASTER': 1, '1001249 PLEAT TRV': 1, '207-7469 PACKAGING TRAVELER': 1, '270-7257 PACKAGING TRAVELER': 1 };
   const key = (s) => String(s || '').trim().toUpperCase();
   BASE.forEach((r) => { (midx[key(r.pn)] = midx[key(r.pn)] || []).push(r); });
-  function mapStation(loc, text, floor, kind) {
-    const L = key(loc);
-    if (/WIRE ?WELD/.test(L)) return 'wire';
-    if (/WELD/.test(L)) return 'weld';
+  function mapStation(loc, text, floor, kind, wfl) {
+    const L = key(loc), T = key(text);
+    if (/WIRE ?WELD/.test(L)) return wfl ? 'fweld' : 'weld';
+    if (/WELD/.test(L)) return wfl ? 'fweld' : /SPOT|\bA B C P\b/.test(L) || (/\bSPOT WELD/.test(T) && !/TACK WELD|FULL WELD/.test(T)) ? 'spot' : 'weld';
     if (/WASH/.test(L)) return 'wash';
     if (/CLIP/.test(L)) return 'clip';
     if (/POWDER|PAINT/.test(L)) return 'powder';
@@ -2943,6 +2945,8 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (floor === 'filter') return /PLEAT/.test(key(kind)) || /MACHINE ?# ?(528|336)/.test(L) ? 'pleat' : 'pot';
     return 'metal';
   }
+  // Welding done in the filter building: filter / screen travelers and travelers worked in the filter area (not silencer lids that only roll in filter prod)
+  function weldFloor(m) { return /PLEAT|FILTER TRV|PANEL|CRIMP|SCREEN TRV/.test(key(m.kind)) || m.ops.some((o) => /FILTER AREA|FILTER DEPT/.test(key(o[2])) || /URETHANE|PLEAT PACK|POTTING/.test(key(o[1]))); }
   function guessFloor(m) { return /PLEAT|FILTER TRV|PANEL|CRIMP|SCREEN TRV/.test(key(m.kind)) || m.ops.some((o) => /FLTR|FILTER/.test(key(o[2])) || /URETHANE|PLEAT PACK|POTTING/.test(key(o[1]))) ? 'filter' : 'metal'; }
   // CNC department: lathe / mill / deburr / ultrasonic in CNC; "wash dept" goes to Wash; "prod dept" to the metal floor
   const cncStation = (mach, text) => { const L = key(mach); if (/WASH DEPT|WASH STATION/.test(L) || /WASH STATION/.test(key(text))) return 'wash'; if (/PROD DEPT/.test(L)) return 'metal'; return 'cnc'; };
@@ -2951,10 +2955,10 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       travRev: m.tr || '—', travDate: '', dwgRev: m.dr || '—', dwgDate: '', customer: m.cu || 'N/A', material: m.mat || '', risk: '', moveTo: 'stage', pages: 0, file: m.pdf, extra: [], dw: '',
       cncPdf: 'docs/cnc/pdf/' + m.pdf, cncSetup: (m.su || []).map((f) => ({ t: f.replace(/\.pdf$/i, ''), path: 'docs/cnc/setup/' + f })),
       ops: m.ops.map((o) => ({ n: o[0], station: cncStation(o[2], o[1]), mach: [o[2] || '—'], text: o[1] })), docs: [] };
-    const floor = guessFloor(m);
+    const floor = guessFloor(m), wfl = weldFloor(m);
     return { id: 'M:' + m.f, master: true, anyDest: true, floor, pn: m.pn, wpn: m.wpn, name: m.name || m.kind, kind: m.kind, form: m.fa ? 'FORM 9-3 · Final Assembly Traveler' : 'FORM 117 · Shop Order and Traveler', fa: !!m.fa,
       travRev: m.tr || '—', travDate: m.td || '', dwgRev: m.dr || '—', dwgDate: '', customer: m.cu || 'N/A', material: m.mat || '', risk: '', moveTo: m.fa ? 'fg' : 'stage', pages: m.pg, file: m.f + '.pdf', extra: m.x || [], dw: String(m.f).replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
-      ops: m.ops.map((o) => ({ n: o[0], station: mapStation(o[2], o[1], floor, m.kind), mach: [o[2] || '—'], text: o[1] })), docs: [] };
+      ops: m.ops.map((o) => ({ n: o[0], station: mapStation(o[2], o[1], floor, m.kind, wfl), mach: [o[2] || '—'], text: o[1] })), docs: [] };
   }
   const RISK_NAME = { L: 'Low risk', M: 'Medium risk', H: 'High risk' };
   const ovr = (rid, tag) => { const x = rls().filter((r) => r.rid === rid && r.n === tag && r.status === 'approved').sort((a, b) => b.okAt - a.okAt)[0]; return x ? x.text : null; };
@@ -4670,7 +4674,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         if (!rt) return toast('That master traveler is not loaded yet.', 'bad');
         if (rt.stack && store.mode === 'shared') store.db.doc('routings/' + rt.id.replace(/[^A-Za-z0-9_-]/g, '-')).set(W.clone(rt)).catch(() => toast('Could not save the stack steps. Check the connection.', 'bad'));
         try { const j = W.newJob({ rid: rt.id, so: r.t, qty: Number(r.q) || 0, due: r.u, pri: jobs().filter((x) => x.st !== 'complete').length + 1, ship: d.floor === 'final' && r.po && r.so ? { po: r.po, sales: r.so } : null }, { u: ui.user, at: Date.now(), adopt: true });
-          if (rt.master) j.ops.forEach((o, i) => { o.station = mapStation(rt.ops[i].mach[0], rt.ops[i].text, d.floor, rt.kind); });
+          if (rt.master) j.ops.forEach((o, i) => { o.station = mapStation(rt.ops[i].mach[0], rt.ops[i].text, d.floor, rt.kind, d.floor === 'filter'); });
           if (!j.name || j.name === rt.kind) j.name = r.d || j.name;
           if (assyOf(r)) j.assy = assyOf(r);
           if (r.pn && (!j.pn || j.pn === 'N/A' || key(j.pn) !== key(r.pn))) j.pn = r.pn;
