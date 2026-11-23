@@ -1502,7 +1502,11 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 12:50';
+<<<<<<< HEAD
+  const APP_BUILD = '2026-11-23 12:55';
+=======
+  const APP_BUILD = '2026-11-23 12:55';
+>>>>>>> parent of 84c83d2 (Speed: one screen redraw per frame while data feeds arrive (was 23 at startup), and drawings / logs / Sage BOM / stack designs load right after the first screen shows)
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -1624,17 +1628,16 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     try { if (window.claude && window.claude.use) { db = await window.claude.use('db'); window.claude.use('sample').then((s) => { store.sample = s; }); window.claude.use('downloads').then((d) => { store.downloads = d; render(); }); } } catch (e) { db = null; }
     if (!db) { store.mode = 'local'; loadLocal(); store.loaded = true; render(); return; }
     store.db = db; store.mode = 'shared'; setTimeout(restoreQueue, 1500);
-    // Many data feeds arrive together: draw the screen once per frame, not once per feed.
-    const rs = () => { if (rs.t) return; rs.t = requestAnimationFrame(() => { rs.t = 0; render(); }); };
     db.collection('jobs').onSnapshot((s) => {
       const m = {}; s.docs.forEach((d) => { const j = d.data(); if (j && j.id) m[j.id] = j; });
       Object.keys(store.queue).forEach((id) => { m[id] = store.queue[id].job || store.queue[id]; });
-      store.jobs = m; store.loaded = true; setTimeout(cncAuto, 1500); if (ui.openRlOnLoad && !ui.modal) { ui.openRlOnLoad = false; setTimeout(() => openModal({ type: 'rlList' }), 600); } if (ui.openJobOnLoad && m[ui.openJobOnLoad]) { const oj = ui.openJobOnLoad; ui.openJobOnLoad = null; try { history.replaceState(null, '', location.pathname); } catch (e) { /* ok */ } openJob(oj); } rs(); setTimeout(endOfDay, 1500);
-    }, () => { if (window.WT_SB) { store.loaded = true; rs(); setTimeout(() => { try { location.reload(); } catch (e) { /* ok */ } }, 8000); return; } store.mode = 'local'; loadLocal(); store.loaded = true; rs(); });
-    db.collection('dock').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.dock = m; const a = document.activeElement; if (ui.view === 'dock' && !(a && /dk-f|^dk-q$/.test((a.className || '') + ' ' + (a.id || '')))) rs(); }, () => {});
-    db.collection('bphotos').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.bphotos = m; if (ui.view === 'pack') rs(); }, () => {});
+      store.jobs = m; store.loaded = true; setTimeout(cncAuto, 1500); if (ui.openRlOnLoad && !ui.modal) { ui.openRlOnLoad = false; setTimeout(() => openModal({ type: 'rlList' }), 600); } if (ui.openJobOnLoad && m[ui.openJobOnLoad]) { const oj = ui.openJobOnLoad; ui.openJobOnLoad = null; try { history.replaceState(null, '', location.pathname); } catch (e) { /* ok */ } openJob(oj); } render(); setTimeout(endOfDay, 1500);
+    }, () => { if (window.WT_SB) { store.loaded = true; render(); setTimeout(() => { try { location.reload(); } catch (e) { /* ok */ } }, 8000); return; } store.mode = 'local'; loadLocal(); store.loaded = true; render(); });
+    db.collection('dock').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.dock = m; const a = document.activeElement; if (ui.view === 'dock' && !(a && /dk-f|^dk-q$/.test((a.className || '') + ' ' + (a.id || '')))) render(); }, () => {});
+    db.collection('bphotos').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.bphotos = m; if (ui.view === 'pack') render(); }, () => {});
     // Office can push an update to every tablet at once: config/app.reloadAt newer than when this tablet loaded → reload (stays signed in). Waits while someone is typing or has a window open.
     { const loadedAt = Date.now(); let want = 0; const tryGo = () => { if (!want) return; const busy = ui.modal || (document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)); if (busy) return setTimeout(tryGo, 15000); goFresh(); };
+<<<<<<< HEAD
       // reloadAt may be a little in the future (gives the new version time to publish): wait until then and reload once — a tablet that loaded before that time must not reload over and over.
       db.doc('config/app').onSnapshot((d) => { const x = d && d.data ? d.data() : null, at = x ? Number(x.reloadAt) : 0; if (at > loadedAt && !want) { want = 1; setTimeout(tryGo, Math.max(0, at - Date.now()) + 2000); } }); }
     db.collection('pmtimer').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id && !x.done) m[x.id] = x; }); store.pmT = m; if (ui.view === 'pm') rs(); }, () => {});
@@ -1660,6 +1663,28 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       db.collection('cnc').onSnapshot((s) => { s.docs.forEach((d) => { if (d.id === 'materials') { const x = d.data(); store.cncMat = (x && x.rows) || []; } }); }, () => {});
       db.collection('prints').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.pn) m[d.id] = x; }); store.prints = m; rs(); if (ui.modal) renderModal(); }, () => {});
     }, 900);
+=======
+      db.doc('config/app').onSnapshot((d) => { const x = d && d.data ? d.data() : null; if (x && Number(x.reloadAt) > loadedAt) { want = 1; tryGo(); } }); }
+    db.collection('pmtimer').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id && !x.done) m[x.id] = x; }); store.pmT = m; if (ui.view === 'pm') render(); }, () => {});
+    db.collection('pmjournal').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.pmj = m; if (ui.view === 'pm') render(); }, () => {});
+    db.collection('partreq').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.partreq = m; render(); setTimeout(partAuto, 2000); }, () => {});
+    db.collection('credits').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { m[d.id] = d.data(); }); store.credits = m; render(); }, () => {});
+    db.collection('logfix').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.floor && x.t) m[x.floor + ':' + x.t] = x; }); store.logfix = m; Object.keys(store.logsRaw || {}).forEach((k) => { store.logs[k] = applyFix(k, store.logsRaw[k]); }); render(); if (ui.modal && ui.modal.type === 'lateFix') renderModal(); }, () => {});
+    db.collection('logs').onSnapshot((s) => { s.docs.forEach((d) => { const x = d.data(); if (/_x$/.test(d.id)) { (store.logx = store.logx || {})[d.id.slice(0, -2)] = x; return; } (store.logsRaw = store.logsRaw || {})[d.id] = ((x && x.rows) || []).map((r) => (r && r.s == null ? Object.assign({}, r, { s: r.c ? 'C' : 'O' }) : r)); store.logs[d.id] = applyFix(d.id, store.logsRaw[d.id]); if (d.id === 'final' && x) store.finMeta = { at: x.at, by: x.by, file: x.file }; }); render(); }, () => {});
+    db.collection('routings').onSnapshot((s) => { s.docs.forEach((d) => { const r = d.data(); if (!r || !r.id) return; const ex = W.routing(r.id); if (!ex) W.ROUTINGS.push(W.clone(r)); else if (r.stack || r.learned || /^(STK|WO|FL)[:-]/.test(r.id)) { Object.assign(ex, W.clone(r)); if (store.baseOps) delete store.baseOps[r.id]; Object.keys(PR).forEach((k) => { if (PR[k].dwFail) delete PR[k]; }); } }); W.ROUTINGS.forEach((rt) => { if (rt.stack) applyStackDesign(rt); reshape(rt); }); render(); }, () => {});
+    db.collection('oporder').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.rid && Array.isArray(x.order)) m[x.rid] = x; }); store.opOrder = m; reshapeAll(); render(); }, () => {});
+    db.collection('sage').onSnapshot((s) => { s.docs.forEach((d) => { if (d.id === 'bom') { const x = d.data(); store.sageBom = (x && x.bom) || {}; store.sageAt = x && x.at; } }); render(); }, () => {});
+    db.collection('stackdesign').onSnapshot((s) => { store.stackDesigns = s.docs.map((d) => d.data()).filter((x) => x && x.pn); W.ROUTINGS.forEach((rt) => { if (rt.stack) applyStackDesign(rt); }); render(); if (ui.modal) renderModal(); }, () => {});
+    db.collection('cnc').onSnapshot((s) => { s.docs.forEach((d) => { if (d.id === 'materials') { const x = d.data(); store.cncMat = (x && x.rows) || []; } }); }, () => {});
+    db.collection('fixtures').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.path) m[d.id] = x; }); store.fixtures = m; render(); }, () => {});
+    db.collection('prints').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.pn) m[d.id] = x; }); store.prints = m; render(); if (ui.modal) renderModal(); }, () => {});
+    db.collection('redlines').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.redlines = m; applyAreas(); render(); if (ui.modal) renderModal(); }, () => {});
+    db.collection('wip').onSnapshot((sn) => { sn.docs.forEach((d) => { if (d.id === 'count') { const x = d.data(), lnOf = (l) => (/^paint/i.test(l) ? 'powder' : /^wel/i.test(l) ? 'weld' : /^wash/i.test(l) ? 'wash' : /^metal/i.test(l) ? 'metal' : /^lui[sz]/i.test(l) ? 'glue' : ''); store.wip = Object.assign({}, x, { rows: (x.rows || []).map((r) => (Array.isArray(r) ? { t: String(r[0]), pn: String(r[1] || ''), loc: r[2], ln: lnOf(r[2]) } : r)) }); } }); render(); }, () => {});
+    db.collection('pm').onSnapshot((sn) => { const m = {}; sn.docs.forEach((d) => { m[d.id] = d.data(); }); store.pm = m; if (ui.view === 'pm' || ui.view === 'cal' || ui.view === 'home') render(); }, () => {});
+    db.collection('pmlog').onSnapshot((sn) => { const m = {}; sn.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.pmlog = m; if (ui.view === 'pm' || ui.view === 'cal' || ui.view === 'home') render(); }, () => {});
+    db.collection('plan').onSnapshot((sn) => { const m = {}; sn.docs.forEach((d) => { const x = d.data(); if (x && x.items) m[d.id] = x; }); store.plan = m; render(); setTimeout(cncAuto, 1500); }, () => {});
+    db.doc('config/main').onSnapshot((s) => { if (s.exists) { mergeCfg(s.data()); render(); } }, () => {});
+>>>>>>> parent of 84c83d2 (Speed: one screen redraw per frame while data feeds arrive (was 23 at startup), and drawings / logs / Sage BOM / stack designs load right after the first screen shows)
     loadStaff(); setInterval(loadStaff, 60000);
   }
   // Each tablet queues what the person did. Before saving, it takes a short lock on that traveler and reads the latest copy.
