@@ -3054,7 +3054,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     }).catch(() => { store.masterN = -1; });
   }
   const dwN = (r) => (r.stack ? (stackOwn(r) ? stackOwn(r).docs.length : 0) + (stackPrint(r) ? 1 : ((stackRef(r) || {}).docs || []).filter((d) => !/^Traveler/.test(d.t || '')).length) : r.series === 'cnc' ? 1 + (r.cncSetup || []).length : (r.docs || []).length || (r.master && store.dwg && store.dwg[r.dw] ? store.dwg[r.dw].n : 0));
-  const SHARD = {}, PRINTS_ONLY = { '1002698': 'UPLOAD-1002698' }, ALIAS = { '102911': '1002911', 'KWI-4700QT-1': 'KWI-4700', '270-7469': '207-7469', '207-7257': '270-7257' }, PR = {};
+  const SHARD = {}, PRINTS_ONLY = { '1002698': 'UPLOAD-1002698' }, ALIAS = { '102911': '1002911', 'KWI-4700QT-1': 'KWI-4700', '270-7469': '207-7469', '207-7257': '270-7257', '10001104': '1001104', '104563': '1004563', '30000738': '3000738', '3001068-6PF': '3001068-6-PF', '10001983': '1001983', '58-5323': '586-5323' }, PR = {};
   function printsFor(slug) { PR[slug] = PR[slug] || { master: true, docs: [], dw: slug }; ensureDocs(PR[slug]); return PR[slug]; }
   function ensureDocs(r) {
     if (!r || !r.master || r.docs.length || r.dwLoading || !store.dwg || !store.dwg[r.dw]) return;
