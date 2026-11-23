@@ -70,7 +70,20 @@ button{font-family:inherit}
       '<h2>2 · Text size</h2><div class="grid">' + SIZES.map((z) => '<button data-size="' + z[0] + '"' + (size === z[0] ? ' class="on"' : '') + '>' + (size === z[0] ? '✓ ' : '') + z[1] + '<small>' + z[2] + '</small></button>').join('') + '</div>' +
       '<h2>3 · Start</h2><div class="grid"><button data-a="done" class="go"' + (areas.length ? '' : ' disabled') + '>✓ Show on TV<small>' + (areas.length ? areas.map(name).map(esc).join(' · ') : 'Pick at least one area') + '</small></button><button data-a="exit">← Back to the app<small>Leave TV mode</small></button></div></div>';
   }
+  // Around the start of day and after each break and lunch, the TV shows who is back on the tablet
+  const WINS = [['06:40', '07:15'], ['09:30', '09:55'], ['12:15', '12:40'], ['14:45', '15:10']];
+  const inWin = () => { const d = new Date(); if ([0, 6].indexOf(d.getDay()) >= 0) return false; const hm = d.toTimeString().slice(0, 5); return WINS.some((w) => hm >= w[0] && hm < w[1]); };
+  let who = null;
+  async function loadWho() { try { const r = await fetch(URL_ + '/rest/v1/rpc/tv_who', { method: 'POST', headers: { apikey: API, Authorization: 'Bearer ' + API, 'Content-Type': 'application/json' }, body: JSON.stringify({ p_key: key }) }); if (r.ok) who = await r.json(); } catch (e) { /* keep last */ } }
+  function drawWho() { const P = (who && who.people) || [], rs = who && who.restart ? new Date(String(who.restart)).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+    const on = P.filter((p) => p.on), inn = P.filter((p) => p.since && !p.on), out = P.filter((p) => !p.since && p.used14), never = P.filter((p) => !p.since && !p.used14);
+    const box = (L, bg, fg) => L.map((p) => '<span style="display:inline-block;margin:.4vh .3vw;padding:.6vh .8vw;border-radius:.8vh;background:' + bg + ';color:' + fg + ';font-size:2.6vh;font-weight:700">' + esc(p.name) + '</span>').join('');
+    const sec = (t, n, L, bg, fg) => '<section class="p" style="flex:1"><div class="ph"><b style="font-size:3.2vh">' + t + ' (' + n + ')</b></div><div style="overflow:hidden">' + (L.length ? box(L, bg, fg) : '<div class="none">—</div>') + '</div></section>';
+    app.innerHTML = '<div class="tv"><div class="top"><h1 style="font-size:3.6vh">👀 WHO IS ON IT · SINCE ' + esc(rs) + '</h1><span class="clk">' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + '</span></div>' +
+      '<div class="board" style="grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr">' + sec('🟢 On a job', on.length, on, '#1E7B34', '#fff') + sec('🟡 Signed in', inn.length, inn, '#F4D35E', '#13202F') + sec('🔴 Not yet', out.length, out, '#B3261E', '#fff') + '</div>' +
+      (never.length ? '<div style="font-size:1.8vh;color:#5A6676">⚪ Not using the tablet: ' + never.map((p) => esc(p.name)).join(', ') + '</div>' : '') + '</div>'; }
   function draw() {
+    if (key && !setup && inWin() && who) return drawWho();
     if (!key) { app.innerHTML = '<div class="pick"><h1>Walker Priorities TV</h1><p>Open the Walker Traveler app on this TV, tap <b>📺 TV mode</b> on the main menu and pick the areas. No typing needed.</p><div class="grid"><button data-a="exit">Open the Walker Traveler app<small>Then tap 📺 TV mode</small></button></div></div>'; return; }
     if (setup) return drawSetup();
     const [C, R] = layout(areas.length), H = window.innerHeight || 720;
@@ -95,7 +108,7 @@ button{font-family:inherit}
   }
   async function load() {
     if (!key || setup) return draw();
-    try { await Promise.all(areas.map(one)); err = ''; } catch (e) { err = (e && e.message) || 'Reconnecting…'; }
+    try { await Promise.all(areas.map(one).concat(inWin() ? [loadWho()] : [])); err = ''; } catch (e) { err = (e && e.message) || 'Reconnecting…'; }
     draw();
   }
   app.addEventListener('click', (e) => {

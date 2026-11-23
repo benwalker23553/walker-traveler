@@ -1476,7 +1476,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 07:25';
+  const APP_BUILD = '2026-11-23 07:35';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -2029,7 +2029,10 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const order = !ui.user ? ['ops', 'inout', 'work', 'today', 'board', 'pack', 'usage', 'tvmode', 'all', 'asap', 'where', 'pm', 'cal', 'train', 'area']
       : !lead ? (/maint/i.test(ui.user.area || '') ? ['pm', 'ops', 'mine', 'where', 'train', 'area', 'inout'] : ['ops', 'work', 'mine', 'today', 'board', 'cncreq', 'pack', 'orders', 'build', 'usage', 'tvmode', 'all', 'asap', 'hold', 'where', 'pm', 'cal', 'train', 'area', 'inout'])
       : ['work', 'prio', 'usage', 'board', 'orders', 'build', 'cncreq', 'pack', 'tvmode', 'sign', 'ops', 'xl', 'pm', 'cal', 'alerts', 'all', 'asap', 'hold', 'rl', 'fin', 'issue', 'final', 'lib', 'imp', 'where', 'manage', 'train', 'area', 'inout'];
-    return (newBuild ? '<div class="banner warn"><div><b>New version of the app is ready.</b></div><button class="btn primary" id="b-refresh2" data-a="goFresh">⟳ Update now</button></div>' : '') + '<div class="head"><div><h1>Main menu</h1><p class="muted">' + (ui.user ? 'Signed in as ' + esc(ui.user.name.replace(/\.$/, '')) + '.' : 'Not signed in.') + ' This tablet is set to ' + esc(areaName()) + '.</p></div></div><div class="menu">' + order.map((k) => T[k]()).join('') + '</div><p class="small muted" style="text-align:right;margin-top:10px">App version ' + esc(APP_BUILD) + '</p>';
+    const WIN = [['06:40', '07:15'], ['09:30', '09:55'], ['12:15', '12:40'], ['14:45', '15:10']], nd = new Date(), hm0 = nd.toTimeString().slice(0, 5), inW = [0, 6].indexOf(nd.getDay()) < 0 && WIN.some((w) => hm0 >= w[0] && hm0 < w[1]);
+    let wb = ''; if (inW) { whoNowLoad(); if (WN && WN.people) { const P = WN.people, on = P.filter((p) => (p.running || []).length), inn = P.filter((p) => p.since && !(p.running || []).length), out = P.filter((p) => !p.since && p.used14);
+      wb = '<div class="banner ' + (out.length ? 'warn' : 'ok') + '"><div><b>👀 Back on it since ' + esc(new Date(String(WN.restart).replace(' ', 'T')).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })) + ':</b> 🟢 ' + on.length + ' on a job · 🟡 ' + inn.length + ' signed in' + (out.length ? ' · <b>🔴 Not yet: ' + out.map((p) => esc(p.name)).join(', ') + '</b>' : ' · everyone is in') + '</div><button class="btn sm" data-nav="usage">See all</button></div>'; } }
+    return wb + (newBuild ? '<div class="banner warn"><div><b>New version of the app is ready.</b></div><button class="btn primary" id="b-refresh2" data-a="goFresh">⟳ Update now</button></div>' : '') + '<div class="head"><div><h1>Main menu</h1><p class="muted">' + (ui.user ? 'Signed in as ' + esc(ui.user.name.replace(/\.$/, '')) + '.' : 'Not signed in.') + ' This tablet is set to ' + esc(areaName()) + '.</p></div></div><div class="menu">' + order.map((k) => T[k]()).join('') + '</div><p class="small muted" style="text-align:right;margin-top:10px">App version ' + esc(APP_BUILD) + '</p>';
   }
 
   /* ---------- preventive maintenance (PM): pm_equipment (every machine + gage) and pm_work_orders are the record.
@@ -2563,7 +2566,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       Object.keys(best).map((k) => { const L = best[k], b = L[0]; return '<tr><td><b class="mono">' + esc(b.pn) + '</b> · ' + esc(W.station(b.st).name) + '</td><td>' + L.length + '</td><td>' + b.who.map((w) => esc(nm(w))).join(', ') + '</td><td><b>' + Math.round(b.rate) + '</b>' + (L.length > 1 ? ' <span class="small muted">avg ' + Math.round(L.reduce((a, x) => a + x.rate, 0) / L.length) + '</span>' : '') + '</td><td>' + Math.round(b.per) + '</td><td class="small">' + b.combos.map(esc).join('<br>') + '</td></tr>'; }).join('') + '</tbody></table></div></div>'; }
   // 👀 Right now: who has signed in / started a job since the day started or the last break ended — and who has not
   let WN = null, wnAt = 0;
-  function whoNowLoad(force) { if (!window.WT_SB || (!force && Date.now() - wnAt < 55000)) return; wnAt = Date.now(); window.WT_SB.rpc('who_now').then((r) => { if (r.data) { WN = r.data; if (ui.view === 'usage') render(); } }); }
+  function whoNowLoad(force) { if (!window.WT_SB || (!force && Date.now() - wnAt < 55000)) return; wnAt = Date.now(); window.WT_SB.rpc('who_now').then((r) => { if (r.data) { WN = r.data; if (ui.view === 'usage' || ui.view === 'home') render(); } }); }
   setInterval(() => { if (ui.view === 'usage') whoNowLoad(); }, 60000);
   function whoNowHtml(BRD, isFilt) { whoNowLoad(); if (!WN) return ''; if (WN.weekend || !WN.restart) return '';
     const P = (WN.people || []).filter((p) => BRD === 'all' || (BRD === 'filter') === isFilt(p)), hm = (t) => (t ? new Date(String(t).replace(' ', 'T')).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : ''), rs = hm(WN.restart);
