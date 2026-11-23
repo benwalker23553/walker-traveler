@@ -36,18 +36,10 @@
   const subs = {};             // col -> [callbacks]
   const docSubs = {};          // 'col/id' -> [callbacks]
   let channel = null;
-  // Each document is copied and locked once when it arrives (not every document on every change),
-  // and changes that land together (a sync touching 40 jobs) are sent to the screens as one update.
-  const frozen = {};           // col -> Map(id -> frozen copy)
-  const fz = (col, id, data) => { const f = deep(clone(data)); (frozen[col] = frozen[col] || new Map()).set(id, f); return f; };
-  const pend = {};
-  function emit(col) { if (pend[col]) return; pend[col] = setTimeout(() => { pend[col] = 0; emitNow(col); }, 120); }
-  function emitNow(col) {
-    const m = cache[col] || new Map(), F = frozen[col] || new Map();
-    const get = (id) => (F.has(id) ? F.get(id) : fz(col, id, m.get(id)));
-    const docs = [...m.keys()].map((id) => { const v = get(id); return { id, data: () => v }; });
-    (subs[col] || []).forEach((cb) => cb({ docs }));
-    [...m.keys()].forEach((id) => (docSubs[col + '/' + id] || []).forEach((cb) => { const v = get(id); cb({ exists: true, data: () => v }); }));
+  function emit(col) {
+    const m = cache[col] || new Map();
+    (subs[col] || []).forEach((cb) => cb({ docs: [...m.entries()].map(([id, data]) => ({ id, data: () => deep(clone(data)) })) }));
+    [...m.keys()].forEach((id) => (docSubs[col + '/' + id] || []).forEach((cb) => cb({ exists: true, data: () => deep(clone(m.get(id))) })));
   }
   async function loadCol(col) {
     const out = new Map(); let from = 0;
@@ -57,14 +49,13 @@
       data.forEach((r) => out.set(r.id, r.data));
       if (data.length < 1000) break; from += 1000;
     }
-    cache[col] = out; frozen[col] = new Map(); return out;
+    cache[col] = out; return out;
   }
   function live() {
     if (channel) return;
     channel = sb.channel('docs-live').on('postgres_changes', { event: '*', schema: 'public', table: 'docs' }, (p) => {
       const r = p.new && p.new.col ? p.new : null; if (!r) return;
-      if (!subs[r.col] && !Object.keys(docSubs).some((k) => k.indexOf(r.col + '/') === 0)) return;
-      (cache[r.col] = cache[r.col] || new Map()).set(r.id, r.data); if (frozen[r.col]) frozen[r.col].delete(r.id); emit(r.col);
+      (cache[r.col] = cache[r.col] || new Map()).set(r.id, r.data); emit(r.col);
     }).subscribe((st) => { if (st === 'SUBSCRIBED') Object.keys(cache).forEach((c) => loadCol(c).then(() => emit(c)).catch(() => {})); });
     // Catch up after the tablet wakes or Wi-Fi returns
     document.addEventListener('visibilitychange', () => { if (!document.hidden) Object.keys(cache).forEach((c) => loadCol(c).then(() => emit(c)).catch(() => {})); });
@@ -90,7 +81,7 @@
           const data = clone(v);
           const { error } = await sb.from('docs').upsert({ col, id, data }, { onConflict: 'col,id' });
           if (error) throw error;
-          (cache[col] = cache[col] || new Map()).set(id, data); if (frozen[col]) frozen[col].delete(id);
+          (cache[col] = cache[col] || new Map()).set(id, data);
         }
       };
     }
