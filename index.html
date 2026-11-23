@@ -904,7 +904,7 @@ window.WT_ESP = [
   function log(job, ctx, a, d) { job.log.push({ at: ctx.at, by: ctx.u ? ctx.u.id : 'system', a, d: d || '' }); }
   function seg(op, type, ctx) {
     const last = op.seg[op.seg.length - 1];
-    if (last && !last.e) last.e = ctx.at;
+    if (last && !last.e) last.e = Math.max(ctx.at, last.s || 0); // a timer can never end before it started
     if (type) op.seg.push({ t: type, s: ctx.at, by: ctx.u.id });
   }
   const openSeg = (op) => { const l = op.seg[op.seg.length - 1]; return l && !l.e ? l : null; };
@@ -1120,7 +1120,7 @@ window.WT_ESP = [
       case 'endDay': {
         // End of the work day: stop the clock on everything still running. The operator signs in with their PIN to start again.
         let n = 0;
-        job.ops.forEach((o) => { if (['setup', 'first_piece', 'running'].indexOf(o.st) < 0 || o.paused) return; const os = openSeg(o); o.paused = { reason: 'End of shift', at: ctx.at, by: 'system', resume: os ? os.t : 'run', auto: true }; seg(o, 'paused', { at: ctx.at, u: { id: 'system' } }); n++; log(job, { at: ctx.at, u: { id: 'system' } }, 'Clocked out — end of shift', 'Op ' + o.n + ' · sign in with your PIN to start again'); });
+        job.ops.forEach((o) => { if (['setup', 'first_piece', 'running'].indexOf(o.st) < 0 || o.paused) return; const os = openSeg(o); if (os && os.s > ctx.at) return; /* restarted after that shift ended — a late clock-out must not stop it */ o.paused = { reason: 'End of shift', at: ctx.at, by: 'system', resume: os ? os.t : 'run', auto: true }; seg(o, 'paused', { at: ctx.at, u: { id: 'system' } }); n++; log(job, { at: ctx.at, u: { id: 'system' } }, 'Clocked out — end of shift', 'Op ' + o.n + ' · sign in with your PIN to start again'); });
         if (!n) return src; break;
       }
       case 'resume': {
@@ -1502,7 +1502,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 13:50';
+  const APP_BUILD = '2026-11-23 14:00';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
