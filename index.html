@@ -1502,7 +1502,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 14:00';
+  const APP_BUILD = '2026-11-23 14:10';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -2649,7 +2649,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         row('✅', 'Your suggestion gets approved', '+' + v('ideaOkPts', 5) + ' more', 'When Marty and Paul sign it and it goes on every traveler.') +
         row('↔', 'Fix the step order (press, hold and slide)', v('reorderPts', 2) + ' each', 'Puts the steps in the order the work really happens.') +
         row('✎', 'Edit a step or a work order', v('editPts', 2) + ' each', 'Supervisors fixing a traveler for a job.') +
-        row('✍', 'Sign off a change', v('signPts', 1) + ' each', 'Finalizing or approving a suggested change.') +
+        row('✍', 'Sign-offs', v('signPts', 1) + ' each', 'Approving a first article, a closing signature, closing a hold, releasing a traveler, issuing travelers on the Shop Traveler Log, or approving a suggested change.') +
         '') +
       sec('Get better — fair for everyone, not just the fastest', row('⚡', 'Beat the shop pace on a step', '+' + v('pacePts', 1) + ' (or +' + v('paceFastPts', 2) + ' if 25% faster)', 'Your minutes per piece on a step vs the shop’s normal for that same step — needs at least 3 runs of that step on the tablet, and scrap 2% or less. Fast and bad does not count.') +
         row('📈', 'Beat your own average', 'up to +' + v('improveMax', 10), 'Your points per day this period vs your own last 4 weeks. +1 for every 10% better. You compete with yourself, so new and slower people can still win points.') +
