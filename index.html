@@ -1490,7 +1490,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 11:20';
+  const APP_BUILD = '2026-11-23 11:25';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -1618,6 +1618,9 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       store.jobs = m; store.loaded = true; setTimeout(cncAuto, 1500); if (ui.openRlOnLoad && !ui.modal) { ui.openRlOnLoad = false; setTimeout(() => openModal({ type: 'rlList' }), 600); } if (ui.openJobOnLoad && m[ui.openJobOnLoad]) { const oj = ui.openJobOnLoad; ui.openJobOnLoad = null; try { history.replaceState(null, '', location.pathname); } catch (e) { /* ok */ } openJob(oj); } render(); setTimeout(endOfDay, 1500);
     }, () => { if (window.WT_SB) { store.loaded = true; render(); setTimeout(() => { try { location.reload(); } catch (e) { /* ok */ } }, 8000); return; } store.mode = 'local'; loadLocal(); store.loaded = true; render(); });
     db.collection('bphotos').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.bphotos = m; if (ui.view === 'pack') render(); }, () => {});
+    // Office can push an update to every tablet at once: config/app.reloadAt newer than when this tablet loaded → reload (stays signed in). Waits while someone is typing or has a window open.
+    { const loadedAt = Date.now(); let want = 0; const tryGo = () => { if (!want) return; const busy = ui.modal || (document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)); if (busy) return setTimeout(tryGo, 15000); goFresh(); };
+      db.doc('config/app').onSnapshot((d) => { const x = d && d.data ? d.data() : null; if (x && Number(x.reloadAt) > loadedAt) { want = 1; tryGo(); } }); }
     db.collection('pmtimer').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id && !x.done) m[x.id] = x; }); store.pmT = m; if (ui.view === 'pm') render(); }, () => {});
     db.collection('pmjournal').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.pmj = m; if (ui.view === 'pm') render(); }, () => {});
     db.collection('partreq').onSnapshot((s) => { const m = {}; s.docs.forEach((d) => { const x = d.data(); if (x && x.id) m[x.id] = x; }); store.partreq = m; render(); setTimeout(partAuto, 2000); }, () => {});
