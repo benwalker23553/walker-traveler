@@ -1478,7 +1478,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 07:50';
+  const APP_BUILD = '2026-11-23 09:20';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -4272,7 +4272,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   // The step text people should follow: a change for this job only, else the newest approved red-line, else the master traveler
   function liveStep(rid, n, base, j) {
     const ed = j && (j.edits || {})[n]; if (ed) return { text: ed.text, how: 'job', x: ed };
-    const ok = rls().filter((x) => x.rid === rid && x.n === n && x.status === 'approved').sort((a, b) => b.okAt - a.okAt)[0];
+    const ok = rls().filter((x) => x.rid === rid && x.n === n && x.status === 'approved' && !(x.struct && x.struct.kind === 'add' && x.text === x.was)).sort((a, b) => b.okAt - a.okAt)[0];
     return ok ? { text: ok.text, how: 'redline', x: ok } : { text: base, how: 'master' };
   }
   async function saveRl(x) { store.redlines[x.id] = x; render(); if (ui.modal) renderModal(); if (store.mode === 'shared') { try { await store.db.doc('redlines/' + x.id).set(W.clone(x)); } catch (e) { toast('Could not save the red-line. Check the connection.', 'bad'); } } }
@@ -4374,14 +4374,14 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       const sx = x.struct;
       if ((sx.kind === 'merge' || sx.kind === 'del') && sx.drop) ops = ops.filter((o) => String(o.n) !== String(sx.drop));
       if (sx.kind === 'add' && sx.text && !ops.some((o) => String(o.n) === String(sx.n))) {
-        const k = ops.findIndex((o) => String(o.n) === String(x.n)), near = ops[k] || ops[ops.length - 1] || {};
-        ops.splice(k < 0 ? ops.length : k + 1, 0, { n: sx.n, station: sx.station || near.station, mach: [sx.mach || (near.mach || [])[0] || '—'], text: sx.text, added: x.id });
+        const top = String(x.n) === '000', k = top ? -1 : ops.findIndex((o) => String(o.n) === String(x.n)), near = top ? (ops[0] || {}) : (ops[k] || ops[ops.length - 1] || {});
+        ops.splice(top ? 0 : k < 0 ? ops.length : k + 1, 0, { n: sx.n, station: sx.station || near.station, mach: [sx.mach || (near.mach || [])[0] || '—'], text: sx.text, added: x.id });
       }
     });
     rt.ops = ops; applyOpOrder(rt);
   }
   const reshapeAll = () => W.ROUTINGS.forEach(reshape);
-  const structTxt = (x) => { const sx = x && x.struct; if (!sx) return ''; return sx.kind === 'del' ? 'Removes op ' + sx.drop + ' from the traveler' + (sx.why ? ' — ' + sx.why : '') : sx.kind === 'merge' ? 'Combines op ' + x.n + ' and op ' + sx.drop + ' into one step (op ' + sx.drop + ' comes off the traveler)' : sx.kind === 'add' ? 'Splits it: adds a new op ' + sx.n + ' right after op ' + x.n + ': “' + sx.text + '”' : ''; };
+  const structTxt = (x) => { const sx = x && x.struct; if (!sx) return ''; return sx.kind === 'del' ? 'Removes op ' + sx.drop + ' from the traveler' + (sx.why ? ' — ' + sx.why : '') : sx.kind === 'merge' ? 'Combines op ' + x.n + ' and op ' + sx.drop + ' into one step (op ' + sx.drop + ' comes off the traveler)' : sx.kind === 'add' ? (String(x.n) === '000' ? 'Adds a new first step, op ' + sx.n + ': “' + sx.text + '”' : 'Splits it: adds a new op ' + sx.n + ' right after op ' + x.n + ': “' + sx.text + '”') : ''; };
   function applyOpOrder(rt) {
     const x = store.opOrder && store.opOrder[rt.id]; if (!x || !rt.ops) return;
     const pos = {}; x.order.forEach((n, k) => { pos[String(n)] = k; });
