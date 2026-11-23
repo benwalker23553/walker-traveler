@@ -1502,7 +1502,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 11:40';
+  const APP_BUILD = '2026-11-23 12:40';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -2575,6 +2575,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const monthly = k === 'month' || k === 'last', rep = monthly && cfg.noRepeat !== false && D.prevWinner ? D.prevWinner : null;
     const elig = ops.filter((p) => p.score > 0 && p.id !== rep && (p.days || 0) >= Math.min(cfg.minDays || 3, 2)), top = elig[0] || null, sat = rep && ops[0] && ops[0].id === rep ? ops[0] : null;
     const imp = ops.filter((p) => p.improve_pct != null && (p.days || 0) >= (cfg.minDays || 3)).sort((a, b) => b.improve_pct - a.improve_pct)[0];
+    h += raceHtml(ops, winId, BRD, BN, k);
     h += '<div class="banner ' + (top ? 'ok' : 'info') + '"><div>' + (top ? '💵 <b>' + (BRD === 'all' ? 'Top in the whole shop' : k === 'last' ? BN[BRD] + ' winner' : BN[BRD] + ' — leading for the $' + esc(cfg.bonus || 150)) + ': ' + esc(top.name) + '</b> (' + esc(top.area || '') + ') · score ' + top.score + ' · ' + top.days + ' days on the tablet' : 'Nobody has a score yet for this period.') +
       (sat ? '<br><span class="small">' + esc(sat.name) + ' has the top score but won last month — the $' + esc(cfg.bonus || 150) + ' goes to the next person so everyone has a shot. Great job, ' + esc(sat.name.split(' ')[0]) + '.</span>' : '') +
       (imp && imp.improve_pct > 0 ? '<br>📈 <b>Most improved: ' + esc(imp.name) + '</b> · ▲ ' + imp.improve_pct + '% vs their last 4 weeks' : '') + '</div></div>';
@@ -2663,6 +2664,58 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     h += '<div class="panel"><h2>Example</h2><p>Rene punches <b>1,000 blanks</b> (0.5 min each = 500 min = <b>8.3</b> work points), adds <b>2 fixture photos</b> (<b>4</b>), suggests <b>1 change</b> that gets approved (<b>3 + 5 = 8</b>), and uses the tablet <b>5 days</b> (<b>10</b>). Score = <b>30.3</b>.</p></div>';
     return h;
   }
+  /* ---------- 🏁 The race: the leaderboard as a car race. Cars drive in from the start; the leader crosses the checkered line. ---------- */
+  const RACE_COL = ['#E63946', '#FF8A00', '#2EC4B6', '#3A86FF', '#9B5DE5', '#F15BB5', '#00BBF9', '#80B918', '#FFBE0B', '#FB5607'];
+  const raceCar = (col, num) => '<svg viewBox="0 0 120 52" class="rc-svg" aria-hidden="true"><g class="rc-body">' +
+    '<path d="M6 34 Q8 24 22 22 L42 20 Q50 8 66 8 L78 8 Q88 9 94 20 L108 22 Q116 24 116 32 L116 38 L6 38 Z" fill="' + col + '" stroke="#111" stroke-width="2"/>' +
+    '<path d="M50 20 Q56 11 66 11 L76 11 Q84 12 88 20 Z" fill="#BDE0FE" stroke="#111" stroke-width="1.5"/>' +
+    '<circle cx="68" cy="17" r="6" fill="#fff" stroke="#111" stroke-width="1.5"/><rect x="66" y="14" width="7" height="3" rx="1" fill="#222"/>' +
+    '<rect x="2" y="18" width="12" height="5" rx="1" fill="#111"/><rect x="7" y="22" width="3" height="10" fill="#111"/>' +
+    '<circle cx="32" cy="29" r="8" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="32" y="33" text-anchor="middle" font-size="11" font-weight="900" font-family="Arial" fill="#111">' + num + '</text>' +
+    '<path d="M96 26 L114 28" stroke="#fff" stroke-width="2" opacity=".7"/></g>' +
+    '<g class="rc-wheel" style="transform-origin:26px 40px"><circle cx="26" cy="40" r="10" fill="#222"/><circle cx="26" cy="40" r="4" fill="#ccc"/><path d="M26 31 L26 49 M17 40 L35 40" stroke="#888" stroke-width="2"/></g>' +
+    '<g class="rc-wheel" style="transform-origin:94px 40px"><circle cx="94" cy="40" r="10" fill="#222"/><circle cx="94" cy="40" r="4" fill="#ccc"/><path d="M94 31 L94 49 M85 40 L103 40" stroke="#888" stroke-width="2"/></g></svg>';
+  const RACE_CSS = '<style id="race-css">.race{background:linear-gradient(180deg,#0b1d33,#13304f);border-radius:14px;padding:12px 12px 8px;margin:0 0 12px;color:#fff;position:relative;overflow:hidden}' +
+    '.race h2{color:#fff;margin:0 0 4px;font-size:1.35rem;letter-spacing:.5px}.race .rc-sub{color:#9fc3ea;font-size:.85rem;margin:0 0 8px}' +
+    '.rc-track{position:relative;background:#3a3f45;border-radius:10px;border:3px solid #fff;padding:4px 0;overflow:hidden}' +
+    '.rc-fin{position:absolute;top:0;bottom:0;right:0;width:26px;background-image:linear-gradient(45deg,#111 25%,transparent 25%,transparent 75%,#111 75%),linear-gradient(45deg,#111 25%,#fff 25%,#fff 75%,#111 75%);background-size:13px 13px;background-position:0 0,6.5px 6.5px;z-index:1}' +
+    '.rc-start{position:absolute;top:0;bottom:0;left:52px;width:4px;background:#fff;opacity:.6}' +
+    '.rc-lane{position:relative;height:62px;border-bottom:2px dashed rgba(255,255,255,.35)}.rc-lane:last-child{border-bottom:0}.rc-lane:nth-child(odd){background:rgba(255,255,255,.04)}' +
+    '.rc-pos{position:absolute;left:4px;top:50%;transform:translateY(-50%);width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:1.1rem;color:#111;border:3px solid #fff;z-index:2}' +
+    '.rc-car{position:absolute;top:3px;left:calc(58px + (100% - 58px - 26px - 118px) * var(--x));width:118px;z-index:3}.rc-svg{width:118px;height:52px;display:block;filter:drop-shadow(0 3px 2px rgba(0,0,0,.5))}' +
+    '.rc-tag{position:absolute;right:100%;top:8px;margin-right:6px;white-space:nowrap;background:rgba(0,0,0,.65);padding:2px 8px;border-radius:12px;font-size:.85rem;font-weight:700;border:2px solid var(--c)}.rc-tag small{color:#ffd166;margin-left:4px}' +
+    '.rc-car.near .rc-tag{right:auto;left:100%;margin:0 0 0 6px}' +
+    '.race.go .rc-car{animation:rcDrive 3.2s cubic-bezier(.25,.8,.3,1) both;animation-delay:var(--d)}.race.go .rc-wheel{animation:rcSpin .25s linear 13}' +
+    '.race.go .rc-body{animation:rcBob .18s ease-in-out 17 alternate}' +
+    '@keyframes rcDrive{from{left:6px}}@keyframes rcSpin{to{transform:rotate(360deg)}}@keyframes rcBob{to{transform:translateY(-1.5px)}}' +
+    '.rc-puff{position:absolute;left:-14px;top:26px;width:12px;height:12px;border-radius:50%;background:#ddd;opacity:0}.race.go .rc-puff{animation:rcPuff .5s ease-out 6;animation-delay:var(--d)}@keyframes rcPuff{0%{opacity:.8;transform:scale(.4)}100%{opacity:0;transform:translateX(-26px) scale(1.6)}}' +
+    '.rc-lead .rc-svg{filter:drop-shadow(0 0 8px #ffd166) drop-shadow(0 3px 2px rgba(0,0,0,.5))}.rc-flag{position:absolute;right:-4px;top:-22px;font-size:1.6rem;transform-origin:bottom left;z-index:4}.race.go .rc-flag{animation:rcWave .4s ease-in-out 10 alternate 3s}@keyframes rcWave{from{transform:rotate(-15deg)}to{transform:rotate(15deg)}}' +
+    '.rc-conf{position:absolute;top:-10px;width:9px;height:14px;opacity:0;z-index:5;border-radius:2px}.race.go .rc-conf{animation:rcConf 2.4s ease-in forwards}@keyframes rcConf{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:0;transform:translateY(520px) rotate(720deg)}}' +
+    '.rc-banner{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%) scale(0);background:#FFBE0B;color:#111;font-weight:900;font-size:1.6rem;padding:10px 22px;border-radius:12px;border:4px solid #111;z-index:6;white-space:nowrap;box-shadow:0 6px 0 #111}.race.go .rc-banner{animation:rcBan 2.6s ease-out 3.1s both}@keyframes rcBan{0%{transform:translate(-50%,-50%) scale(0) rotate(-8deg)}15%{transform:translate(-50%,-50%) scale(1.15) rotate(3deg)}25%,80%{transform:translate(-50%,-50%) scale(1) rotate(0)}100%{transform:translate(-50%,-50%) scale(0);opacity:0}}' +
+    '.rc-tick{margin-top:8px;background:#FFBE0B;color:#111;border-radius:8px;overflow:hidden;white-space:nowrap;font-weight:700;padding:6px 0}.rc-tick span{display:inline-block;padding-left:100%;animation:rcTick 38s linear infinite}@keyframes rcTick{to{transform:translateX(-100%)}}' +
+    '.pod{display:flex;gap:10px;align-items:flex-end;justify-content:center;margin:0 0 12px;flex-wrap:wrap}.pod div{border-radius:12px 12px 4px 4px;color:#111;text-align:center;padding:10px 12px;min-width:150px;border:3px solid #111;box-shadow:0 5px 0 #111}.pod b{display:block;font-size:1.15rem}.pod .m{font-size:2.2rem;line-height:1}' +
+    '.pod .p1{background:linear-gradient(#FFE066,#FFBE0B);min-height:150px}.pod .p2{background:linear-gradient(#F1F3F5,#ADB5BD);min-height:120px}.pod .p3{background:linear-gradient(#FFC9A3,#E8955A);min-height:100px}' +
+    '@media (max-width:700px){.rc-car{width:84px;left:calc(50px + (100% - 50px - 26px - 84px) * var(--x))}.rc-svg{width:84px;height:38px}.rc-lane{height:50px}.rc-pos{width:34px;height:34px;font-size:.95rem}.rc-tag{font-size:.75rem}}' +
+    '@media (prefers-reduced-motion:reduce){.race.go *{animation:none!important}}</style>';
+  function raceHtml(ops, winId, BRD, BN, k) {
+    const R = ops.filter((p) => p.score > 0).slice(0, 8); if (!R.length) return '';
+    const key = BRD + '|' + k + '|' + R.map((p) => p.id + ':' + p.score).join(','), go = true;
+    if (ui.raceEl && ui.raceEl.dataset.key === key) { queueMicrotask(() => { const sl = document.getElementById('race-slot'); if (sl) sl.replaceWith(ui.raceEl); }); return '<div id="race-slot"></div>' + raceHtml.pod; }
+    const max = R[0].score || 1, lead = R[0], me = ui.user && ui.user.id;
+    const lanes = R.map((p, i) => { const col = RACE_COL[i % RACE_COL.length], x = Math.max(0.04, Math.min(1, p.score / max)), first = String(p.name || '').split(/[\s.]+/)[0];
+      return '<div class="rc-lane"><span class="rc-pos" style="background:' + col + '">' + (i + 1) + '</span><div class="rc-car' + (i === 0 ? ' rc-lead' : '') + (x < 0.45 ? ' near' : '') + '" style="--x:' + x.toFixed(3) + ';--d:' + (i * 0.12).toFixed(2) + 's;--c:' + col + '">' +
+        '<span class="rc-tag">' + (p.id === me ? '⭐ ' : '') + esc(first) + '<small>' + p.score + '</small></span><span class="rc-puff"></span>' + raceCar(col, i + 1) + (i === 0 ? '<span class="rc-flag">🏁</span>' : '') + '</div></div>'; }).join('');
+    const conf = go ? Array.from({ length: 36 }, (_, i) => '<i class="rc-conf" style="left:' + (40 + Math.random() * 58).toFixed(1) + '%;background:' + RACE_COL[i % RACE_COL.length] + ';animation-delay:' + (3 + Math.random() * 1.2).toFixed(2) + 's"></i>').join('') : '';
+    const T = []; for (let i = 1; i < R.length; i++) { const g = Math.round((R[i - 1].score - R[i].score) * 10) / 10; T.push(g <= 3 ? '🔥 ' + R[i].name + ' is right on ' + R[i - 1].name + '\'s bumper — only ' + g + ' pts back!' : '🏎 ' + R[i].name + ' needs ' + g + ' pts to pass ' + R[i - 1].name); }
+    T.unshift('🏆 ' + lead.name + ' leads the ' + BN[BRD].replace(/^\S+ /, '') + ' race with ' + lead.score + ' pts'); if (winId) T.push('💵 $' + esc((ui.us && ui.us.data && ui.us.data.cfg && ui.us.data.cfg.bonus) || 150) + ' to the winner at the end of the month — every job on the tablet moves your car!');
+    const medal = ['🥇', '🥈', '🥉'], pd = [1, 0, 2].filter((i) => R[i]).map((i) => '<div class="p' + (i + 1) + '"><span class="m">' + medal[i] + '</span><b>' + esc(R[i].name) + '</b><span class="small">' + esc(R[i].area || '') + '</span><br><b style="font-size:1.5rem">' + R[i].score + '</b><span class="small">points</span></div>').join('');
+    if (!document.getElementById('race-css')) document.head.insertAdjacentHTML('beforeend', RACE_CSS);
+    const html = '<div class="race' + (go ? ' go' : '') + '" data-key="' + esc(key) + '"><div class="row" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div><h2>🏁 ' + esc(BN[BRD]) + ' Grand Prix</h2><p class="rc-sub">Every piece, note and photo on the tablet moves your car. First across the line wins.</p></div><button class="btn sm" data-a="raceAgain">🔁 Replay race</button></div>' +
+      '<div class="rc-track"><span class="rc-start"></span><span class="rc-fin"></span>' + lanes + '</div>' + conf + (go ? '<div class="rc-banner">🏁 ' + esc(String(lead.name).split(/[\s.]+/)[0]) + ' takes the lead!</div>' : '') +
+      '<div class="rc-tick"><span>' + T.map(esc).join('   ·   ') + '</span></div></div>';
+    raceHtml.pod = '<div class="pod">' + pd + '</div>';
+    queueMicrotask(() => { const sl = document.getElementById('race-slot'); if (!sl) return; const t = document.createElement('div'); t.innerHTML = html; ui.raceEl = t.firstElementChild; sl.replaceWith(ui.raceEl); });
+    return '<div id="race-slot"></div>' + raceHtml.pod; }
   function printWriteUp(p, k) { const [f, t] = usageRange(k), E = (v) => esc(v == null ? '' : v);
     const html = '<!doctype html><html><head><meta charset="utf-8"><title>Write-up ' + E(p.name) + '</title><style>body{font:14px Arial;margin:30px;max-width:780px}h1{font-size:20px}.l{border-bottom:1px solid #000;height:26px}td{padding:6px;border:1px solid #000}table{border-collapse:collapse;width:100%}@media print{button{display:none}}</style></head><body><button onclick="window.print()">Print</button><h1>WALKER ENGINEERING · EMPLOYEE WRITE-UP / WARNING NOTICE</h1>' +
       '<table><tr><td>Employee</td><td><b>' + E(p.name) + '</b></td><td>Area</td><td>' + E(p.area) + '</td></tr><tr><td>Date</td><td>' + E(fDay(Date.now())) + '</td><td>Period reviewed</td><td>' + E(f) + ' to ' + E(t) + '</td></tr></table>' +
@@ -4631,6 +4684,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     }
     if (d.a === 'setRisk' || d.a === 'setArea') { if (!ui.user || !W.isApprover(ui.user)) return toast('A supervisor or manager makes this change.', 'bad'); const rt = W.routing(d.rid), o = rt.ops.find((q) => String(q.n) === String(d.n)); return openModal({ type: d.a, rid: rt.id, n: o.n, v: d.a === 'setRisk' ? rk(rt, o) : o.station }); }
     if (d.a === 'mEdit') { if (!ui.user || !W.isApprover(ui.user)) return toast('A supervisor or manager makes corrections.', 'bad'); const rt = W.routing(d.rid), o = rt.ops.find((x) => String(x.n) === String(d.n)), n = o ? o.n : d.n, was = d.fld ? hdr(rt, d.fld) : liveStep(rt.id, n, o ? o.text : '', null).text; return openModal({ type: 'mEdit', rid: rt.id, n, was, text: was, reason: '', note: '' }); }
+    if (d.a === 'raceAgain') { ui.raceEl = null; return render(); }
     if (d.a === 'dkTab') { (ui.dk = ui.dk || {}).tab = d.v; ui.dk.cur = ''; return render(); }
     if (d.a === 'dkNew') return dkNew(d.v);
     if (d.a === 'dkOpen') { (ui.dk = ui.dk || {}).cur = d.id; return render(); }
