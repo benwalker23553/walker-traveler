@@ -889,7 +889,9 @@ window.WT_ESP = [
   const isApprover = (u) => !!u && (u.role === 'approver' || u.role === 'manager');
   const canDispose = (u) => isApprover(u) || (!!u && u.role === 'qa');
   const sideOf = (st) => (STATIONS.find((s) => s.id === st) || {}).floor || 'filter';
-  const covers = (u, st) => !u.side || u.side === sideOf(st);
+  // Extra sides a supervisor may sign for (Ricky signs/closes metal travelers too — Ben, Nov 23)
+  const EXTRA_SIDES = { ricky: ['metal'] };
+  const covers = (u, st) => !u.side || u.side === sideOf(st) || (EXTRA_SIDES[u.id] || []).indexOf(sideOf(st)) >= 0;
   function fail(msg) { const e = new Error(msg); e.user = true; throw e; }
   function log(job, ctx, a, d) { job.log.push({ at: ctx.at, by: ctx.u ? ctx.u.id : 'system', a, d: d || '' }); }
   function seg(op, type, ctx) {
@@ -1476,7 +1478,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 07:45';
+  const APP_BUILD = '2026-11-23 07:50';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
