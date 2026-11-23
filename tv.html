@@ -25,7 +25,7 @@ button{font-family:inherit}
 .s{font-size:var(--sb);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .s b{color:#13202F}
 .tag{display:inline-block;background:var(--ok);color:#fff;border-radius:.5vh;padding:0 .5vw;font-size:calc(var(--sb)*.95);margin-right:.4vw;font-family:system-ui,sans-serif;vertical-align:middle}
-.tag.fr{background:#B45309}.tag.at{background:#5A6676}.i.away{opacity:.6}
+.tag.fr{background:#B45309}.tag.at{background:#5A6676}.i.away{opacity:.6}.tag.hr{background:#1E7B34}.tag.cm{background:#1D4ED8}.i.fl .n{opacity:.55}
 .more{font-size:var(--sb);color:var(--muted);padding-top:.3vh}
 .none{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:var(--tt);text-align:center}
 .f{display:flex;justify-content:flex-end;gap:.6vw}
@@ -91,7 +91,7 @@ button{font-family:inherit}
     const tt = base, sb = base * 0.72, hd = base * 1.25;
         const panels = areas.map((id) => { const o = openOf(id), d = doneN(id), show = Math.min(o.length, 25);
       return '<section class="p"><div class="ph"><b>' + esc(name(id)) + '</b><span>' + setLine(id) + '</span></div><div class="rows">' +
-        (!data[id] ? '<div class="none">Loading…</div>' : o.length ? o.slice(0, show).map((x, k) => '<div class="i' + (k ? '' : ' now') + (x.at ? ' away' : '') + '"><div class="n">' + (k + 1) + '</div><div><div class="t">' + (k ? '' : '<span class="tag">NOW</span>') + (x.from ? '<span class="tag fr">FROM ' + esc(name(x.from).toUpperCase()) + ' #' + esc(x.fromRank) + '</span>' : '') + (x.at ? '<span class="tag at">NOW AT ' + esc(name(x.at).toUpperCase()) + '</span>' : '') + esc(x.title) + '</div><div class="s">' + esc(x.sub || '') + (x.who ? ' · <b>' + esc(x.who) + '</b>' : '') + (x.note ? ' · Note: ' + esc(x.note) : '') + '</div></div></div>').join('') +
+        (!data[id] ? '<div class="none">Loading…</div>' : o.length ? o.slice(0, show).map((x, k) => '<div class="i' + (k || x.flow ? '' : ' now') + (x.at ? ' away' : '') + (x.flow ? ' fl' : '') + '"><div class="n">' + (k + 1) + '</div><div><div class="t">' + (k || x.flow ? '' : '<span class="tag">NOW</span>') + (x.flow === 'here' ? '<span class="tag hr">' + (/running|setup|first_piece/.test(x.stat || '') ? '● WORKING' : 'IN AREA') + '</span>' : '') + (x.flow === 'coming' ? '<span class="tag cm">COMING FROM ' + esc(name(x.src).toUpperCase()) + '</span>' : '') + (x.from ? '<span class="tag fr">FROM ' + esc(name(x.from).toUpperCase()) + ' #' + esc(x.fromRank) + '</span>' : '') + (x.at ? '<span class="tag at">NOW AT ' + esc(name(x.at).toUpperCase()) + '</span>' : '') + esc(x.title) + '</div><div class="s">' + esc(x.sub || '') + (x.who ? ' · <b>' + esc(x.who) + '</b>' : '') + (x.note ? ' · Note: ' + esc(x.note) : '') + '</div></div></div>').join('') +
           '<div class="more" data-total="' + o.length + '" data-done="' + d + '"></div>' : '<div class="none">No priorities set</div>') + '</div></section>'; }).join('');
     app.innerHTML = '<div class="tv" style="--tt:' + tt.toFixed(2) + 'vh;--sb:' + sb.toFixed(2) + 'vh;--hd:' + hd.toFixed(2) + 'vh"><div class="top"><h1>WALKER PRIORITIES</h1>' + (err ? '<span class="err">' + esc(err) + '</span>' : '') + '<span class="clk">' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + '</span></div>' +
       '<div class="board" style="grid-template-columns:repeat(' + C + ',1fr);grid-template-rows:repeat(' + R + ',1fr)">' + panels + '</div>' +

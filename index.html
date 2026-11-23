@@ -1502,7 +1502,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 14:20';
+  const APP_BUILD = '2026-11-23 14:30';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -3142,7 +3142,9 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (/\bCNC\b|HAAS/.test(L)) return 'cnc';
     if (/MACHINE SHOP|COLD SAW|LATHE|MILL/.test(L)) return 'machine';
     if (/GLUE/.test(L)) return 'glue';
-    if (/CLEAN/.test(L)) return 'metal';
+    // flow: metal → wash → weld / glue / paint → final. Cleaning station, degreasing and parts washer steps are Wash; glue, adhesive and silencing material are Glue / Assembly.
+    if (floor !== 'filter' && !/\b(DRILL|PUNCH|BEAD)\b/.test(T) && (/CLEAN|DEGREAS|WASHER/.test(L) || (!L && /\b(DEGREASE|ULTRASONIC|PARTS WASHER|WASH (ALL )?PARTS|CLEAN AND RINSE)\b/.test(T)))) return 'wash';
+    if (floor !== 'filter' && !/WELD|POWDER|PAINT/.test(L) && !/\b(DRILL|PUNCH|BEAD)\b/.test(T) && /\b(GLUE|ADHESIVE|SILENCING MATERIAL|SILENCER MATERIAL)\b/.test(T)) return 'glue';
     if (/FINAL ASSY|FINAL ASSEMBLY/.test(L)) return floor === 'filter' ? 'qc' : 'pack';
     if (floor === 'filter') return /PLEAT/.test(key(kind)) || /MACHINE ?# ?(528|336)/.test(L) ? 'pleat' : 'pot';
     return 'metal';
