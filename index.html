@@ -1071,6 +1071,18 @@ window.WT_ESP = [
         log(job, ctx, p.trans ? 'Switched from paper — started on the tablet at op ' + (job.ops[up + 1] ? job.ops[up + 1].n : '—') : p.exc ? 'Exception — earlier steps not on the tablet' : 'Steps recorded off the tablet', 'Op ' + job.ops[i0].n + (up > i0 ? ' – ' + job.ops[up].n : '') + ' done' + (who ? ' by ' + who : '') + ' · ' + good + ' good' + (note ? ' · ' + note : '') + (nx ? ' · now at op ' + nx.n : ' · traveler closed'));
         break;
       }
+      case 'noBox': {
+        // OEM packaging step (PACKAGE FOR SHIPMENT): this batch is not being boxed — e.g. it goes unboxed to stock for our own airsep assemblies. Anyone signed in can choose it, with a reason.
+        op = job.ops[i]; if (!op) fail('Pick a step.'); if (!ctx.u) fail('Sign in first.');
+        { const rt = routing(job.rid), ro = rt && rt.ops && rt.ops.find((o) => o.n === op.n); if (!ro || !/^PACKAGE FOR SHIPMENT/.test(String(ro.text || ''))) fail('Only the packaging step can be bypassed here.'); }
+        if (['ready', 'setup', 'setup_done'].indexOf(op.st) < 0 && !(op.paused)) fail(op.st === 'pending' ? 'Parts have not reached this step yet.' : 'Work already started on this step. Finish it there.');
+        if (openHolds(job, op.n).length) fail('Close the hold first.');
+        const why = String(p.reason || '').trim() || 'Not boxed — unboxed to finished stock for assemblies';
+        (op.seg || []).forEach((sg) => { if (sg.e == null) sg.e = ctx.at; }); op.paused = null;
+        op.skipped = { by: ctx.u.id, at: ctx.at, reason: why, ask: ctx.u.id, noBox: true }; op.good = op.qtyIn - (op.scrap || 0); op.short = 0; op.st = 'done'; op.closedAt = ctx.at;
+        { const nx = job.ops[i + 1]; if (nx) { nx.qtyIn = op.good; if (nx.st === 'pending') nx.st = 'ready'; } else if (job.ops.every((o) => ['done', 'closed', 'skipped'].indexOf(o.st) >= 0)) { job.st = 'complete'; job.doneAt = ctx.at; } }
+        log(job, ctx, 'Not boxed', 'Op ' + op.n + ' bypassed · ' + op.good + ' pcs · ' + why); break;
+      }
       case 'skip': {
         // Skip a step that is not needed on this job. Only before work starts on it, and only with a supervisor's PIN.
         op = job.ops[i]; if (!op) fail('Pick a step.');
@@ -1490,7 +1502,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 11:25';
+  const APP_BUILD = '2026-11-23 11:40';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -3252,7 +3264,8 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     { const i0y = j.ops.findIndex((o) => ['done', 'closed', 'skipped'].indexOf(o.st) < 0); if (ui.user && i0y >= 0 && i <= i0y && W.transOk(j) && j.ops.slice(i0y + 1).some((o) => o.st === 'pending') && sec.indexOf('transPick') < 0 && main.indexOf('transGo') < 0)
       sec += '<button class="btn" data-a="transPick" data-job="' + id + '">📄 Paper traveler is further along? Start from paper at my step</button>'; }
     { const ro = rop(W.routing(j.rid), j, i); if (ro && /^PACKAGE FOR SHIPMENT/.test(String(ro.text || ''))) { const n0 = Number(op.qtyIn) || Number(j.qty) || 0, keep = Math.ceil(n0 * UNBOX_PCT / 100);
-      msg = '<div class="banner info" style="margin:0 0 8px"><div><b>📦 Box ' + (n0 - keep) + ' · leave ' + keep + ' unboxed</b> (' + UNBOX_PCT + '% of ' + n0 + ') — bag them and send to finished stock for airsep assemblies. Write the batch code(s) on the pallet label.</div></div>' + msg; } }
+      msg = '<div class="banner info" style="margin:0 0 8px"><div><b>📦 Box ' + (n0 - keep) + ' · leave ' + keep + ' unboxed</b> (' + UNBOX_PCT + '% of ' + n0 + ') — bag them and send to finished stock for airsep assemblies. Write the batch code(s) on the pallet label. <b>Not boxing this batch?</b> Tap 🚫 Not boxing.</div></div>' + msg;
+      if (ui.user && ['ready', 'setup', 'setup_done'].indexOf(op.st) >= 0 || (ui.user && op.paused)) sec += '<button class="btn warn" data-m="noBox" data-job="' + id + '" data-i="' + i + '">🚫 Not boxing — all go unboxed to stock</button>'; } }
     return '<div class="actionbar"><div class="msg">' + msg + '</div><div class="row">' + main + '</div><div class="row">' + sec + '</div></div>' + learnedHtml(j, i) + crewHtml(j, i);
   }
   // Supplier details appear when the reason is a bad supplier part
@@ -3836,6 +3849,8 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
           '<label>Description<input id="we-name" value="' + esc(j.name || rt.name || '') + '"></label><div class="grid2"><label>Due date<input id="we-due" type="date" value="' + esc(j.due ? ymd(j.due) : '') + '"></label><label>Customer<input id="we-cust" value="' + esc(rt.customer && rt.customer !== 'N/A' ? rt.customer : '') + '"></label></div>' +
           '<h3>Steps</h3>' + rt.ops.map((o, k) => '<label>' + esc(o.n) + ' · ' + esc(W.station(o.station).name) + '<textarea class="we-st" data-k="' + k + '" rows="2">' + esc(o.text || '') + '</textarea></label>').join('') +
           '<label>Why are you changing it?<input id="we-why" placeholder="Example: was 6\" PL, should be 6.5\" PL"></label>' + foot('Save changes'); break; }
+      case 'noBox': { const j = store.jobs[m.job], o = j.ops[m.i];
+        h = '<h2>🚫 Not boxing · Shop Order ' + esc(j.so) + '</h2><p>All <b>' + esc(o.qtyIn) + '</b> pcs stay bagged and go to finished stock unboxed. The packaging step is marked <b>bypassed — not boxed</b> with your name.</p><div class="tiles">' + ['For airsep assemblies', 'Stock — no order to ship yet', 'Customer wants them unboxed'].map((r) => '<button class="btn ' + (m.reason === r ? 'sel' : '') + '" data-set="reason" data-v="' + esc(r) + '"><span>' + r + '</span></button>').join('') + '</div>' + inp('reason', 'Or say why', m) + foot('🚫 Not boxing', 'warn'); break; }
       case 'prEta': { const x = (store.partreq || {})[m.id] || {}, sh = Math.max(0, (Number(x.qty) || 0) - (Number(m.have) || 0));
         h = '<h2>⏳ CNC parts — not on hand · ' + esc(x.pn) + '</h2><p>Asked for <b>' + esc(x.qty) + '</b> for traveler #' + esc(x.so) + ' (' + esc(x.ppn || '') + '). Tell them what you have now and when the rest will be ready. They get a message, and so does Paul so he can set the priority.</p>' +
           '<div class="row" style="gap:10px">' + inp('have', 'How many you have now', m, 'inputmode="numeric"') + '<label>Ready by<input type="date" data-f="date" id="m-date" value="' + esc(m.date || '') + '"></label></div><p><b>Short: ' + sh + '</b></p>' + inp('note', 'Note (why / what is in front of it)', m) +
@@ -4099,6 +4114,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
           const doc = { pn, rev, path, at: Date.now(), by: ui.user.id, src: 'app', name: f.name, hist }; await store.db.doc('prints/' + key).set(doc); (store.prints = store.prints || {})[key] = doc; closeModal(); render(); toast(pn + ' rev ' + rev + ' is now the current print on every tablet'); }
           catch (e) { toast('Upload failed: ' + (e.message || e), 'bad'); } })(); return; }
       case 'ship': ok = run(m.job, 'shipInfo', { po: m.po, sales: m.sales }); if (ok) toast('Shipping release saved'); break;
+      case 'noBox': { if (!run(m.job, 'noBox', { i: Number(m.i), reason: 'Not boxed — ' + (m.reason || 'for airsep assemblies') })) return; closeModal(); toast('Bypassed — not boxed. Parts go to finished stock unboxed.'); return render(); }
       case 'prEta': { const x = (store.partreq || {})[m.id]; if (!x) return closeModal(); if (!m.date) return toast('Pick the date they will be ready.', 'bad');
         const have = Math.max(0, Number(m.have) || 0), sh = Math.max(0, (Number(x.qty) || 0) - have), y = Object.assign({}, x, { eta: { have, short: sh, date: m.date, note: String(m.note || '').trim(), paul: !!m.paul, by: ui.user.id, at: Date.now() } }); savePR(y);
         const msg = y.pn + ' for #' + y.so + ': ' + (have ? have + ' now, ' : '') + 'short ' + sh + ' · ready by ' + fDue(m.date) + (y.eta.note ? ' · ' + y.eta.note : '');
