@@ -887,6 +887,8 @@ window.WT_ESP = [
   const routing = (id) => ROUTINGS.find((r) => r.id === id);
   const station = (id) => STATIONS.find((s) => s.id === id) || { id, name: id, kind: 'store' };
   const isApprover = (u) => !!u && (u.role === 'approver' || u.role === 'manager');
+  // A traveler that has never been worked on a tablet (paper traveler from before the switch-over)
+  const paperFresh = (job) => !!job && job.ops.every((o) => ['ready', 'pending'].indexOf(o.st) >= 0 && !(o.seg && o.seg.length) && !o.setup && !o.paper) && !(job.lots || []).length;
   const canDispose = (u) => isApprover(u) || (!!u && u.role === 'qa');
   const sideOf = (st) => (STATIONS.find((s) => s.id === st) || {}).floor || 'filter';
   // Extra sides a supervisor may sign for (Ricky signs/closes metal travelers too — Ben, Nov 23)
@@ -1043,7 +1045,10 @@ window.WT_ESP = [
         op.st = 'first_piece'; seg(op, 'first_piece', ctx); log(job, ctx, 'First article started', 'Op ' + op.n); break;
       case 'catchUp': {
         // Steps done in an area that is not on the tablets yet (e.g. wash, welding): a supervisor records them so the traveler moves on / closes
-        if (!ctx.u || (!isApprover(ctx.u) && !p.exc)) fail('A supervisor records steps done off the tablet.');
+        // p.trans = switch-over from paper: the traveler has never been worked on a tablet; anyone can start it at their step (no points lost)
+        if (p.trans && !paperFresh(job)) fail('This traveler is already being worked on the tablets. Use the exception instead.');
+        if (p.trans && !String(p.note || '').trim()) fail('Write a short note about the paper traveler.');
+        if (!ctx.u || (!isApprover(ctx.u) && !p.exc && !p.trans)) fail('A supervisor records steps done off the tablet.');
         const i0 = job.ops.findIndex((o) => ['done', 'closed', 'skipped'].indexOf(o.st) < 0), up = Number(p.upTo), good = Number(p.good);
         if (i0 < 0) fail('Every step is already done.');
         if (!(up >= i0 && up < job.ops.length)) fail('Pick the last step that was done.');
@@ -1052,11 +1057,11 @@ window.WT_ESP = [
           if (['ready', 'pending'].indexOf(o.st) < 0) fail('Op ' + o.n + ' is being worked on the tablet right now (' + o.st + '). Finish it there first.');
           if (openHolds(job, o.n).length) fail('Op ' + o.n + ' has an open hold. Close it first.'); }
         const who = String(p.who || '').trim(), note = String(p.note || '').trim();
-        for (let k = i0; k <= up; k++) { const o = job.ops[k]; o.st = 'done'; o.paper = true; o.offTablet = { by: ctx.u.id, at: ctx.at, who, note, good, exc: !!p.exc }; o.closedAt = ctx.at; o.qtyIn = k === i0 ? o.qtyIn : 0; if (k === up) o.good = good; }
+        for (let k = i0; k <= up; k++) { const o = job.ops[k]; o.st = 'done'; o.paper = true; o.offTablet = { by: ctx.u.id, at: ctx.at, who, note, good, exc: !!p.exc, trans: !!p.trans }; o.closedAt = ctx.at; o.qtyIn = k === i0 ? o.qtyIn : 0; if (k === up) o.good = good; }
         const nx = job.ops[up + 1];
         if (nx) { nx.qtyIn = good; nx.st = 'ready'; }
         else { job.st = 'complete'; job.doneAt = ctx.at; }
-        log(job, ctx, p.exc ? 'Exception — earlier steps not on the tablet' : 'Steps recorded off the tablet', 'Op ' + job.ops[i0].n + (up > i0 ? ' – ' + job.ops[up].n : '') + ' done' + (who ? ' by ' + who : '') + ' · ' + good + ' good' + (note ? ' · ' + note : '') + (nx ? ' · now at op ' + nx.n : ' · traveler closed'));
+        log(job, ctx, p.trans ? 'Switched from paper — started on the tablet at op ' + (job.ops[up + 1] ? job.ops[up + 1].n : '—') : p.exc ? 'Exception — earlier steps not on the tablet' : 'Steps recorded off the tablet', 'Op ' + job.ops[i0].n + (up > i0 ? ' – ' + job.ops[up].n : '') + ' done' + (who ? ' by ' + who : '') + ' · ' + good + ' good' + (note ? ' · ' + note : '') + (nx ? ' · now at op ' + nx.n : ' · traveler closed'));
         break;
       }
       case 'skip': {
@@ -1444,7 +1449,7 @@ window.WT_ESP = [
     return t;
   }
 
-  root.WT = { STATIONS, ROUTINGS, ISSUES, DEFAULT_CFG, PAUSE_REASONS, HOLD_REASONS, BLOCK_REASONS, DISPOSITIONS, ST_LABEL, clone, routing, station, isApprover, canDispose, sideOf, covers, newJob, act, gate, finalDest, opLocked, selfClose, closesSelf, batchStep, CREW_TASKS, CREW_GROUPS, CREW_FIRST, crewOpen, isSetupStep, bucket, nextAction, where, blocking, goodDone, dur, approvalWait, totals, isFinal, shipOk, workMs, isWorking, lastShiftEnd, setShift, shiftText, openHolds, openCheck, unmoved, moved, sendable, inbound, midTarget, totalScrap };
+  root.WT = { STATIONS, ROUTINGS, ISSUES, DEFAULT_CFG, PAUSE_REASONS, HOLD_REASONS, BLOCK_REASONS, DISPOSITIONS, ST_LABEL, clone, routing, station, isApprover, paperFresh, canDispose, sideOf, covers, newJob, act, gate, finalDest, opLocked, selfClose, closesSelf, batchStep, CREW_TASKS, CREW_GROUPS, CREW_FIRST, crewOpen, isSetupStep, bucket, nextAction, where, blocking, goodDone, dur, approvalWait, totals, isFinal, shipOk, workMs, isWorking, lastShiftEnd, setShift, shiftText, openHolds, openCheck, unmoved, moved, sendable, inbound, midTarget, totalScrap };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -1478,7 +1483,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 09:20';
+  const APP_BUILD = '2026-11-23 09:40';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -3155,9 +3160,11 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         msg = inc.length ? inc.reduce((a, l) => a + l.qty, 0) + ' pcs are on the way from op ' + esc(j.ops[i - 1].n) + '. Count them and tap Receive to start this step.' : 'Parts for this operation have not been received at ' + esc(W.station(op.station).name) + ' yet.';
         { const i0x = j.ops.findIndex((o) => ['done', 'closed', 'skipped'].indexOf(o.st) < 0); if (!inc.length && ui.user && i0x >= 0 && i0x < i && j.ops.slice(i0x, i).every((o) => ['ready', 'pending'].indexOf(o.st) >= 0)) {
           msg += ' <b>Was op ' + esc(j.ops.slice(i0x, i).map((o) => o.n).join(', ')) + ' (' + esc(Array.from(new Set(j.ops.slice(i0x, i).map((o) => W.station(o.station).name))).join(', ')) + ') done but not on the tablet?</b> Tap the exception and keep going.';
-          sec += '<button class="btn go" data-a="excGo" data-job="' + id + '" data-i="' + i + '">⤼ Exception — earlier step not on the tablet, continue</button>'; } }
+          if (W.paperFresh(j)) { msg = 'Parts for this operation have not been received here on the tablet yet. <b>Paper traveler from before the tablets?</b> If op ' + esc(j.ops.slice(i0x, i).map((o) => o.n).join(', ')) + ' was already done on paper, tap 📄 Start here from paper — no points lost.';
+            main = '<button class="btn primary go" data-a="transGo" data-job="' + id + '" data-i="' + i + '">📄 Start here from paper — earlier steps were done on the paper traveler</button>'; }
+          else sec += '<button class="btn go" data-a="excGo" data-job="' + id + '" data-i="' + i + '">⤼ Exception — earlier step not on the tablet, continue</button>'; } }
         if (!inc.length && ui.user) { const k = j.ops.findIndex((o) => o.st === 'ready'); if (k >= 0 && k < i && !W.opLocked(j, k) && !W.opLocked(j, i)) { msg += ' <b>Doing this step before op ' + esc(j.ops[k].n) + '?</b> Tap the button — the ' + j.ops[k].qtyIn + ' pcs come here and the step order is saved for next time.'; sec += '<button class="btn primary go" data-a="doFirst" data-job="' + id + '" data-i="' + i + '" data-k="' + k + '">⇄ Do this step now — before op ' + esc(j.ops[k].n) + '</button>'; } }
-        main = inc.map((l) => l.to === op.station ? '<button class="btn primary go" data-m="receive" data-job="' + id + '" data-lot="' + esc(l.id) + '">Receive ' + esc(l.id) + ' · ' + l.qty + ' pcs</button>' : '<button class="btn primary" data-m="reroute" data-job="' + id + '" data-lot="' + esc(l.id) + '">' + esc(l.id) + ' went to ' + esc(W.station(l.to).name) + ' — send it to ' + esc(W.station(op.station).name) + '</button>').join(''); break; }
+        if (inc.length || !main) main = inc.map((l) => l.to === op.station ? '<button class="btn primary go" data-m="receive" data-job="' + id + '" data-lot="' + esc(l.id) + '">Receive ' + esc(l.id) + ' · ' + l.qty + ' pcs</button>' : '<button class="btn primary" data-m="reroute" data-job="' + id + '" data-lot="' + esc(l.id) + '">' + esc(l.id) + ' went to ' + esc(W.station(l.to).name) + ' — send it to ' + esc(W.station(op.station).name) + '</button>').join(''); break; }
       case 'ready': case 'setup': case 'setup_done':
         if (FA && !j.blocked && !holds.length && !op.paused) { msg = op.qtyIn + ' pcs here. Do this step, then tap Finish and have the inspector sign it.'; main = A('startStep', '▶ Start this step', 'primary go'); sec = M('block', 'Can’t start', 'sm'); break; }
         if (W.isSetupStep(j, i) && !j.blocked) { msg = '<b>Setup step — no parts are run here.</b> ' + (op.st === 'setup' ? 'Setup running · ' + fDur(W.dur(op, 'setup', Date.now())) + '. Tap Setup done when it is ready.' : 'Do the setup, then tap Setup done. The ' + op.qtyIn + ' pcs go on to the next step, where the run starts.');
@@ -3755,6 +3762,9 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const j = m.job ? store.jobs[m.job] : null, op = j && m.i != null ? j.ops[m.i] : null;
     let h = '', wide = false;
     switch (m.type) {
+      case 'trans': { const j = store.jobs[m.job], i0 = j.ops.findIndex((o) => ['done', 'closed', 'skipped'].indexOf(o.st) < 0), L = j.ops.slice(i0, m.i);
+        h = '<h2>📄 Start from paper · Shop Order ' + esc(j.so) + '</h2><p>This traveler went through the shop on paper before the tablets. These steps were done on the paper traveler:</p><ul>' + L.map((o) => '<li><b>Op ' + esc(o.n) + ' · ' + esc(W.station(o.station).name) + '</b></li>').join('') + '</ul><p class="small muted">They are marked <b>done on paper</b> with your note, and the traveler starts live on the tablet at <b>op ' + esc(j.ops[m.i].n) + '</b>. This is the switch-over, not an exception — nobody loses points. Keep the paper traveler with the parts.</p>' +
+          '<div class="row" style="gap:10px">' + inp('good', 'Pieces here now', m, 'inputmode="numeric"') + inp('who', 'Who did the earlier steps (from the paper, if signed)', m) + '</div>' + inp('note', 'Note', m) + foot('📄 Start op ' + esc(j.ops[m.i].n) + ' on the tablet'); break; }
       case 'exc': { const j = store.jobs[m.job], i0 = j.ops.findIndex((o) => ['done', 'closed', 'skipped'].indexOf(o.st) < 0), L = j.ops.slice(i0, m.i);
         h = '<h2>⤼ Exception · Shop Order ' + esc(j.so) + '</h2><p>These steps were done but nobody signed them on the tablet:</p><ul>' + L.map((o) => '<li><b>Op ' + esc(o.n) + ' · ' + esc(W.station(o.station).name) + '</b></li>').join('') + '</ul><p class="small muted">They are marked done as an exception with your name, and the parts come to op ' + esc(j.ops[m.i].n) + ' so you can work. ' + (Date.now() < EXC_FROM ? 'From December 1 the area that skipped the tablet loses points on the leaderboard.' : 'The area that skipped the tablet loses points on the leaderboard.') + '</p>' +
           '<div class="row" style="gap:10px">' + inp('good', 'Pieces that came to you', m, 'inputmode="numeric"') + inp('who', 'Who did those steps (if you know)', m) + '</div>' + foot('⤼ Continue'); break; }
@@ -4024,6 +4034,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
           const doc = { pn, rev, path, at: Date.now(), by: ui.user.id, src: 'app', name: f.name, hist }; await store.db.doc('prints/' + key).set(doc); (store.prints = store.prints || {})[key] = doc; closeModal(); render(); toast(pn + ' rev ' + rev + ' is now the current print on every tablet'); }
           catch (e) { toast('Upload failed: ' + (e.message || e), 'bad'); } })(); return; }
       case 'ship': ok = run(m.job, 'shipInfo', { po: m.po, sales: m.sales }); if (ok) toast('Shipping release saved'); break;
+      case 'trans': { const g = Number(m.good); if (!(g > 0)) return toast('Enter how many pieces are here.', 'bad'); if (!String(m.note || '').trim()) return toast('Write a short note.', 'bad'); if (!run(m.job, 'catchUp', { upTo: m.i - 1, good: g, who: m.who, note: 'Done on paper before the tablet — ' + String(m.note).trim(), trans: true })) return; closeModal(); ui.opI = m.i; toast('Switched from paper — this traveler is live on the tablet at op ' + store.jobs[m.job].ops[m.i].n + '. Tap Start.'); return render(); }
       case 'exc': { const g = Number(m.good); if (!(g > 0)) return toast('Enter how many pieces came to you.', 'bad'); if (!run(m.job, 'catchUp', { upTo: m.i - 1, good: g, who: m.who, note: 'Exception — not signed on the tablet', exc: true })) return; closeModal(); ui.opI = m.i; toast('Exception recorded — the parts are at op ' + store.jobs[m.job].ops[m.i].n + '. Go ahead.'); return render(); }
       case 'catchUp': { if (!run(m.job, 'catchUp', { upTo: Number(m.upTo), good: Number(m.good), who: m.who, note: m.note })) return; closeModal(); toast('Recorded. ' + (store.jobs[m.job].st === 'complete' ? 'Traveler closed.' : 'Parts are at the next step.')); return render(); }
       case 'woEdit': { const j0 = store.jobs[m.job], rt = j0 && W.routing(j0.rid); if (!j0 || !rt) return closeModal();
@@ -4435,6 +4446,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     }
     if (d.a === 'setRisk' || d.a === 'setArea') { if (!ui.user || !W.isApprover(ui.user)) return toast('A supervisor or manager makes this change.', 'bad'); const rt = W.routing(d.rid), o = rt.ops.find((q) => String(q.n) === String(d.n)); return openModal({ type: d.a, rid: rt.id, n: o.n, v: d.a === 'setRisk' ? rk(rt, o) : o.station }); }
     if (d.a === 'mEdit') { if (!ui.user || !W.isApprover(ui.user)) return toast('A supervisor or manager makes corrections.', 'bad'); const rt = W.routing(d.rid), o = rt.ops.find((x) => String(x.n) === String(d.n)), n = o ? o.n : d.n, was = d.fld ? hdr(rt, d.fld) : liveStep(rt.id, n, o ? o.text : '', null).text; return openModal({ type: 'mEdit', rid: rt.id, n, was, text: was, reason: '', note: '' }); }
+    if (d.a === 'transGo') { const j = store.jobs[d.job]; if (!j || !need()) return; const i0 = j.ops.findIndex((o) => ['done', 'closed', 'skipped'].indexOf(o.st) < 0); return openModal({ type: 'trans', job: j.id, i: Number(d.i), good: String(j.ops[i0].qtyIn || j.qty || ''), who: '', note: 'Earlier steps done on the paper traveler; starting here on the tablet' }); }
     if (d.a === 'excGo') { const j = store.jobs[d.job]; if (!j || !need()) return; const i0 = j.ops.findIndex((o) => ['done', 'closed', 'skipped'].indexOf(o.st) < 0); return openModal({ type: 'exc', job: j.id, i: Number(d.i), good: String(j.ops[i0].qtyIn || j.qty || ''), who: '' }); }
     if (d.a === 'catchUp') { const j = store.jobs[d.job]; if (!j || !ui.user || !W.isApprover(ui.user)) return toast('A supervisor records steps done off the tablet.', 'bad'); const i0 = j.ops.findIndex((o) => ['done', 'closed', 'skipped'].indexOf(o.st) < 0); if (i0 < 0) return toast('Every step is already done.');
       return openModal({ type: 'catchUp', job: j.id, upTo: String(j.ops.length - 1), good: String(j.ops[i0].qtyIn || j.qty || ''), who: '', note: '' }); }
