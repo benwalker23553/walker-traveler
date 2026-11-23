@@ -1490,7 +1490,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 10:35';
+  const APP_BUILD = '2026-11-23 10:45';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -2677,6 +2677,8 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); } else toast('Allow pop-ups to print the packing sheet', 'bad');
   }
   // 🟡 Silencing cut list: every open metal traveler (live or still on paper) with a "cut yellow silencing material" step not done yet — so Glue (Luis Herrera) cuts pads before welding needs them
+  // Share of every OEM packaging batch that stays unboxed (bagged, to finished stock) for our own airsep assemblies — Ben, Nov 23: 10%
+  const UNBOX_PCT = 10;
   const SIL_RE = /\b(CUT|PUNCH)\b[^.]*(SILENC|YELLOW)|YELLOW SILENC[^.]*\bCUT\b/;
   function silNeeds() {
     const out = [], cutOps = (rt) => (rt && rt.ops ? rt.ops.filter((o) => SIL_RE.test(String(o.text || '').toUpperCase())) : []);
@@ -3234,6 +3236,8 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (W.batchStep(j, i) && op.st !== 'done' && op.st !== 'pending') msg = '<b>🏷 Batch code step:</b> when you finish, you type the batch / date code printed on the filters. ' + msg;
     { const i0y = j.ops.findIndex((o) => ['done', 'closed', 'skipped'].indexOf(o.st) < 0); if (ui.user && i0y >= 0 && i <= i0y && W.transOk(j) && j.ops.slice(i0y + 1).some((o) => o.st === 'pending') && sec.indexOf('transPick') < 0 && main.indexOf('transGo') < 0)
       sec += '<button class="btn" data-a="transPick" data-job="' + id + '">📄 Paper traveler is further along? Start from paper at my step</button>'; }
+    { const ro = rop(W.routing(j.rid), j, i); if (ro && /^PACKAGE FOR SHIPMENT/.test(String(ro.text || ''))) { const n0 = Number(op.qtyIn) || Number(j.qty) || 0, keep = Math.ceil(n0 * UNBOX_PCT / 100);
+      msg = '<div class="banner info" style="margin:0 0 8px"><div><b>📦 Box ' + (n0 - keep) + ' · leave ' + keep + ' unboxed</b> (' + UNBOX_PCT + '% of ' + n0 + ') — bag them and send to finished stock for airsep assemblies. Write the batch code(s) on the pallet label.</div></div>' + msg; } }
     return '<div class="actionbar"><div class="msg">' + msg + '</div><div class="row">' + main + '</div><div class="row">' + sec + '</div></div>' + learnedHtml(j, i) + crewHtml(j, i);
   }
   // Supplier details appear when the reason is a bad supplier part
