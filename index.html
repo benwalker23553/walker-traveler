@@ -1502,7 +1502,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-23 17:10';
+  const APP_BUILD = '2026-11-23 17:30';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -2786,8 +2786,8 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   }
   // 🚚 Ship today / late: every open Sage sales order line due in the last 60 days or next 7, and where it is (stock, which area, paper traveler, or no traveler)
   const SD = { rows: null, at: 0, busy: false, err: '', f: 'all' };
-  function shipLoad(force) { if (SD.busy || (!force && SD.rows && Date.now() - SD.at < 5 * 60000) || !window.WT_SB) return; SD.busy = true;
-    window.WT_SB.rpc('ship_digest').then((r) => { SD.busy = false; SD.at = Date.now(); SD.err = r.error ? r.error.message : ''; if (!r.error) { SD.rows = r.data.rows || []; SD.counts = r.data.counts || {}; SD.asOf = r.data.asOf; } if (ui.view === 'ship' || ui.view === 'home') render(); }, () => { SD.busy = false; }); }
+  function shipLoad(force) { if (SD.busy || (!force && SD.at && Date.now() - SD.at < 5 * 60000) || !window.WT_SB) return; SD.busy = true; SD.at = Date.now();
+    window.WT_SB.rpc('ship_digest').then((r) => { SD.busy = false; SD.at = Date.now(); SD.err = r.error ? r.error.message : ''; if (!r.error) { SD.rows = r.data.rows || []; SD.counts = r.data.counts || {}; SD.asOf = r.data.asOf; } if (ui.view === 'ship' || ui.view === 'home') render(); }, () => { SD.busy = false; SD.at = Date.now(); }); }
   const shipWhere = (x) => x.where === 'stock' ? ['ok', '✅ In stock — pack it'] : x.where === 'live' ? ['info', '🔧 ' + (x.st ? W.station(x.st).name : 'On the floor') + ' · #' + x.t] : x.where === 'paper' ? ['warn', '📄 Paper traveler #' + x.t + (x.fl ? ' (' + x.fl + ')' : '') + ' — not on the tablet'] : ['bad', '❗ No traveler — needs one'];
   const shipDept = (x) => x.where === 'stock' ? 'Packing / shipping' : x.where === 'live' && x.st ? W.station(x.st).name : x.where === 'paper' ? 'Paper — ' + (x.fl || '?') : 'Needs a traveler';
   function renderShip() { shipLoad();
