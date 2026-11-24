@@ -980,7 +980,9 @@ window.WT_ESP = [
     const r = routing(job.rid), ro = r && r.ops ? (r.ops.find((o) => o.n === op.n) || r.ops[i]) : null; if (ro && typeof ro.setup === 'boolean') return ro.setup;
     const t = String((ro && ro.text) || '');
     // CNC travelers and work orders (Joseph): any step with the word SETUP / SET UP is setup only — never run as a batch — and every step before the first production step (run, cut, drill, make, bore, turn) is setup too
-    if (op.station === 'cnc' || (r && (r.wo || /^(WO|STK):|^M:CNC/.test(String(job.rid || ''))))) {
+    // molds and fixtures (FX…) are one-offs — exceptions to the CNC setup rule
+    const moldFx = /^FX/i.test(String(job.pn || '')) || /\bMOLD\b|\bFIXTURE\b/i.test(String((r && r.name) || '') + ' ' + String(job.name || ''));
+    if (!moldFx && (op.station === 'cnc' || (r && (r.wo || /^(WO|STK):|^M:CNC/.test(String(job.rid || '')))))) {
       if (/\bSET\s*-?\s*UP\b/i.test(t)) return true;
       const PROD = /\bRUN\b|\bCUT\b|\bDRILL|\bMAKE\b(?!\s+SURE)|\bBORE\b|\bTURN\s+(THE\s+)?O\.?D|\bMACHINE\s+(STACK|PART|THE\s+PART)|\bMILL\b(?!\s+USING)/i, txt = (k) => { const o = job.ops[k]; const x = r && r.ops ? (r.ops.find((q) => q.n === (o && o.n)) || r.ops[k]) : null; return String((x && x.text) || ''); };
       for (let k = 0; k <= i; k++) if (PROD.test(txt(k))) return false;
@@ -1510,7 +1512,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-24 06:45';
+  const APP_BUILD = '2026-11-24 06:55';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
