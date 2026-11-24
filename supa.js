@@ -41,8 +41,11 @@
     (subs[col] || []).forEach((cb) => cb({ docs: [...m.entries()].map(([id, data]) => ({ id, data: () => deep(clone(data)) })) }));
     [...m.keys()].forEach((id) => (docSubs[col + '/' + id] || []).forEach((cb) => cb({ exists: true, data: () => deep(clone(m.get(id))) })));
   }
+  // debug: ?skipcol=jobs,prints loads the app with those data sets left empty (to find what makes a screen hang)
+  const SKIPCOL = (new URLSearchParams(location.search).get('skipcol') || '').split(',').filter(Boolean);
   async function loadCol(col) {
     const out = new Map(); let from = 0;
+    if (SKIPCOL.indexOf(col) >= 0 || SKIPCOL.indexOf('all') >= 0) { cache[col] = out; return out; }
     for (;;) {
       const { data, error } = await sb.from('docs').select('id,data').eq('col', col).range(from, from + 999);
       if (error) throw error;
