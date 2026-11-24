@@ -124,7 +124,7 @@ button{font-family:inherit}
   function full() { try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {} }
   const wl = () => { try { if (navigator.wakeLock && document.visibilityState === 'visible') navigator.wakeLock.request('screen').catch(() => {}); } catch (e) {} };
   wl(); document.addEventListener('visibilitychange', () => { wl(); if (document.visibilityState === 'visible') load(); });
-  load(); setInterval(load, 30000);
+  load(); setInterval(load, 180000); // every 3 min: the TV is a wall board, not a stopwatch — keeps the database light
   const t0 = Date.now(); setInterval(() => { if (!setup && Date.now() - t0 > 3600000 && navigator.onLine !== false) location.reload(); }, 60000);
 })();
 </script></body></html>
