@@ -1553,7 +1553,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-24 15:55';
+  const APP_BUILD = '2026-11-24 15:45';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -1801,9 +1801,19 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     const j = store.jobs[jobId];
     try { const ctx = { u: u || ui.user, at: Date.now(), cfg: store.cfg }; save(W.act(j, action, p, ctx), [[action, p, ctx]]);
       { const jj = store.jobs[jobId] || j, oo = jj && p && jj.ops[p.i]; if (ALERT[action] && !(action === 'finish' && oo && oo.st !== 'fin_wait')) sendAlert(jj, p && p.i, action, ALERT[action], p && (p.reason || p.note) ? String(p.reason || p.note).slice(0, 120) : ''); }
+      if (AUTO_PZ[action]) autoPause(u || ui.user, jobId, p && p.i);
       return true; }
     catch (e) { if (e.user) { toast(e.message, 'bad'); return false; } throw e; }
   }
+  // One person, one running clock: starting work on another step pauses whatever else this person still has running (unless others are still working it).
+  const AUTO_PZ = { startSetup: 1, startFirst: 1, startBatch: 1, startStep: 1, resume: 1, crewJoin: 1, runMore: 1 };
+  function autoPause(u, jobId, i0) { if (!u) return; const done = [];
+    Object.values(store.jobs).forEach((j) => { if (j.st === 'complete') return; j.ops.forEach((o, i) => {
+      if ((j.id === jobId && i === Number(i0)) || o.paused || ['setup', 'first_piece', 'running'].indexOf(o.st) < 0) return;
+      const os = (o.seg || []).filter((x) => x.e == null).pop(); if (!os || os.by !== u.id) return;
+      if ((o.crew || []).some((c) => !c.end && c.id !== u.id && c.who !== u.id)) return;
+      try { const cx = { u, at: Date.now(), cfg: store.cfg }, pp = { i, reason: 'Pulled to another job' }; save(W.act(j, 'pause', pp, cx), [['pause', pp, cx]]); done.push('Shop Order ' + j.so + ' op ' + o.n); } catch (e) { /* leave it */ } }); });
+    if (done.length) setTimeout(() => toast('⏸ Paused ' + done.join(', ') + ' — you can only run one job at a time. Resume it when you go back.'), 600); }
   function renderSync() {
     const el = $('#sync'); if (!el) return; const n = Object.keys(store.queue).length; const off = store.offline || navigator.onLine === false;
     let t = 'Connecting…', c = '';
