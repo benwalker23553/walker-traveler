@@ -4,7 +4,21 @@
   const URL_ = 'https://ztpkhjgsxzlwxjzddgzf.supabase.co';
   const KEY = 'sb_publishable_Zq17n4I5OapehYOckC7JQA_H7shyW9S';
   const SHOP_EMAIL = 'floor@walker-traveler.shop';
-  const sb = window.supabase.createClient(URL_, KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+  /* ---------- safety: no request may hang the tablet. Each call gets a time limit; when the server is slow a banner says so and the work waits on the tablet ---------- */
+  const net = { slow: 0, fail: 0, okAt: Date.now(), pend: 0 };
+  const banner = () => { let b = document.getElementById('wt-netbar'); const bad = net.pend > 0 && (net.slow > 0 || net.fail > 0);
+    if (!bad) { if (b) b.remove(); return; }
+    if (!b) { b = document.createElement('div'); b.id = 'wt-netbar'; b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:2000;background:#B45309;color:#fff;font:600 15px system-ui,sans-serif;padding:8px 14px;text-align:center'; (document.body || document.documentElement).appendChild(b); }
+    b.textContent = '⚠ The shop server is slow right now — keep working; your taps are saved on this tablet and send when it is back.'; };
+  const safeFetch = (u, o) => {
+    const url = String(typeof u === 'string' ? u : (u && u.url) || ''), big = /\/storage\/v1\//.test(url), ms = big ? 120000 : /\/auth\/v1\//.test(url) ? 15000 : 25000;
+    const ac = new AbortController(), t0 = Date.now(); if (o && o.signal) o.signal.addEventListener('abort', () => ac.abort());
+    net.pend++; const slowT = setTimeout(() => { net.slow++; banner(); }, big ? 30000 : 6000), killT = setTimeout(() => ac.abort(), ms);
+    return window.fetch.call(window, u, Object.assign({}, o, { signal: ac.signal })).then((r) => { if (r.status >= 500) { net.fail++; } else if (Date.now() - t0 < 6000) { net.fail = 0; net.slow = 0; net.okAt = Date.now(); } return r; },
+      (e) => { net.fail++; throw e; }).finally(() => { clearTimeout(slowT); clearTimeout(killT); net.pend--; if (net.slow > 0 && Date.now() - t0 >= 6000) net.slow--; banner(); });
+  };
+  window.WT_NET = net;
+  const sb = window.supabase.createClient(URL_, KEY, { auth: { persistSession: true, autoRefreshToken: true }, global: { fetch: (u, o) => safeFetch(u, o) } });
   window.WT_SB = sb;
   const deep = (o) => { if (o && typeof o === 'object') { Object.freeze(o); Object.values(o).forEach(deep); } return o; };
   const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -29,7 +43,12 @@
     document.getElementById('sl-go').onclick = go;
     document.getElementById('sl-pw').onkeydown = (e) => { if (e.key === 'Enter') go(); };
   }
-  sb.auth.getSession().then(({ data }) => { if (data && data.session) ready(true); else loginScreen(); });
+  // The sign-in check can hang when the server is overloaded. If this tablet already has a saved shop sign-in, open with it after 8 s and keep retrying behind the scenes.
+  let decided = false; const hasSaved = () => { try { return Object.keys(localStorage).some((k) => /^sb-.*-auth-token$/.test(k) && localStorage.getItem(k)); } catch (e) { return false; } };
+  const decide = (ok) => { if (decided) return; decided = true; if (ok) ready(true); else loginScreen(); };
+  sb.auth.getSession().then(({ data }) => decide(!!(data && data.session)), () => decide(hasSaved()));
+  setTimeout(() => { if (!decided && hasSaved()) decide(true); }, 8000);
+  sb.auth.onAuthStateChange((ev) => { if (ev === 'SIGNED_OUT' && decided && !hasSaved()) loginScreen('This tablet was signed out of the shop. A manager enters the shop password once to set it up again.'); });
 
   /* ---------- documents: same shape as before (collection / doc / onSnapshot / set) ---------- */
   const cache = {};            // col -> Map(id -> data)
@@ -137,7 +156,7 @@
   async function boot() {
     await authed;
     let base = null;
-    try { const b = await getFile('data/base.json'); base = JSON.parse(await b.text()); try { localStorage.setItem('wt-base', JSON.stringify(base)); } catch (e) { /* full */ } }
+    try { const b = await Promise.race([getFile('data/base.json'), new Promise((_, rej) => setTimeout(() => rej(new Error('slow')), 15000))]); base = JSON.parse(await b.text()); try { localStorage.setItem('wt-base', JSON.stringify(base)); } catch (e) { /* full */ } }
     catch (e) { try { base = JSON.parse(localStorage.getItem('wt-base') || 'null'); } catch (e2) { base = null; } }
     if (!base) { const el = document.getElementById('main'); if (el) el.innerHTML = '<div class="wrap"><div class="banner bad"><div><b>Shop files are not loaded yet.</b> A manager loads them once from a PC with the starter files.</div></div></div>'; }
     globalThis.WT_BASE = base || {};
