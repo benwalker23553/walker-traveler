@@ -1512,7 +1512,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     else restoreMine();
   }
   // Version stamp + auto-update: tablets check for a newer app every 3 minutes and reload themselves when nobody is mid-task (signed-in person and screen kept)
-  const APP_BUILD = '2026-11-24 06:55';
+  const APP_BUILD = '2026-11-24 08:40';
   function goFresh() { try { sessionStorage.setItem('wt-resume', JSON.stringify({ id: ui.user ? ui.user.id : null, at: Date.now(), view: ui.view })); } catch (e) { /* ok */ } const jid = ui.view === 'job' && ui.jobId ? ui.jobId : ''; location.replace(location.pathname + '?v=' + Date.now().toString(36) + (jid ? '&job=' + encodeURIComponent(jid) : '')); }
   let newBuild = '';
   function checkBuild() { fetch('index.html?b=' + Date.now(), { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = /APP_BUILD = '(\d{4}-[^']+)'/.exec(t); if (!m || m[1] === APP_BUILD) return; newBuild = m[1];
@@ -1736,12 +1736,14 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
   }
   /* ---------- phone alerts to supervisors (free web push; no prices ever) ---------- */
   const ALERT = { reqFirst: 'First article ready to sign', reqMid: 'Midpoint check ready', finish: 'Closing signature needed', hold: 'Part put on hold', block: 'Job stopped — can’t start', scrap: 'Bad parts logged' };
-  function sendAlert(j, i, kind, title, extra) {
+  // Managers / approvers who can sign off, those covering this station first
+  function signers(st) { return store.cfg.roster.filter((p) => p.active !== false && W.isApprover(p)).slice().sort((a, b) => ((st && W.covers(a, st)) ? 0 : 1) - ((st && W.covers(b, st)) ? 0 : 1) || String(a.name).localeCompare(String(b.name))); }
+  function sendAlert(j, i, kind, title, extra, ids) {
     if (!window.WT_NOTIFY || !j) return Promise.resolve(null);
     const op = i != null ? j.ops[i] : null, st = op ? op.station : (j.ops.find((o) => o.st !== 'done') || j.ops[0] || {}).station;
     const who = ui.user ? ui.user.name : 'Someone';
     const body = j.pn + ' · SO ' + j.so + (op ? ' · op ' + op.n : '') + ' · ' + (st ? W.station(st).name : '') + '\n' + who + (extra ? ': ' + extra : '');
-    return window.WT_NOTIFY({ side: W.sideOf(st), station: st, job: j.id, kind, from: ui.user ? ui.user.id : '', title, body, tag: 'wt-' + j.id + '-' + kind, url: location.origin + location.pathname + '#job=' + encodeURIComponent(j.id) }).catch(() => null);
+    return window.WT_NOTIFY({ side: ids && ids.length ? '' : W.sideOf(st), ids: ids && ids.length ? ids : undefined, station: st, job: j.id, kind, from: ui.user ? ui.user.id : '', title, body, tag: 'wt-' + j.id + '-' + kind, url: location.origin + location.pathname + '#job=' + encodeURIComponent(j.id) }).catch(() => null);
   }
   async function alertsOn(id, pin) {
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !window.WT_PUSH_KEY) throw new Error(/iPhone|iPad/.test(navigator.userAgent) ? 'Add this app to your Home Screen first, open it from the icon, then try again.' : 'This browser cannot get alerts. Use Chrome on Android, or the Home Screen app on iPhone.');
@@ -4151,7 +4153,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         h = '<h2>🔩 Request parts from CNC</h2><p class="muted">Traveler <b>#' + esc(m.so) + '</b> · <span class="mono">' + esc(m.ppn) + '</span> · ' + m.qty + ' pcs. Joseph and CNC get an alert.</p>' +
           (C.length ? '<h3>From the bill of materials</h3>' + C.map((c, k) => '<div class="row" style="gap:10px;align-items:center;border-top:1px solid var(--line);padding:6px 0"><label class="check" style="flex:1"><input type="checkbox" data-f="c' + k + '"' + (on(c, k) ? ' checked' : '') + '> <b class="mono">' + esc(c.pn) + '</b> ' + esc(c.d) + (c.per > 1 ? ' · ' + c.per + ' per part' : '') + (had(c) ? ' <span class="pill ' + (PR_ST[had(c).st] || PR_ST.open)[0] + '">Already ' + (PR_ST[had(c).st] || PR_ST.open)[1].toLowerCase() + '</span>' : '') + '</label><input class="field" style="max-width:110px" type="number" inputmode="numeric" min="1" data-f="q' + k + '" value="' + esc(m['q' + k] != null ? m['q' + k] : Math.max(1, c.per * (m.qty || 1))) + '"></div>').join('') : '<p class="small muted">No CNC parts on this part’s bill of materials. Type the part below.</p>') +
           '<h3>Other hardware</h3><div class="grid2">' + inp('xpn', 'Part # (nut, bung, fitting…)', m) + inp('xq', 'How many', m, 'type="number" inputmode="numeric" min="1"') + '</div>' + inp('note', 'Note (optional)', m) + foot('🔩 Send to CNC'); break; }
-      case 'callSup': h = '<h2>🔔 Call a supervisor</h2><p class="muted"><span class="mono">' + esc(j.pn) + '</span> · op ' + esc(op.n) + ' · ' + esc(W.station(op.station).name) + '. Sends an alert to the ' + esc(W.sideOf(op.station)) + ' supervisors’ phones.</p>' + tiles('reason', ['Come check this part', 'First piece ready', 'Question on the print', 'Machine problem', 'Need material', 'Quality problem'], m) +
+      case 'callSup': h = '<h2>🔔 Call a supervisor</h2><p class="muted"><span class="mono">' + esc(j.pn) + '</span> · op ' + esc(op.n) + ' · ' + esc(W.station(op.station).name) + '. Sends an alert to the phones of the managers you pick.</p><h3>Send to (managers who can sign off)</h3><div class="tiles">' + signers(op.station).map((p) => '<button class="btn sm ' + ((m.to || []).indexOf(p.id) >= 0 ? 'sel' : '') + '" data-tog="to" data-v="' + esc(p.id) + '">' + ((m.to || []).indexOf(p.id) >= 0 ? '☑ ' : '☐ ') + esc(p.name) + '</button>').join('') + '</div><p class="small muted">Tap names to add or remove. Your picks are remembered for this area.</p><h3>Reason</h3>' + tiles('reason', ['Come check this part', 'First piece ready', 'Question on the print', 'Machine problem', 'Need material', 'Quality problem'], m) +
         '<label>Note (optional)<textarea data-f="note" id="m-note" placeholder="Type, or tap the microphone on the keyboard and speak">' + esc(m.note || '') + '</textarea></label>' + foot('Send alert', 'go'); break;
       case 'alertsOn': h = '<h2>🔔 Alerts on this phone</h2><p>' + esc(nm(m.who)) + ', get a notification when someone in your area calls you, needs a signature, or puts a part on hold.</p><p class="small muted">iPhone: first add this app to your Home Screen (Share → Add to Home Screen) and open it from the icon. Then turn alerts on here.</p>' + pad(m) + foot('Turn on alerts', 'go'); break;
       case 'redline': { const o2 = rop(W.routing(j.rid), j, m.i); h = '<h2>✎ Change this step · op ' + op.n + '</h2><p class="muted">Fix the words below, or just say what is wrong. ' + esc(nm(RL_QA())) + ' gets a text, finalizes the wording and signs, then ' + esc(nm(RL_MGR())) + ' signs and every ' + esc(j.pn) + ' traveler updates.</p>' +
@@ -4300,10 +4302,11 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
         const at = Date.now(), made = L.map((x) => { const id = prId(m.so, x.pn), old = (store.partreq || {})[id]; return Object.assign({ id, so: String(m.so), ppn: m.ppn, job: m.job, need: m.due, auto: false }, x, { by: ui.user.id, at, st: 'open', note: m.note || '', stBy: null, stAt: null, prev: old && old.st !== 'open' ? old.st : undefined }); });
         made.forEach((x) => savePR(x)); if (m.job && store.jobs[m.job]) run(m.job, 'logNote', { a: 'Parts requested from CNC', d: made.map((x) => x.qty + ' × ' + x.pn).join(', ') });
         reqAlert({ so: m.so, ppn: m.ppn, job: m.job }, made, false); closeModal(); render(); return toast('Sent to CNC: ' + made.map((x) => x.qty + ' × ' + x.pn).join(', ')); }
-      case 'callSup': { if (!m.reason) return toast('Pick a reason.', 'bad'); const j = store.jobs[m.job]; if (m.busy) return; m.busy = true;
-        run(m.job, 'logNote', { a: 'Called supervisor', d: m.reason + (m.note ? ' — ' + m.note : '') });
+      case 'callSup': { if (!(m.to || []).length) return toast('Pick at least one manager.', 'bad'); if (!m.reason) return toast('Pick a reason.', 'bad'); const j = store.jobs[m.job]; if (m.busy) return; m.busy = true;
+        ls.set('wt-callto-' + W.sideOf((j.ops[m.i] || {}).station), m.to.join(','));
+        run(m.job, 'logNote', { a: 'Called supervisor', d: m.reason + (m.note ? ' — ' + m.note : '') + ' · to ' + m.to.map(nm).join(', ') });
         if (!window.WT_NOTIFY) { closeModal(); return toast('Alerts work on the live app only.', 'bad'); }
-        sendAlert(j, m.i, 'call', m.reason, m.note).then((r) => { closeModal(); if (r && r.data && r.data.sent) toast('Alert sent to ' + r.data.people.map(nm).join(', ')); else toast('Saved on the traveler. No supervisor has alerts turned on for this area yet — call them.', 'bad'); }); return; }
+        sendAlert(j, m.i, 'call', m.reason, m.note, m.to).then((r) => { closeModal(); const got = r && r.data && r.data.people || [], miss = m.to.filter((x) => got.indexOf(x) < 0); if (got.length) toast('Alert sent to ' + got.map(nm).join(', ') + (miss.length ? '. No alerts on the phone of ' + miss.map(nm).join(', ') + ' — call them.' : '')); else toast('Saved on the traveler. ' + m.to.map(nm).join(', ') + ' do not have alerts turned on — call them.', 'bad'); }); return; }
       case 'alertsOn': { if ((m.pin || '').length !== 4 || m.busy) return; m.busy = true;
         alertsOn(m.who, m.pin).then((msg) => { m.busy = false; closeModal(); toast(msg); render(); }).catch((e) => { m.busy = false; m.pin = ''; renderModal(); toast(String(e.message || e), 'bad'); }); return; }
       case 'redline': { const j = store.jobs[m.job], op = j.ops[m.i], o2 = rop(W.routing(j.rid), j, m.i), tx = String(m.text || '').trim(), was = liveStep(j.rid, op.n, o2.text, null).text;
@@ -4885,6 +4888,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
     if (d.zoom) { ui.zoom = Number(d.zoom); return render(); }
     if (d.libdoc) { const r = W.routing(d.libdoc), x = r.docs[Number(d.k)]; $('#results').hidden = true; $('#modal').innerHTML = '<div class="sheet wide"><div class="row" style="justify-content:space-between"><h2>' + esc(x.t) + (x.rev ? ' · Rev ' + esc(x.rev) : '') + '</h2><button class="btn sm" data-close>Close</button></div>' + (x.flag ? '<div class="banner warn"><div><b>Check revision.</b> ' + esc(x.flag) + '</div></div>' : '') + '<div class="viewer"><img src="' + esc(x.f) + '" alt="' + esc(x.t) + '" style="width:160%"></div></div>'; $('#modal').hidden = false; ui.modal = { type: 'lib' }; return; }
     if (d.pin && m) return pinKey(m, d.pin);
+    if (d.tog && m) { const a = (m[d.tog] = (m[d.tog] || []).slice()), k = a.indexOf(d.v); if (k >= 0) a.splice(k, 1); else a.push(d.v); return renderModal(); }
     if (d.set && m) {
       m[d.set] = d.v; if (d.set === 'who') { m.pin = ''; m.first = ''; if (m.type === 'login') m.keep = !!d.v && (ls.get('wt-keep') === d.v || ls.get('wt-alerts') === d.v); if (d.v && m.type !== 'login' && m.type !== 'jobWho' && m.type !== 'plWho') setTimeout(() => { const pd = $('#modal .pad'); if (pd) pd.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 30); }
       if (m.type === 'crew' && d.set === 'who' && d.v) { const t = lastCombo(d.v); m.tasks = t ? t.slice() : []; }
@@ -4926,7 +4930,7 @@ const PM_SEED = {"tasks":[{"id":"t01","g":"DAILY PM — Pumps & Urethane Dispens
       if (d.m === 'buildTrav') return openModal({ type: 'buildTrav', pn: d.pn || '', qty: d.qty || '', d: d.desc || '', sales: d.sales || '', cust: d.cust || '', po: d.po || '', due: d.due || '', st: '', acts: [], words: '' });
       if (d.m === 'addStep') { const jj = store.jobs[d.job], lo = jj && jj.ops[jj.ops.length - 1]; return openModal({ type: 'addStep', job: d.job, st: lo ? lo.station : '', acts: [], words: '' }); }
       if (d.m === 'partReq') { const C0 = {}; return openModal({ type: 'partReq', so: d.so, ppn: d.ppn, qty: Number(d.qty) || 0, job: d.job || '', due: d.due || '', xpn: '', xq: '', note: '' }); }
-      if (d.m === 'callSup') return openModal({ type: 'callSup', job, i, reason: '', note: '' });
+      if (d.m === 'callSup') { const st = (store.jobs[job].ops[i] || {}).station, sv = String(ls.get('wt-callto-' + W.sideOf(st)) || '').split(',').filter((x) => x && person(x)); return openModal({ type: 'callSup', job, i, reason: '', note: '', to: sv.length ? sv : signers(st).filter((p) => W.covers(p, st)).map((p) => p.id) }); }
       if (d.m === 'redline') return openModal({ type: 'redline', job, i, reason: '', text: liveStep(j.rid, op.n, rop(W.routing(j.rid), j, i).text, null).text, note: '' });
       if (d.m === 'jobWho') { if (!canPlan()) return toast('A manager or supervisor assigns jobs.', 'bad'); let w = []; LANES.forEach((l) => openItems(l.id).forEach((x) => { if (x.k === 'j' && x.ref === j.id && whoList(x).length) w = whoList(x); })); return openModal({ type: 'jobWho', job: j.id, crew: w }); }
       if (d.m === 'priority') return openModal({ type: 'priority', job, pri: j.pri, rush: j.rush, reason: '' });
